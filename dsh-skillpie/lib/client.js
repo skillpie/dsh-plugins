@@ -138,6 +138,9 @@ window.__ModuleLoader__.load({
             ref: frameRef,
             src: MARKET_URL,
             title: t('title'),
+            // 授权内嵌页使用剪贴板(分享/安装复制);桌面 GUI 走 http 时
+            // 站点自身还有 execCommand 降级,这里对安全上下文生效。
+            allow: 'clipboard-write; clipboard-read',
             onLoad: function () { setLoaded(true) },
             style: { width: '100%', height: '100%', border: 'none', display: 'block' },
           }),
