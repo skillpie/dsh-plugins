@@ -17,13 +17,13 @@
  * The file is private (`0700` directory, `0600` file), like the connection
  * store.
  *
- * @module dsh-db-studio/session-store
+ * @module dsh-dba/session-store
  */
 
 import { randomUUID } from 'node:crypto'
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { studioHome } from './home.js'
+import { dbaHome } from './home.js'
 
 const FILE_MODE = 0o600
 const DIR_MODE = 0o700
@@ -64,7 +64,7 @@ function normalizeEntry(entry) {
 export class SessionSelectionStore {
   constructor(home) {
     this.home = home
-    this.dir = studioHome(home)
+    this.dir = dbaHome(home)
     this.file = join(this.dir, 'sessions.json')
     this.state = emptyState()
     this.loaded = false
@@ -89,7 +89,7 @@ export class SessionSelectionStore {
       }
     } catch (error) {
       if (error?.code !== 'ENOENT') {
-        console.warn('dsh-db-studio: ignoring unreadable session store —', error?.message ?? error)
+        console.warn('dsh-dba: ignoring unreadable session store —', error?.message ?? error)
       }
     }
     return this

@@ -1,10 +1,10 @@
-# dsh-db-studio 可从 ZCode DB 工具迁移的优点(插件侧改造清单)
+# dsh-dba 可从 ZCode DB 工具迁移的优点(插件侧改造清单)
 
 对比对象:
 - ZCode:`ZCodeOnline/apps/zcode-cli/packages/core/src/tool/handlers/db/`(driver / db-query / db-execute / db-schema / db-export / store)+ `packages/shared/src/dataSource.ts`
 - 本插件:`lib/drivers.js`、`lib/service.js`、`lib/index.js`
 
-约束:**只改 dsh-db-studio 插件,不改 DSH 宿主源码**。依赖宿主扩展点的项标注了可行路径或明确放弃。
+约束:**只改 dsh-dba 插件,不改 DSH 宿主源码**。依赖宿主扩展点的项标注了可行路径或明确放弃。
 
 ## P0 — 安全与正确性(低成本高收益)
 
@@ -97,7 +97,7 @@
 - ZCode:每数据源一份人工维护的 markdown 口径/陷阱文档(租户过滤、单号
   规则、统计陷阱),随表清单注入上下文(data-source-schema-reminder.ts)。
 - 完整形态依赖宿主注入通道,**不改 DSH 源码做不了**。
-- 适配版:连接对象加 `notes` 字段(或 studioHome 下 notes/<id>.md),
+- 适配版:连接对象加 `notes` 字段(或 dbaHome 下 notes/<id>.md),
   `db_describe_schema` 列表模式返回时附带;GUI 连接编辑框加手册编辑。
   模型需一次工具调用获取,省不掉往返但知识能带上。
 

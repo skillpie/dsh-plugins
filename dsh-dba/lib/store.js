@@ -1,20 +1,20 @@
 /**
- * Connection store for dsh-db-studio.
+ * Connection store for dsh-dba.
  *
- * Connections live in `<home>/dsh-db-studio/connections.json` (mode 0600,
+ * Connections live in `<home>/dsh-dba/connections.json` (mode 0600,
  * directory 0700). The browser never receives a password: `publicConnection()`
  * strips it and reports `hasPassword` instead. Passwords are stored in the
  * local file because a database client has to be able to reconnect without
  * the user retyping them; the file permissions are the boundary, and the
  * README says so plainly.
  *
- * @module dsh-db-studio/store
+ * @module dsh-dba/store
  */
 
 import { randomUUID } from 'node:crypto'
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { absolutePath, studioHome } from './home.js'
+import { absolutePath, dbaHome } from './home.js'
 
 const FILE_MODE = 0o600
 const DIR_MODE = 0o700
@@ -135,7 +135,7 @@ export function connectionTarget(connection) {
 export class ConnectionStore {
   constructor(home) {
     this.home = home
-    this.dir = studioHome(home)
+    this.dir = dbaHome(home)
     this.file = join(this.dir, 'connections.json')
     this.connections = []
     this.loaded = false
@@ -153,7 +153,7 @@ export class ConnectionStore {
       }
     } catch (error) {
       if (error?.code !== 'ENOENT') {
-        console.warn('dsh-db-studio: ignoring unreadable connections file —', error?.message ?? error)
+        console.warn('dsh-dba: ignoring unreadable connections file —', error?.message ?? error)
       }
     }
     return this

@@ -1,11 +1,11 @@
 /**
- * Where dsh-db-studio keeps its data.
+ * Where dsh-dba keeps its data.
  *
  * The resolution mirrors `@deepseek-ai/dsh-home-paths`: an explicit config
  * wins over `$DSH_HOME`, which wins over `~/.dsh`; a blank environment value
  * is treated as unset. `~` and `~/...` are expanded against the OS home.
  *
- * @module dsh-db-studio/home
+ * @module dsh-dba/home
  */
 
 import { homedir } from 'node:os'
@@ -27,8 +27,8 @@ export function resolveDshHome(configured, env = process.env) {
 }
 
 /** The plugin's private directory under a harness home. */
-export function studioHome(home) {
-  return join(home, 'dsh-db-studio')
+export function dbaHome(home) {
+  return join(home, 'dsh-dba')
 }
 
 /** Make a path absolute without touching the filesystem. */

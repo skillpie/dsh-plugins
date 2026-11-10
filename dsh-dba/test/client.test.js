@@ -35,7 +35,7 @@ test('client bundle registers a sidebar entry and a main panel', async () => {
   }
   vm.runInNewContext(code, sandbox, { filename: 'client.js' })
   assert.ok(captured, 'the bundle must register a module factory')
-  assert.equal(captured.id, 'dsh-db-studio')
+  assert.equal(captured.id, 'dsh-dba')
 
   const React = {
     createElement() { return null },
@@ -47,7 +47,7 @@ test('client bundle registers a sidebar entry and a main panel', async () => {
     if (request === 'react') return React
     throw new Error('unexpected require: ' + request)
   })
-  assert.equal(client.name, 'dsh-db-studio')
+  assert.equal(client.name, 'dsh-dba')
   assert.ok(client.inject.includes('slots'))
   assert.ok(client.inject.includes('layout'))
   assert.ok(client.inject.includes('locale'))
@@ -90,16 +90,16 @@ test('client bundle registers a sidebar entry and a main panel', async () => {
   const picker = registrations.find((row) => row.options.name === 'conversation.input.left')
   const status = registrations.find((row) => row.options.name === 'conversation.composer.dock')
   assert.ok(main, 'must register the main panel')
-  assert.equal(main.options.key, 'dbstudio')
-  assert.equal(main.options.locale, 'dsh-db-studio')
+  assert.equal(main.options.key, 'dba')
+  assert.equal(main.options.locale, 'dsh-dba')
   assert.ok(sidebar, 'must register the sidebar entry')
-  assert.equal(sidebar.options.id, 'dbstudio')
+  assert.equal(sidebar.options.id, 'dba')
   assert.equal(typeof sidebar.options.order, 'number')
   assert.equal(typeof sidebar.options.label, 'function')
   assert.ok(view, 'must register the conversation database tab')
   assert.equal(view.options.order, 5, 'the tab sits between Chat (0) and Trajectory (10)')
   assert.ok(picker, 'must register the composer multi-select')
-  assert.equal(picker.options.id, 'dbstudio')
+  assert.equal(picker.options.id, 'dba')
   assert.ok(status, 'must register the composer status strip')
   const command = commandRegistrations.find((row) => row.name === 'db')
   assert.ok(command, 'must register the /db slash command')

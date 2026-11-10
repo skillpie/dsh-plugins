@@ -1,10 +1,10 @@
 /**
- * dsh-db-studio — Cordis entry (host half).
+ * dsh-dba — Cordis entry (host half).
  *
  * Exposes two independent surfaces, both optional so a headless or non-HTTP
  * assembly still gets the other:
  *
- *   - `POST /dsh-db-studio/api` for the browser panel (overview, CRUD, rows,
+ *   - `POST /dsh-dba/api` for the browser panel (overview, CRUD, rows,
  *     SQL).
  *   - model-facing tools `db_list_connections`, `db_describe_schema`,
  *     `db_query`, `db_execute`.
@@ -14,12 +14,12 @@
  * are probed through `optionalHostImport`, the same pattern dsh-bill uses, so
  * a `link:`ed checkout resolves them from the harness entry point.
  *
- * @module dsh-db-studio
+ * @module dsh-dba
  */
 
-import { createStudio, DEFAULT_CONFIG } from './service.js'
+import { createDba, DEFAULT_CONFIG } from './service.js'
 
-const ROUTE = '/dsh-db-studio/api'
+const ROUTE = '/dsh-dba/api'
 const MAX_BODY = 4 * 1024 * 1024
 
 /** One issue in the Standard Schema config vocabulary. */
@@ -34,7 +34,7 @@ const issue = (message, ...path) => ({ message, path: path.length ? path : undef
 export const Config = {
   '~standard': {
     version: 1,
-    vendor: 'dsh-db-studio',
+    vendor: 'dsh-dba',
     validate(input) {
       if (input === undefined || input === null) return { value: { ...DEFAULT_CONFIG } }
       if (typeof input !== 'object' || Array.isArray(input)) return { issues: [issue('expected an object')] }
@@ -136,8 +136,8 @@ function sessionOf(exec) {
  * outside the selection is refused too. Only the IDE-side panel (no Session)
  * sees every connection.
  */
-async function resolveConnectionId(studio, requested, session) {
-  const overview = await studio.listConnections()
+async function resolveConnectionId(dba, requested, session) {
+  const overview = await dba.listConnections()
   const rows = overview.connections
   const find = (id) => rows.find((row) => row.id === id)
   if (!session) {
@@ -150,7 +150,7 @@ async function resolveConnectionId(studio, requested, session) {
     if (rows.length === 0) throw new Error('还没有配置数据库连接。请让用户在「数据库」侧边栏面板新建连接后再试。')
     throw new Error(`有多个数据库连接，请用 connectionId 指定：${rows.map((row) => `${row.id} (${row.name})`).join(', ')}`)
   }
-  const state = await studio.sessionState(session.id, session.cwd)
+  const state = await dba.sessionState(session.id, session.cwd)
   const selected = state.selectedIds
   if (selected.length === 0) {
     throw new Error('当前会话还没有选择数据库。请让用户在输入框旁的多选下拉里选择数据库后再试。')
@@ -169,11 +169,11 @@ async function resolveConnectionId(studio, requested, session) {
 
 /** Build the model-facing tools. Every execute toggles the activity counter
  * so the composer status pill can blink while a database tool is running. */
-function buildToolDefinitions(studio) {
+function buildToolDefinitions(dba) {
   const definitions = [
     {
       name: 'db_list_connections',
-      description: 'List the database connections configured in DSH DB Studio, with their ids, kinds and targets, and mark which ones are selected for this conversation. '
+      description: 'List the database connections configured in DSH DBA, with their ids, kinds and targets, and mark which ones are selected for this conversation. '
         + 'The result also carries each selected connection\'s query handbook (查数手册: human-maintained domain rules like tenant filters and known pitfalls) — read it before writing SQL. '
         + 'Call this first when the user asks about data but you do not know which connection to use. Only selected connections may be queried. Passwords are never returned.',
       parameters: {},
@@ -191,11 +191,11 @@ function buildToolDefinitions(studio) {
       },
       async execute(_args, exec) {
         const session = sessionOf(exec)
-        const overview = await studio.listConnections()
+        const overview = await dba.listConnections()
         const rows = overview.connections
         let selectedIds = rows.map((row) => row.id)
         if (session) {
-          const state = await studio.sessionState(session.id, session.cwd)
+          const state = await dba.sessionState(session.id, session.cwd)
           selectedIds = state.selectedIds
         }
         const marked = rows.map((row) => ({ ...row, selected: selectedIds.includes(row.id) }))
@@ -207,7 +207,7 @@ function buildToolDefinitions(studio) {
               : `当前会话已选择 ${selectedRows.length} 个数据库：\n` + selectedRows.map((row) => `- \`${row.id}\` · ${row.name} · ${row.kind}${row.demo ? '（示例）' : ''}`).join('\n') + '\n\n')
             + `全部 ${rows.length} 个连接：\n` + marked.map((row) => `- \`${row.id}\` · ${row.name} · ${row.kind}${row.selected ? ' ✓ 已选' : ''}`).join('\n')
         // 手册随首次列表调用带给模型（插件侧最接近注入的通道；总量已在 notesBulk 截断）。
-        const notesById = await studio.notesBulk(selectedIds)
+        const notesById = await dba.notesBulk(selectedIds)
         const notesBlocks = selectedRows
           .filter((row) => notesById[row.id]?.notes)
           .map((row) => `「${row.name}」查数手册（人工口径/陷阱，写 SQL 前先读）：\n${notesById[row.id].notes}${notesById[row.id].truncated ? '\n(手册过长已截断)' : ''}`)
@@ -242,8 +242,8 @@ function buildToolDefinitions(studio) {
       },
       async execute(args, exec) {
         const session = sessionOf(exec)
-        const id = await resolveConnectionId(studio, args?.connectionId, session)
-        const schema = await studio.schema(id, args?.table, session ? { sessionId: session.id, cwd: session.cwd } : {})
+        const id = await resolveConnectionId(dba, args?.connectionId, session)
+        const schema = await dba.schema(id, args?.table, session ? { sessionId: session.id, cwd: session.cwd } : {})
         if (schema.tables) {
           const keyword = typeof args?.keyword === 'string' ? args.keyword.trim().toLowerCase() : ''
           const tables = keyword
@@ -310,8 +310,8 @@ function buildToolDefinitions(studio) {
       },
       async execute(args, exec) {
         const session = sessionOf(exec)
-        const id = await resolveConnectionId(studio, args?.connectionId, session)
-        const result = await studio.query(id, args?.sql, { limit: args?.limit, source: 'agent', ...(session ? { sessionId: session.id, cwd: session.cwd } : {}) })
+        const id = await resolveConnectionId(dba, args?.connectionId, session)
+        const result = await dba.query(id, args?.sql, { limit: args?.limit, source: 'agent', ...(session ? { sessionId: session.id, cwd: session.cwd } : {}) })
         const rows = result.rows ?? []
         const summaryParts = [`查询成功，返回 ${rows.length} 行${result.truncated ? '（已截断）' : ''}，耗时 ${result.elapsedMs} ms。`]
         const table = markdownTable(result.columns, rows, 25)
@@ -356,8 +356,8 @@ function buildToolDefinitions(studio) {
       async execute(args, exec) {
         if (args?.confirm !== true) throw new Error('写操作需要显式确认：请先在对话中得到用户同意，再以 confirm: true 重试。')
         const session = sessionOf(exec)
-        const id = await resolveConnectionId(studio, args?.connectionId, session)
-        const result = await studio.execute(id, args?.sql, { source: 'agent', allowFullTable: args?.allowFullTable === true, ...(session ? { sessionId: session.id, cwd: session.cwd } : {}) })
+        const id = await resolveConnectionId(dba, args?.connectionId, session)
+        const result = await dba.execute(id, args?.sql, { source: 'agent', allowFullTable: args?.allowFullTable === true, ...(session ? { sessionId: session.id, cwd: session.cwd } : {}) })
         const affected = result.changes ?? 0
         const lines = [`执行成功：影响 ${affected} 行${result.wrapped ? '（事务已提交）' : ''}${result.lastInsertRowid != null ? `，最后插入 id = ${result.lastInsertRowid}` : ''}，耗时 ${result.elapsedMs ?? 0} ms。`]
         if (Array.isArray(result.results)) {
@@ -404,11 +404,11 @@ function buildToolDefinitions(studio) {
       },
       async execute(args, exec) {
         const session = sessionOf(exec)
-        const id = await resolveConnectionId(studio, args?.connectionId, session)
+        const id = await resolveConnectionId(dba, args?.connectionId, session)
         const tables = typeof args?.tables === 'string' && args.tables.trim()
           ? args.tables.split(',').map((token) => token.trim()).filter(Boolean)
           : undefined
-        const result = await studio.exportData(id, {
+        const result = await dba.exportData(id, {
           scope: args?.scope,
           tables,
           where: typeof args?.where === 'string' ? args.where : undefined,
@@ -437,11 +437,11 @@ function buildToolDefinitions(studio) {
   for (const definition of definitions) {
     const original = definition.execute
     definition.execute = async function (args, exec) {
-      studio.markActivity(1)
+      dba.markActivity(1)
       try {
         return await original.call(this, args, exec)
       } finally {
-        studio.markActivity(-1)
+        dba.markActivity(-1)
       }
     }
   }
@@ -449,7 +449,7 @@ function buildToolDefinitions(studio) {
 }
 
 /** Dispatch one HTTP request body. */
-async function dispatch(studio, body, options = {}) {
+async function dispatch(dba, body, options = {}) {
   const action = body?.action
   if (!action) throw new Error('缺少 action / missing action')
   const sessionId = typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : undefined
@@ -458,35 +458,35 @@ async function dispatch(studio, body, options = {}) {
   switch (action) {
     case 'overview':
     case 'list':
-      return { ok: true, ...(await studio.listConnections()) }
+      return { ok: true, ...(await dba.listConnections()) }
     case 'session-state':
-      return { ok: true, ...(await studio.sessionState(sessionId, cwd)) }
+      return { ok: true, ...(await dba.sessionState(sessionId, cwd)) }
     case 'session-set':
-      return { ok: true, ...(await studio.setSessionSelection(sessionId, body.ids, cwd)) }
+      return { ok: true, ...(await dba.setSessionSelection(sessionId, body.ids, cwd)) }
     case 'session-status':
-      return { ok: true, ...(await studio.sessionStatus(sessionId, cwd)) }
+      return { ok: true, ...(await dba.sessionStatus(sessionId, cwd)) }
     case 'tables':
-      return { ok: true, ...(await studio.schema(body.id, undefined, scoped)) }
+      return { ok: true, ...(await dba.schema(body.id, undefined, scoped)) }
     case 'describe':
-      return { ok: true, ...(await studio.schema(body.id, body.table, scoped)) }
+      return { ok: true, ...(await dba.schema(body.id, body.table, scoped)) }
     case 'rows':
-      return { ok: true, ...(await studio.rows(body.id, body.table, { limit: body.limit, offset: body.offset, ...scoped })) }
+      return { ok: true, ...(await dba.rows(body.id, body.table, { limit: body.limit, offset: body.offset, ...scoped })) }
     case 'query':
-      return { ok: true, ...(await studio.query(body.id, body.sql, { limit: body.limit, source: 'ui', ...scoped })) }
+      return { ok: true, ...(await dba.query(body.id, body.sql, { limit: body.limit, source: 'ui', ...scoped })) }
     case 'execute':
-      return { ok: true, ...(await studio.execute(body.id, body.sql, { source: 'ui', ...scoped })) }
+      return { ok: true, ...(await dba.execute(body.id, body.sql, { source: 'ui', ...scoped })) }
     case 'history-list':
-      return { ok: true, ...(await studio.sqlHistory(sessionId)) }
+      return { ok: true, ...(await dba.sqlHistory(sessionId)) }
     case 'history-all':
-      return { ok: true, ...(await studio.allSqlHistory()) }
+      return { ok: true, ...(await dba.allSqlHistory()) }
     case 'history-clear':
-      return { ok: true, ...(await studio.clearSqlHistory(sessionId)) }
+      return { ok: true, ...(await dba.clearSqlHistory(sessionId)) }
     case 'notes-get':
-      return { ok: true, ...(await studio.notes(body.id, scoped)) }
+      return { ok: true, ...(await dba.notes(body.id, scoped)) }
     case 'notes-set':
-      return { ok: true, ...(await studio.setNotes(body.id, typeof body.notes === 'string' ? body.notes : '', scoped)) }
+      return { ok: true, ...(await dba.setNotes(body.id, typeof body.notes === 'string' ? body.notes : '', scoped)) }
     case 'export':
-      return { ok: true, ...(await studio.exportData(body.id, {
+      return { ok: true, ...(await dba.exportData(body.id, {
         scope: body.scope,
         tables: Array.isArray(body.tables) ? body.tables : undefined,
         where: typeof body.where === 'string' ? body.where : undefined,
@@ -495,19 +495,19 @@ async function dispatch(studio, body, options = {}) {
         ...scoped,
       })) }
     case 'test':
-      return { ok: true, ...(await studio.testConnection(body.connection ?? body)) }
+      return { ok: true, ...(await dba.testConnection(body.connection ?? body)) }
     case 'add':
-      return { ok: true, connection: await studio.addConnection(body.connection ?? body) }
+      return { ok: true, connection: await dba.addConnection(body.connection ?? body) }
     case 'update':
-      return { ok: true, connection: await studio.updateConnection(body.id, body.patch ?? {}) }
+      return { ok: true, connection: await dba.updateConnection(body.id, body.patch ?? {}) }
     case 'remove':
-      return { ok: true, removed: await studio.removeConnection(body.id) }
+      return { ok: true, removed: await dba.removeConnection(body.id) }
     case 'seed-demo':
-      return { ok: true, ...(await studio.seedDemo()) }
+      return { ok: true, ...(await dba.seedDemo()) }
     case 'ping':
       return { ok: true, time: Date.now() }
     case 'activity':
-      return { ok: true, busy: studio.activityBusy() }
+      return { ok: true, busy: dba.activityBusy() }
     default:
       throw new Error(`未知操作 / unknown action: ${action}`)
   }
@@ -515,20 +515,20 @@ async function dispatch(studio, body, options = {}) {
 
 /** Cordis plugin entry. */
 export default {
-  name: 'dsh-db-studio',
+  name: 'dsh-dba',
   Config,
   inject: [],
   apply(ctx, config = null) {
     const cfg = config ?? { ...DEFAULT_CONFIG }
-    const studio = createStudio({ dshHome: cfg.dshHome, config: cfg })
+    const dba = createDba({ dshHome: cfg.dshHome, config: cfg })
 
     // Kick the load/demo seed off now; individual requests await the same
     // promise, so the first request after boot cannot race it.
-    studio.ready().catch((error) => {
-      console.warn('dsh-db-studio: initialization failed —', error?.message ?? error)
+    dba.ready().catch((error) => {
+      console.warn('dsh-dba: initialization failed —', error?.message ?? error)
     })
 
-    ctx.effect(() => () => studio.dispose().catch(() => {}), 'dsh-db-studio: adapters')
+    ctx.effect(() => () => dba.dispose().catch(() => {}), 'dsh-dba: adapters')
 
     // Live Session lookup for workspace-aware defaults. `sessions` may not be
     // mounted in every assembly, so this is a probe rather than an inject.
@@ -567,17 +567,17 @@ export default {
             }
           }
           if (req.method !== 'POST') {
-            send(200, { ok: true, service: 'dsh-db-studio', route: ROUTE })
+            send(200, { ok: true, service: 'dsh-dba', route: ROUTE })
             return
           }
           try {
             const body = await readBody(req)
-            send(200, await dispatch(studio, body, { cwdOf }))
+            send(200, await dispatch(dba, body, { cwdOf }))
           } catch (error) {
             send(200, { ok: false, error: error?.message ?? String(error) })
           }
         },
-      }), 'dsh-db-studio: http api')
+      }), 'dsh-dba: http api')
     })
 
     // ── model-facing tools ───────────────────────────────────────────────
@@ -591,31 +591,31 @@ export default {
             if (execution?.name !== 'db_execute') return next()
             return {
               kind: 'ask',
-              reason: 'dsh-db-studio db_execute writes to the database',
+              reason: 'dsh-dba db_execute writes to the database',
               displayReason: {
                 en: 'The assistant wants to run a write statement against your database (INSERT / UPDATE / DELETE / DDL). It only executes after you approve.',
                 zh: '助手即将对数据库执行写操作（INSERT / UPDATE / DELETE / DDL），你确认后才会执行。',
               },
             }
-          }), 'dsh-db-studio: agent write approval gate')
+          }), 'dsh-dba: agent write approval gate')
         }
         optionalHostImport('@deepseek-ai/dsh-tools').then((mod) => {
           if (!mod?.defineTool) {
-            console.warn('dsh-db-studio: @deepseek-ai/dsh-tools not reachable; agent tools are disabled')
+            console.warn('dsh-dba: @deepseek-ai/dsh-tools not reachable; agent tools are disabled')
             return
           }
           try {
             child.effect(() => {
-              const definitions = buildToolDefinitions(studio)
+              const definitions = buildToolDefinitions(dba)
               const disposers = definitions.map((definition) => child.tools.register(mod.defineTool(definition)))
-              console.info('dsh-db-studio: registered ' + definitions.length + ' agent tools (' + definitions.map((definition) => definition.name).join(', ') + ')')
+              console.info('dsh-dba: registered ' + definitions.length + ' agent tools (' + definitions.map((definition) => definition.name).join(', ') + ')')
               return () => { for (const dispose of disposers) dispose?.() }
-            }, 'dsh-db-studio: agent tools')
+            }, 'dsh-dba: agent tools')
           } catch (error) {
-            console.warn('dsh-db-studio: agent tools not registered —', error?.message ?? error)
+            console.warn('dsh-dba: agent tools not registered —', error?.message ?? error)
           }
         }).catch((error) => {
-          console.warn('dsh-db-studio: agent tools not registered —', error?.message ?? error)
+          console.warn('dsh-dba: agent tools not registered —', error?.message ?? error)
         })
       })
     }

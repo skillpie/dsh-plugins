@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: "dsh-db-studio",
+  id: "dsh-dba",
   factory: (require) => {
     var module = { exports: {} };
     var exports = module.exports;
@@ -7,8 +7,8 @@ window.__ModuleLoader__.load({
     var ReactDOM = null;
     try { ReactDOM = require("react-dom"); } catch (error) { ReactDOM = null; }
     var h = React.createElement;
-    var NS = "dsh-db-studio";
-    var API = "/dsh-db-studio/api";
+    var NS = "dsh-dba";
+    var API = "/dsh-dba/api";
 
     // ── copy ────────────────────────────────────────────────────────────
     var zh = {
@@ -340,7 +340,7 @@ window.__ModuleLoader__.load({
     function openGlobalPanel() {
       var layout = APP_CTX && APP_CTX.get("layout");
       if (!layout || typeof layout.selectPanel !== "function") return false;
-      try { layout.selectPanel("dbstudio"); return true; } catch (error) { return false; }
+      try { layout.selectPanel("dba"); return true; } catch (error) { return false; }
     }
 
     // ── per-session database state ──────────────────────────────────────
@@ -348,7 +348,7 @@ window.__ModuleLoader__.load({
     // The picker, the conversation tab and the status strip are three seats
     // over one host-owned answer. They share this small store so a checkbox
     // flips every surface at once; the host remains the authority and every
-    // mutation round-trips through /dsh-db-studio/api.
+    // mutation round-trips through /dsh-dba/api.
     var SESSION_CACHE = new Map();
     var sessionListeners = new Map();
 
@@ -846,17 +846,17 @@ window.__ModuleLoader__.load({
      */
     function installStyles(ctx) {
       ctx.effect(function () {
-        var tagId = "dsh-db-studio/client.css";
+        var tagId = "dsh-dba/client.css";
         if (typeof document === "undefined") return;
         var existing = document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]");
         if (existing) return function () {};
         var style = document.createElement("style");
-        style.dataset.plugin = "dsh-db-studio";
+        style.dataset.plugin = "dsh-dba";
         style.dataset.pluginCss = tagId;
         style.textContent = css;
         document.head.appendChild(style);
         return function () { style.remove(); };
-      }, "dsh-db-studio: styles");
+      }, "dsh-dba: styles");
     }
 
     // ── small UI atoms ───────────────────────────────────────────────────
@@ -1252,7 +1252,7 @@ window.__ModuleLoader__.load({
     }
 
     // ── main page ───────────────────────────────────────────────────────
-    function DbStudioPage(props) {
+    function DbaPage(props) {
       var t = props.t || function (key) { return key; };
       var [overview, setOverview] = React.useState(null);
       var [overviewError, setOverviewError] = React.useState(null);
@@ -1898,9 +1898,9 @@ window.__ModuleLoader__.load({
         setSessionSelection(sessionId, next).catch(function () {});
       }
 
-      function openStudio() {
+      function openDba() {
         setOpen(false);
-        if (props.openStudio) props.openStudio();
+        if (props.openDba) props.openDba();
         else openGlobalPanel();
       }
 
@@ -1934,7 +1934,7 @@ window.__ModuleLoader__.load({
         ),
         entry.error ? h("div", { className: "dshdb-picker-error" }, entry.error) : null,
         h("div", { className: "dshdb-picker-menusep" }),
-        h("button", { type: "button", className: "dshdb-picker-menuitem", onClick: openStudio },
+        h("button", { type: "button", className: "dshdb-picker-menuitem", onClick: openDba },
           h("span", { className: "dshdb-picker-menuicon" }, h(TuneIcon, { size: 14 })),
           h("span", { className: "dshdb-picker-menulabel" }, t("openPanel"))
         )
@@ -2682,7 +2682,7 @@ window.__ModuleLoader__.load({
     }
 
     /** Decorative database glyph for the sidebar row. */
-    function DbStudioIcon(props) {
+    function DbaIcon(props) {
       return h(DatabaseIcon, { size: props.size || 18 });
     }
 
@@ -2691,14 +2691,14 @@ window.__ModuleLoader__.load({
       return h(DatabaseIcon, { size: props.size || 14 });
     }
 
-    exports.name = "dsh-db-studio";
+    exports.name = "dsh-dba";
     exports.inject = ["slots", "layout", "locale", "commandUi"];
     exports.apply = function (ctx) {
       APP_CTX = ctx;
       installStyles(ctx);
       ctx.effect(function () {
         return ctx.locale.register(NS, { zh: zh, en: en });
-      }, "dsh-db-studio: dictionaries");
+      }, "dsh-dba: dictionaries");
       var t = ctx.locale.bind(NS);
 
       // `/db` in the composer: same row treatment as the built-in commands,
@@ -2717,31 +2717,31 @@ window.__ModuleLoader__.load({
               run: function () { openGlobalPanel(); }
             }
           });
-        }, "dsh-db-studio: /db command");
+        }, "dsh-dba: /db command");
       }
 
       ctx.slots.inject("main", function () {
         return ctx.slots.register({
           name: "main",
-          key: "dbstudio",
+          key: "dba",
           locale: NS
-        }, DbStudioPage);
+        }, DbaPage);
       });
       ctx.slots.inject("sidebar.panellist", function () {
         return ctx.slots.register({
           name: "sidebar.panellist",
-          id: "dbstudio",
+          id: "dba",
           order: 20,
           locale: NS,
           label: function () { return t("sidebarLabel"); }
-        }, DbStudioIcon);
+        }, DbaIcon);
       });
 
       // Conversation tab, right after Chat and before Trajectory (order 10).
       ctx.slots.inject("conversation.view", function () {
         return ctx.slots.register({
           name: "conversation.view",
-          id: "dbstudio",
+          id: "dba",
           order: 5,
           locale: NS,
           label: function () { return t("sidebarLabel"); }
@@ -2752,7 +2752,7 @@ window.__ModuleLoader__.load({
       ctx.slots.inject("conversation.input.left", function () {
         return ctx.slots.register({
           name: "conversation.input.left",
-          id: "dbstudio",
+          id: "dba",
           order: 20,
           locale: NS
         }, ConversationDbPicker);
@@ -2762,7 +2762,7 @@ window.__ModuleLoader__.load({
       ctx.slots.inject("conversation.composer.dock", function () {
         return ctx.slots.register({
           name: "conversation.composer.dock",
-          id: "dbstudio",
+          id: "dba",
           order: 20,
           locale: NS
         }, ConversationDbStatus);

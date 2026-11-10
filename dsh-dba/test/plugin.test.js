@@ -5,7 +5,7 @@ import { Readable } from 'node:stream'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import plugin, { buildToolDefinitions, dispatch, Config, ROUTE } from '../lib/index.js'
-import { DatabaseStudio } from '../lib/service.js'
+import { DbaService } from '../lib/service.js'
 
 const workspace = tmpdir()
 
@@ -22,13 +22,13 @@ test('Config materializes defaults and rejects bad values', () => {
 
 test('agent tools list, describe, query and execute', async () => {
   const home = await mkdtemp(join(workspace, '.tmp-test-'))
-  const studio = new DatabaseStudio({ dshHome: home, config: { demo: true } })
+  const dba = new DbaService({ dshHome: home, config: { demo: true } })
   try {
-    const [list, describe, query, execute] = buildToolDefinitions(studio)
+    const [list, describe, query, execute] = buildToolDefinitions(dba)
 
     // 查数手册随首次列表调用带给模型（插件侧最接近注入的通道）。
-    const demoId = (await studio.listConnections()).connections[0].id
-    await studio.setNotes(demoId, '统计 GMV 一律排除已取消订单')
+    const demoId = (await dba.listConnections()).connections[0].id
+    await dba.setNotes(demoId, '统计 GMV 一律排除已取消订单')
     const listed = await list.execute({})
     assert.match(listed.summary, /示例数据库/)
     assert.match(listed.summary, /查数手册/)
@@ -60,25 +60,25 @@ test('agent tools list, describe, query and execute', async () => {
 
     await assert.rejects(() => query.execute({ sql: 'DELETE FROM users' }), /read-only/)
   } finally {
-    await studio.dispose()
+    await dba.dispose()
     await rm(home, { recursive: true, force: true })
   }
 })
 
 test('dispatch answers the HTTP action vocabulary', async () => {
   const home = await mkdtemp(join(workspace, '.tmp-test-'))
-  const studio = new DatabaseStudio({ dshHome: home, config: { demo: true } })
+  const dba = new DbaService({ dshHome: home, config: { demo: true } })
   try {
-    const overview = await dispatch(studio, { action: 'overview' })
+    const overview = await dispatch(dba, { action: 'overview' })
     assert.equal(overview.ok, true)
     const id = overview.connections[0].id
-    const rows = await dispatch(studio, { action: 'rows', id, table: 'orders', limit: 2, offset: 0 })
+    const rows = await dispatch(dba, { action: 'rows', id, table: 'orders', limit: 2, offset: 0 })
     assert.equal(rows.rows.length, 2)
-    const query = await dispatch(studio, { action: 'query', id, sql: 'SELECT COUNT(*) AS n FROM orders' })
+    const query = await dispatch(dba, { action: 'query', id, sql: 'SELECT COUNT(*) AS n FROM orders' })
     assert.equal(query.rows[0].n, 18)
-    await assert.rejects(() => dispatch(studio, { action: 'nope' }), /unknown action/)
+    await assert.rejects(() => dispatch(dba, { action: 'nope' }), /unknown action/)
   } finally {
-    await studio.dispose()
+    await dba.dispose()
     await rm(home, { recursive: true, force: true })
   }
 })
@@ -143,15 +143,15 @@ test('plugin registers the HTTP route and answers it', async () => {
 
 test('agent tools honor the conversation selection', async () => {
   const home = await mkdtemp(join(workspace, '.tmp-test-'))
-  const studio = new DatabaseStudio({ dshHome: home, config: { demo: true } })
+  const dba = new DbaService({ dshHome: home, config: { demo: true } })
   try {
-    const overview = await studio.listConnections()
+    const overview = await dba.listConnections()
     const demo = overview.connections[0]
-    const second = await studio.addConnection({ kind: 'sqlite', name: 'other', file: join(home, 'other.db') })
+    const second = await dba.addConnection({ kind: 'sqlite', name: 'other', file: join(home, 'other.db') })
     const exec = { agent: { session: { id: 'session-tools', header: { cwd: '/workspace/demo' } } } }
-    const [list, , query] = buildToolDefinitions(studio)
+    const [list, , query] = buildToolDefinitions(dba)
 
-    await studio.setSessionSelection('session-tools', [demo.id], '/workspace/demo')
+    await dba.setSessionSelection('session-tools', [demo.id], '/workspace/demo')
     const listed = await list.execute({}, exec)
     assert.deepEqual(listed.selectedIds, [demo.id])
     assert.equal(listed.connections.find((row) => row.id === demo.id).selected, true)
@@ -165,50 +165,50 @@ test('agent tools honor the conversation selection', async () => {
       /不在当前会话的选择范围/,
     )
 
-    await studio.setSessionSelection('session-tools', [], '/workspace/demo')
+    await dba.setSessionSelection('session-tools', [], '/workspace/demo')
     await assert.rejects(
       () => query.execute({ sql: 'SELECT 1' }, exec),
       /还没有选择数据库/,
     )
   } finally {
-    await studio.dispose()
+    await dba.dispose()
     await rm(home, { recursive: true, force: true })
   }
 })
 
 test('dispatch exposes session-state, session-set and session-status', async () => {
   const home = await mkdtemp(join(workspace, '.tmp-test-'))
-  const studio = new DatabaseStudio({ dshHome: home, config: { demo: true } })
+  const dba = new DbaService({ dshHome: home, config: { demo: true } })
   try {
-    const state = await dispatch(studio, { action: 'session-state', sessionId: 's-api' })
+    const state = await dispatch(dba, { action: 'session-state', sessionId: 's-api' })
     assert.equal(state.ok, true)
     assert.equal(state.selectedIds.length, 1)
     const id = state.selectedIds[0]
 
-    const empty = await dispatch(studio, { action: 'session-set', sessionId: 's-api', ids: [] })
+    const empty = await dispatch(dba, { action: 'session-set', sessionId: 's-api', ids: [] })
     assert.deepEqual(empty.selectedIds, [])
 
-    const restored = await dispatch(studio, { action: 'session-set', sessionId: 's-api', ids: [id] })
+    const restored = await dispatch(dba, { action: 'session-set', sessionId: 's-api', ids: [id] })
     assert.deepEqual(restored.selectedIds, [id])
 
-    const status = await dispatch(studio, { action: 'session-status', sessionId: 's-api' })
+    const status = await dispatch(dba, { action: 'session-status', sessionId: 's-api' })
     assert.equal(status.connections[0].ok, true)
 
     await assert.rejects(
-      () => dispatch(studio, { action: 'query', sessionId: 's-api', id: 'missing', sql: 'SELECT 1' }),
+      () => dispatch(dba, { action: 'query', sessionId: 's-api', id: 'missing', sql: 'SELECT 1' }),
       /not selected|not found/,
     )
   } finally {
-    await studio.dispose()
+    await dba.dispose()
     await rm(home, { recursive: true, force: true })
   }
 })
 
 test('agent tools include db_export, keyword filter and allowFullTable', async () => {
   const home = await mkdtemp(join(workspace, '.tmp-test-'))
-  const studio = new DatabaseStudio({ dshHome: home, config: { demo: true } })
+  const dba = new DbaService({ dshHome: home, config: { demo: true } })
   try {
-    const definitions = buildToolDefinitions(studio)
+    const definitions = buildToolDefinitions(dba)
     assert.deepEqual(
       definitions.map((definition) => definition.name),
       ['db_list_connections', 'db_describe_schema', 'db_query', 'db_execute', 'db_export'],
@@ -241,49 +241,49 @@ test('agent tools include db_export, keyword filter and allowFullTable', async (
     assert.equal(exported.files.length, 1)
     assert.match(exported.files[0].path, /users/)
   } finally {
-    await studio.dispose()
+    await dba.dispose()
     await rm(home, { recursive: true, force: true })
   }
 })
 
 test('notes and export actions flow through dispatch', async () => {
   const home = await mkdtemp(join(workspace, '.tmp-test-'))
-  const studio = new DatabaseStudio({ dshHome: home, config: { demo: true } })
+  const dba = new DbaService({ dshHome: home, config: { demo: true } })
   try {
-    const overview = await dispatch(studio, { action: 'overview' })
+    const overview = await dispatch(dba, { action: 'overview' })
     const id = overview.connections[0].id
 
-    const saved = await dispatch(studio, { action: 'notes-set', id, notes: '# 手册\n统计 GMV 排除已取消订单' })
+    const saved = await dispatch(dba, { action: 'notes-set', id, notes: '# 手册\n统计 GMV 排除已取消订单' })
     assert.match(saved.notes, /手册/)
-    const fetched = await dispatch(studio, { action: 'notes-get', id })
+    const fetched = await dispatch(dba, { action: 'notes-get', id })
     assert.match(fetched.notes, /统计/)
 
-    const exported = await dispatch(studio, { action: 'export', id, scope: 'csv', tables: ['users'], outputDir: join(home, 'dispatch-out') })
+    const exported = await dispatch(dba, { action: 'export', id, scope: 'csv', tables: ['users'], outputDir: join(home, 'dispatch-out') })
     assert.equal(exported.ok, true)
     assert.equal(exported.files.length, 1)
 
     // describe 列表模式带回手册
-    const tables = await dispatch(studio, { action: 'tables', id })
+    const tables = await dispatch(dba, { action: 'tables', id })
     assert.match(tables.notes, /统计/)
   } finally {
-    await studio.dispose()
+    await dba.dispose()
     await rm(home, { recursive: true, force: true })
   }
 })
 
 test('activity counter wraps tool executions', async () => {
   const home = await mkdtemp(join(workspace, '.tmp-test-'))
-  const studio = new DatabaseStudio({ dshHome: home, config: { demo: true } })
+  const dba = new DbaService({ dshHome: home, config: { demo: true } })
   try {
-    const definitions = buildToolDefinitions(studio)
-    assert.equal(studio.activityBusy(), false)
+    const definitions = buildToolDefinitions(dba)
+    assert.equal(dba.activityBusy(), false)
     await definitions[2].execute({ sql: 'SELECT COUNT(*) AS n FROM users' })
-    assert.equal(studio.activityBusy(), false)
+    assert.equal(dba.activityBusy(), false)
     // dispatch 暴露 activity 动作
-    const activity = await dispatch(studio, { action: 'activity' })
+    const activity = await dispatch(dba, { action: 'activity' })
     assert.equal(activity.busy, false)
   } finally {
-    await studio.dispose()
+    await dba.dispose()
     await rm(home, { recursive: true, force: true })
   }
 })

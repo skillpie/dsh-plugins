@@ -1,5 +1,5 @@
 {
-  "name": "dsh-db-studio",
+  "name": "dsh-dba",
   "version": "1.0.3",
   "description": "Connect to databases in DeepSeek Harness (DSH), then query and edit data right in the conversation.",
   "type": "module",
@@ -59,12 +59,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/etShaw-zh/dsh-db-studio.git"
+    "url": "git+https://github.com/etShaw-zh/dsh-dba.git"
   },
   "author": "Jianjun Xiao <et_shaw@126.com>",
-  "homepage": "https://github.com/etShaw-zh/dsh-db-studio#readme",
+  "homepage": "https://github.com/etShaw-zh/dsh-dba#readme",
   "bugs": {
-    "url": "https://github.com/etShaw-zh/dsh-db-studio/issues"
+    "url": "https://github.com/etShaw-zh/dsh-dba/issues"
   },
   "publishConfig": {
     "access": "public",

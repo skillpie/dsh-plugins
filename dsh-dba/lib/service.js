@@ -1,12 +1,12 @@
 /**
- * DatabaseStudio — the headless half of dsh-db-studio.
+ * DbaService — the headless half of dsh-dba.
  *
  * Owns the connection store, one cached adapter per connection, the demo
  * database, and the operation vocabulary shared by the HTTP route and the
  * agent tools. Nothing here imports Cordis, so the whole service is testable in
  * a plain Node process.
  *
- * @module dsh-db-studio/service
+ * @module dsh-dba/service
  */
 
 import { chmod, mkdir, stat, writeFile } from 'node:fs/promises'
@@ -24,7 +24,7 @@ import {
   toCsv,
   toSqlLiteral,
 } from './drivers.js'
-import { resolveDshHome, studioHome } from './home.js'
+import { resolveDshHome, dbaHome } from './home.js'
 import { boundNotes, ConnectionStore, connectionTarget, normalizeConnection, publicConnection } from './store.js'
 import { SessionSelectionStore } from './session-store.js'
 
@@ -140,14 +140,14 @@ INSERT INTO orders (id, user_id, product_id, quantity, total, status, created_at
   (18, 3, 1, 3, 384.0, 'paid', '2026-10-17 11:56:00');
 `
 
-export class DatabaseStudio {
+export class DbaService {
   /** Agent 工具在飞计数：底部状态条的圆点闪烁据此判断。 */
   #activityCount = 0
 
   constructor(options = {}) {
     this.config = { ...DEFAULT_CONFIG, ...(options.config ?? {}) }
     this.home = resolveDshHome(options.dshHome, options.env ?? process.env)
-    this.dir = studioHome(this.home)
+    this.dir = dbaHome(this.home)
     this.demoFile = join(this.dir, 'demo.db')
     this.store = new ConnectionStore(this.home)
     this.selections = new SessionSelectionStore(this.home)
@@ -174,7 +174,7 @@ export class DatabaseStudio {
       try {
         await this.#ensureDemo()
       } catch (error) {
-        console.warn('dsh-db-studio: demo database could not be created —', error?.message ?? error)
+        console.warn('dsh-dba: demo database could not be created —', error?.message ?? error)
       }
     }
   }
@@ -478,7 +478,7 @@ export class DatabaseStudio {
         ...outcome,
       })
     } catch (error) {
-      console.warn('dsh-db-studio: failed to record SQL history —', error?.message ?? error)
+      console.warn('dsh-dba: failed to record SQL history —', error?.message ?? error)
     }
   }
 
@@ -639,7 +639,7 @@ export class DatabaseStudio {
 
   /**
    * Export tables as .sql / .csv files under `outputDir` (default
-   * `sql/export` relative to the session workspace, or the studio home when
+   * `sql/export` relative to the session workspace, or the dba home when
    * no workspace is known). scope=ddl writes CREATE TABLE statements (MySQL /
    * SQLite), dml writes INSERTs, csv writes RFC 4180 with a UTF-8 BOM. The
    * database side is read-only; files are the only side effect.
@@ -737,7 +737,7 @@ export class DatabaseStudio {
     const raw = typeof outputDir === 'string' && outputDir.trim() ? outputDir.trim() : join('sql', 'export')
     if (isAbsolute(raw)) return resolve(raw)
     if (typeof cwd === 'string' && cwd.trim()) return resolve(cwd, raw)
-    return resolve(studioHome(this.home), raw)
+    return resolve(dbaHome(this.home), raw)
   }
 
   /** Create the demo connection on demand (empty-state button). */
@@ -757,6 +757,6 @@ export class DatabaseStudio {
 }
 
 /** Convenience factory used by the Cordis entry and tests. */
-export function createStudio(options) {
-  return new DatabaseStudio(options)
+export function createDba(options) {
+  return new DbaService(options)
 }
