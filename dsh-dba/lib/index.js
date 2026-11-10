@@ -515,7 +515,7 @@ async function dispatch(dba, body, options = {}) {
 
 /** Cordis plugin entry. */
 export default {
-  name: 'dsh-dba',
+  name: '@skillpie/dsh-dba',
   Config,
   inject: [],
   apply(ctx, config = null) {

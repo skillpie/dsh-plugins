@@ -1,5 +1,5 @@
 {
-  "name": "dsh-skillpie",
+  "name": "@skillpie/dsh-market",
   "version": "1.0.0",
   "description": "SkillPie marketplace for DeepSeek Harness: search and install agent skills from the sidebar.",
   "type": "module",
@@ -46,5 +46,8 @@
         "@deepseek-ai/dsh-client-ui-sidebar"
       ]
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

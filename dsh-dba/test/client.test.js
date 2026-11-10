@@ -35,7 +35,7 @@ test('client bundle registers a sidebar entry and a main panel', async () => {
   }
   vm.runInNewContext(code, sandbox, { filename: 'client.js' })
   assert.ok(captured, 'the bundle must register a module factory')
-  assert.equal(captured.id, 'dsh-dba')
+  assert.equal(captured.id, '@skillpie/dsh-dba')
 
   const React = {
     createElement() { return null },
@@ -47,7 +47,7 @@ test('client bundle registers a sidebar entry and a main panel', async () => {
     if (request === 'react') return React
     throw new Error('unexpected require: ' + request)
   })
-  assert.equal(client.name, 'dsh-dba')
+  assert.equal(client.name, '@skillpie/dsh-dba')
   assert.ok(client.inject.includes('slots'))
   assert.ok(client.inject.includes('layout'))
   assert.ok(client.inject.includes('locale'))
@@ -91,7 +91,7 @@ test('client bundle registers a sidebar entry and a main panel', async () => {
   const status = registrations.find((row) => row.options.name === 'conversation.composer.dock')
   assert.ok(main, 'must register the main panel')
   assert.equal(main.options.key, 'dba')
-  assert.equal(main.options.locale, 'dsh-dba')
+  assert.equal(main.options.locale, '@skillpie/dsh-dba')
   assert.ok(sidebar, 'must register the sidebar entry')
   assert.equal(sidebar.options.id, 'dba')
   assert.equal(typeof sidebar.options.order, 'number')

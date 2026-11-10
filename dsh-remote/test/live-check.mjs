@@ -1,69 +1,65 @@
 /**
- * Live end-to-end check against a running DSH process with dsh-remote
- * installed (direct mode). Read-only: welcome, session list, observe one
- * session, then close. No prompts are sent.
+ * live-check.mjs — 对真实 dsh-remote 进程做只读冒烟（gui 模式）。
  *
- * Run: node test/live-check.mjs [origin] [code]
+ * 用法: node test/live-check.mjs [origin] [code]
+ *   origin 默认 http://127.0.0.1:52639（本地透传），公网例:
+ *   node test/live-check.mjs https://dsh.skillpie.cn 52301705
+ *
+ * 检查项（全部只读）:
+ *   1. GET /<code>/        → 200 且是代理的 GUI 壳（id="root" + 访客 shim），
+ *                            不是"宿主机暂时离线"占位页；
+ *   2. GET /<code>/（无斜杠）→ 302 到 /<code>/；
+ *   3. GET /dsh-remote/api → 属主 API 存活（仅宿主角色直接可达时）。
+ *
+ * 注意: 旧版探针打 /<code>/ws（console 模式端点），gui 模式下必然
+ * socket hang up——那是假警报，不要再用它判断 gui 模式健康。
  */
-import WebSocket from 'ws'
+import { get } from 'node:http'
+import { get as httpsGet } from 'node:https'
 
-const origin = process.argv[2] ?? 'http://127.0.0.1:58464'
-const url = new URL(origin)
-const code = process.argv[3]
-if (!code || !/^\d{8}$/.test(code)) {
-  console.error('usage: node test/live-check.mjs [origin] [8-digit-code]')
-  process.exit(2)
+const origin = process.argv[2] ?? 'http://127.0.0.1:52639'
+const code = process.argv[3] ?? ''
+
+const fail = (msg) => { console.error('LIVE CHECK FAILED:', msg); process.exit(1) }
+if (!/^\d{8}$/.test(code)) fail(`缺少 8 位远程码: node test/live-check.mjs <origin> <code>`)
+
+function fetchText(url, maxBytes = 400_000) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https:') ? httpsGet : get
+    const req = mod(url, { headers: { 'user-agent': 'dsh-remote-live-check' } }, (res) => {
+      const chunks = []
+      let size = 0
+      res.on('data', (c) => { size += c.length; if (size <= maxBytes) chunks.push(c) })
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }))
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+    req.setTimeout(20_000, () => { req.destroy(new Error('timeout')) })
+  })
 }
 
-const ws = new WebSocket(`${url.protocol === 'https:' ? 'wss:' : 'ws:'}//${url.host}/${code}/ws`)
-const timer = setTimeout(() => {
-  console.error('LIVE CHECK FAILED: timeout')
-  process.exit(1)
-}, 15_000)
+const base = origin.replace(/\/+$/, '')
 
-ws.on('message', (data) => {
-  const frame = JSON.parse(String(data))
-  if (frame.t === 'welcome') {
-    console.log(`welcome: host=${frame.host?.name} allowControl=${frame.host?.allowControl} sessions=${frame.sessions?.length}`)
-    const first = frame.sessions?.[0]
-    if (!first) {
-      console.log('no sessions on host — live check passes (list reached sessionController)')
-      clearTimeout(timer)
-      ws.close()
-      return
-    }
-    console.log(`observing session ${first.id} "${first.title ?? '(untitled)'}" running=${first.running}`)
-    ws.send(JSON.stringify({ t: 'cmd', id: 'r1', cmd: 'sessions.observe', p: { sessionId: first.id } }))
-    return
-  }
-  if (frame.t === 'res' && frame.id === 'r1') {
-    if (!frame.ok) {
-      console.error('LIVE CHECK FAILED: observe rejected:', frame.error)
-      process.exit(1)
-    }
-    console.log(`observe accepted: cursor=${frame.data.cursor} running=${frame.data.state.running}`)
-    return
-  }
-  if (frame.t === 'push') {
-    console.log(`push: f.t=${frame.f?.t} sessionId=${frame.f?.sessionId ?? ''}`)
-    if (frame.f?.t === 'session-history') {
-      const kinds = {}
-      for (const record of frame.f.records ?? []) {
-        const type = record?.event?.type ?? '?'
-        kinds[type] = (kinds[type] ?? 0) + 1
-      }
-      console.log(`history received: ${frame.f.records?.length ?? 0} records`, kinds)
-      console.log('LIVE CHECK PASSED')
-      clearTimeout(timer)
-      ws.close()
-      process.exit(0)
-    }
-    return
-  }
-  console.log(`frame: t=${frame.t} id=${frame.id ?? ''} ok=${frame.ok}`)
-})
+// 1. GUI 壳代理 + 访客 shim
+const page = await fetchText(`${base}/${code}/`).catch((e) => fail(`GET /${code}/ 失败: ${e.message}`))
+if (page.status !== 200) fail(`GET /${code}/ → ${page.status}（离线页/404 都说明 host 未注册到中转）`)
+if (!page.body.includes('id="root"')) fail(`GET /${code}/ 不是 GUI 壳（缺 id="root"），可能被占位页/降级响应顶替`)
+if (!page.body.includes('dsh-remote visitor shim')) fail('代理 HTML 缺少访客 URL shim（公网访客的 /api/* 调用会 400/405）')
+console.log(`✅ GET /${code}/ → 200 GUI 壳 + 访客 shim`)
 
-ws.on('error', (error) => {
-  console.error('LIVE CHECK FAILED: ws error', error.message)
-  process.exit(1)
-})
+// 2. 裸码 302
+const bare = await fetchText(`${base}/${code}`).catch((e) => fail(`GET /${code} 失败: ${e.message}`))
+if (bare.status !== 302 || !String(bare.headers.location ?? '').startsWith(`/${code}/`)) {
+  fail(`GET /${code} → ${bare.status}（期望 302 → /${code}/）`)
+}
+console.log(`✅ GET /${code} → 302 → /${code}/`)
+
+// 3. 属主 API（本地/宿主角色才直接可达；relay-only 服务器 404 属正常）
+const api = await fetchText(`${base}/dsh-remote/api`).catch(() => null)
+if (api && api.status === 200 && api.body.includes('"ok":true')) {
+  console.log('✅ GET /dsh-remote/api → 属主 API 存活')
+} else {
+  console.log('ℹ️ /dsh-remote/api 未直接可达（relay-only 部署属正常）')
+}
+
+console.log(`\n🎉 LIVE CHECK 通过: ${base}/${code}/ 可正常访问`)

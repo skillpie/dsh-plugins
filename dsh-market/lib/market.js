@@ -1,5 +1,5 @@
 /**
- * dsh-skillpie — SkillPie (https://skillpie.cn) market client + installer (host half core).
+ * @skillpie/dsh-market — SkillPie (https://skillpie.cn) market client + installer (host half core).
  *
  * Public, auth-free HTTP API. The field contract mirrors ZCode's
  * packages/shared/src/skill-market.ts (verified against the live service):
@@ -215,7 +215,7 @@ export async function installArchive({ archive, normalizedName, skillRoot }) {
     return { status: 'already-installed', normalizedName, path: targetPath }
   }
 
-  const tempRoot = await mkdtemp(join(tmpdir(), 'dsh-skillpie-'))
+  const tempRoot = await mkdtemp(join(tmpdir(), 'dsh-market-'))
   try {
     const extractRoot = join(tempRoot, 'package')
     await extractZipArchive(archive, extractRoot)

@@ -7,7 +7,7 @@
 ## 技术栈
 
 **运行时**: dsh 0.2.2-rc.1(桌面/官方 npm 同版) | Node ≥22.13(桌面内置 24.21) | 纯 JS ESM,无构建步骤
-**插件依赖**: ws ^8.21.3(dsh-remote) | yauzl ^3.2.0(dsh-skillpie) | pnpm 本地开发/测试依赖
+**插件依赖**: ws ^8.21.3(dsh-remote) | yauzl ^3.2.0(@skillpie/dsh-market) | pnpm 本地开发/测试依赖
 **测试**: node 独立冒烟脚本 `node test/*.mjs`(真实 http+ws 服务器) | agent-browser 无头浏览器验证 UI
 
 ## 新建插件最快路径
@@ -53,7 +53,23 @@
 - systemd 启动:`dsh web --no-open --host 127.0.0.1 --port <p> --public-url https://<域名> --trusted-host <域名>`;nginx 原样透传 Host 与 WebSocket 升级。
 - 服务器上插件依赖需在插件目录内 `npm install --registry=https://registry.npmmirror.com`(link 安装不会代装依赖)。
 - 桌面崩溃恢复会把 profile 的 `dsh.profile.bundles` 重置为出厂两项;用 `plugin_manager set_bundle` 逐个恢复用户 bundle。
+- relay 前缀透传下,GUI/插件的同源绝对路径 API(`/api/*`、`/dsh-dba/*`)必须由 relay 向代理 HTML 注入 fetch/WebSocket shim 重写到 `/<code>/` 前缀,否则公网访客命中 SPA fallback(POST→405)或无访客态的根 mux(→400);`relay-core.visitorShimScript` 即此实现。
+- bridge 收到 `hreq` 帧不可立即 fetch:wss 路径上 `hchunk`/`hend` 是后续独立帧,必须等 body 就绪(`entry.ready`)再 dispatch;本地 pipe 同步送达会掩盖该时序,只在公网复现。
+- 插件可选依赖(pg/mysql2)用裸 `import()` 惰性加载:一次解析失败会被 Node ESM 负缓存记住,进程内永久失败(磁盘 `node -e import()` 正常也无效),重启宿主进程才能恢复;诊断时先在磁盘验证解析再怀疑进程。
+- 宿主进程日志(journal/stdout)看不到插件 `logLine`——它只写内存环,经属主 API 暴露;relay-only 服务器上属主 API 关闭时日志不可见,排障要靠复现探针而不是服务器日志。
 - 安装插件前校验其 peer 版本与 dsh 运行时匹配(`plugin-market 0.2.1-alpha.4` 对 `0.2.2-rc.1` 会启动即 exit 1)。
+
+## npm 发布
+
+- 发布统一走工作区根目录 `publish_npm.sh`:在插件目录里 `../publish_npm.sh`(先 `--dry-run` 预检),脚本依次做身份校验、语法/测试、打包清单检查、发布、等官方异步索引、触发 npmmirror 同步。
+- token 用 Granular Access Token(权限 Read and write);普通 token 发布会被 403 要求 2FA,只能 `npm publish --otp=xxxxxx` 人工给码。
+- scoped 包必须在 package.json 设 `publishConfig.access: "public"`,否则按私有包收费拒绝发布。
+- 本机默认 registry 是 npmmirror;官方源操作(publish/whoami/view 新包)必须显式 `--registry=https://registry.npmjs.org/`。
+- 发布成功 ≠ 立刻可装:官方索引异步(数分钟),**新包首次发布可能先挂 `0.0.0-stage` 空壳占位版本**(无任何文件,按名安装会报 declares no dsh.bundle);`npm view <包名> version` 返回真实版本前不要分发安装。
+- npmmirror 只读:发布后主动 `PUT https://registry-direct.npmmirror.com/<包>/sync?sync_upstream=true` 同步(URL 中 @→%40、/→%2F),验证 `registry.npmmirror.com/<包>` 的 dist-tags.latest 后再通知国内用户。
+- 首次发布前查名:`npm view <包名>` 404 = 可用;npm scope(用户/组织)与用户名共享命名空间,先到先得,不可改名。
+- files 白名单决定 tarball 内容:必含 `cordis.patch.yml`(locale/icon/README 同理),node_modules/lockfile 永不进包;`npm pack --dry-run` 逐项核对。
+- 插件命名社区现状:`dsh-*` 裸前缀占 ~2/3 但重灾区(常用词几乎被占),`@scope/dsh-*` ~21%,`dsh-plugin-*` ~5%;官方自身全用 scope(`@deepseek-ai/dsh-*`),无硬性命名规定,建议 scope。
 
 ## 禁止事项
 

@@ -5,7 +5,7 @@
 # so Node module resolution finds the installed package.
 - insert:
     - id: dba
-      name: dsh-dba
+      name: "@skillpie/dsh-dba"
       config:
         demo: true
         allowWrite: true

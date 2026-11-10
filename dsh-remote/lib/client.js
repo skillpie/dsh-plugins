@@ -464,6 +464,10 @@ window.__ModuleLoader__.load({
           : function (key) { return (zh[key] != null ? zh[key] : (en[key] != null ? en[key] : key)) }
 
         // Sidebar foot: compact action button beside Settings.
+        // 经中转透传访问的访客页（relay 注入 __DSH_REMOTE_VISITOR__）不挂远程入口：
+        // 属主 API 对访客是跨源拒绝的，面板对他们没有用处，只有桌面端展示。
+        if (window.__DSH_REMOTE_VISITOR__ === true) return
+
         ctx.slots.inject('sidebar.footer.action', function () {
           return ctx.slots.register({
             name: 'sidebar.footer.action',

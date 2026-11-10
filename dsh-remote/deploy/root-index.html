@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>远程访问</title>
+<script>
+/* 记住最后访问的 8 位远程码：直接访问根路径时自动跳回上次的宿主机。 */
+(function () {
+  try {
+    var c = localStorage.getItem('dsh-remote-last-code')
+    if (c && /^[1-9]\d{7}$/.test(c)) { location.replace('/' + c + '/'); return }
+  } catch (e) { /* 隐私模式等场景忽略 */ }
+})()
+</script>
+<style>
+  body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#101114;color:#e8eaed;font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  .card{display:flex;flex-direction:column;gap:14px;width:min(340px,86vw);padding:28px 26px;border:1px solid #26282e;border-radius:14px;background:#17181c}
+  .brand{font-size:17px;font-weight:600}
+  .hint{font-size:12.5px;color:#9aa0a6}
+  input{box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid #2c2f36;border-radius:8px;background:#101114;color:#e8eaed;font:15px ui-monospace,Menlo,monospace;letter-spacing:2px;outline:none}
+  input:focus{border-color:#6b84ff}
+  button{padding:10px 12px;border:0;border-radius:8px;background:#3b5bfd;color:#fff;font:14px -apple-system,"PingFang SC",sans-serif;cursor:pointer}
+  button:hover{background:#4d6cff}
+  .err{font-size:12px;color:#ff7a7a;min-height:16px}
+</style></head>
+<body>
+  <div class="card">
+    <div class="brand">远程访问</div>
+    <div class="hint">输入宿主机的 8 位远程码进入。最近使用的码会记住并自动跳转。</div>
+    <input id="code" inputmode="numeric" maxlength="8" placeholder="8 位远程码" autocomplete="off" autofocus>
+    <button id="go">进入</button>
+    <div class="err" id="err"></div>
+  </div>
+<script>
+  var i = document.getElementById('code')
+  var b = document.getElementById('go')
+  var e = document.getElementById('err')
+  function go() {
+    var v = (i.value || '').trim()
+    if (!/^[1-9]\d{7}$/.test(v)) { e.textContent = '请输入 8 位数字远程码（不含 0 开头）'; return }
+    try { localStorage.setItem('dsh-remote-last-code', v) } catch (_) {}
+    location.href = '/' + v + '/'
+  }
+  b.onclick = go
+  i.addEventListener('keydown', function (k) { if (k.key === 'Enter') go() })
+  i.addEventListener('input', function () { e.textContent = '' })
+</script>
+</body></html>

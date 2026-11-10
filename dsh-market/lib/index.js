@@ -1,7 +1,7 @@
 /**
- * dsh-skillpie — Cordis entry (host half).
+ * @skillpie/dsh-market — Cordis entry (host half).
  *
- * Serves POST /dsh-skillpie/api for the browser panel:
+ * Serves POST /dsh-market/api for the browser panel:
  *   { action: 'search',   query, limit }  → { ok, results }
  *   { action: 'installed' }               → { ok, skills }
  *   { action: 'install',  name }          → { ok, result }
@@ -16,7 +16,7 @@
 import { join } from 'node:path'
 import { createMarket, DEFAULT_BASE_URL, DEFAULT_SKILL_ROOT, SkillMarketError } from './market.js'
 
-export const ROUTE = '/dsh-skillpie/api'
+export const ROUTE = '/dsh-market/api'
 const MAX_BODY = 64 * 1024
 
 /** One issue in the Standard Schema config vocabulary. */
@@ -29,7 +29,7 @@ const issue = (message, ...path) => ({ message, path: path.length ? path : undef
 export const Config = {
   '~standard': {
     version: 1,
-    vendor: 'dsh-skillpie',
+    vendor: 'dsh-market',
     validate(input) {
       if (input === undefined || input === null) return { value: {} }
       if (typeof input !== 'object' || Array.isArray(input)) return { issues: [issue('expected an object')] }
@@ -98,7 +98,7 @@ async function dispatch(market, body) {
 
 /** Cordis plugin entry (service-object export form). */
 export default {
-  name: 'dsh-skillpie',
+  name: '@skillpie/dsh-market',
   Config,
   inject: [],
   apply(ctx, config = null) {
@@ -108,7 +108,7 @@ export default {
       baseUrl: cfg.baseUrl ?? DEFAULT_BASE_URL,
     })
 
-    ctx.effect(() => () => {}, 'dsh-skillpie: lifetime')
+    ctx.effect(() => () => {}, '@skillpie/dsh-market: lifetime')
 
     // HTTP carrier for the browser panel. Optional: headless assemblies keep
     // the module loadable without the web layer.
@@ -136,7 +136,7 @@ export default {
             }
           }
           if (req.method !== 'POST') {
-            send(200, { ok: true, service: 'dsh-skillpie', route: ROUTE })
+            send(200, { ok: true, service: 'dsh-market', route: ROUTE })
             return
           }
           try {
@@ -145,7 +145,7 @@ export default {
             send(200, { ok: false, error: error?.message ?? String(error) })
           }
         },
-      }), 'dsh-skillpie: http api')
+      }), '@skillpie/dsh-market: http api')
     })
   },
 }

@@ -1,9 +1,9 @@
-# dsh-skillpie bundle patch.
+# dsh-market bundle patch.
 #
-# One dual-face row: the host half serves POST /dsh-skillpie/api (search,
+# One dual-face row: the host half serves POST /dsh-market/api (search,
 # detail, install into ~/.agents/skills), the client half registers the
 # sidebar panel icon and the "Skill marketplace" main view.
 - insert:
-    - id: skillpie
-      name: dsh-skillpie
+    - id: market
+      name: "@skillpie/dsh-market"
       config: {}

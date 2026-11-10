@@ -45,6 +45,7 @@ const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024
  * console mode are tiny and checked separately.
  */
 const MAX_HOST_FRAME_BYTES = 8 * 1024 * 1024
+const MAX_HTML_INJECT_BYTES = 4 * 1024 * 1024
 const MAX_VISITOR_FRAME_BYTES = 8 * 1024 * 1024
 
 export class RelayCore {
@@ -352,11 +353,47 @@ export class RelayCore {
 
   offlineHtml(code) {
     return `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="refresh" content="5">
+<html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="refresh" content="5"><script>try{localStorage.setItem('dsh-remote-last-code','${code}')}catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>远程控制 ${code}</title>
 <style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:#101114;color:#e8eaed;font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}.big{font-size:17px}.hint{font-size:12.5px;color:#9aa0a6}code{font-family:ui-monospace,Menlo,monospace;color:#6b84ff}</style></head>
 <body><div class="big">宿主机暂时离线</div><div class="hint">远程码 <code>${code}</code> 有效，但宿主机尚未连上中转站。页面会自动重试。</div></body></html>`
+  }
+
+  /**
+   * Visitor-side URL shim. The proxied GUI and plugin panels call absolute
+   * same-origin paths (`/api/...`, `/dsh-dba/...`), which only resolve on the
+   * host's own origin. Under `/<code>/` they must ride the prefix so they land
+   * on the relay's proxy route and splice mux instead of the SPA fallback.
+   * Injected into proxied HTML right after `<head>`; runs before app scripts.
+   */
+  visitorShimScript(code) {
+    const prefix = JSON.stringify(`/${code}`)
+    const map = JSON.stringify(['/api/', '/dsh-dba/', '/dsh-market/'])
+    return `<script>(function(){
+window.__DSH_REMOTE_VISITOR__=true;
+try{localStorage.setItem('dsh-remote-last-code',${JSON.stringify(code)})}catch(e){}
+var P=${prefix};var M=${map};
+function pick(p){for(var i=0;i<M.length;i++){var m=M[i];if(p===m||p.slice(0,m.length)===m)return true}return false}
+function rebase(u){try{var x=new URL(u,location.href);if((x.protocol==='http:'||x.protocol==='https:'||x.protocol==='ws:'||x.protocol==='wss:')&&x.host===location.host&&pick(x.pathname)){return P+x.pathname+x.search+x.hash}}catch(e){}return u}
+var of=window.fetch;
+window.fetch=function(input,init){
+  try{
+    if(typeof input==='string')return of(rebase(input),init);
+    if(input&&typeof input.url==='string'){var nu=rebase(input.url);if(nu!==input.url)return of(new Request(nu,input),init)}
+  }catch(e){}
+  return of(input,init);
+};
+var OW=window.WebSocket;
+window.WebSocket=class extends OW{constructor(u,p){u=rebase(typeof u==='string'?u:String(u));super(u,p)}};
+})(/* dsh-remote visitor shim */);</script>`
+  }
+
+  injectVisitorShim(html, code) {
+    if (typeof html !== 'string' || html.length === 0) return html
+    const shim = this.visitorShimScript(code)
+    if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + shim)
+    return shim + html
   }
 
   proxyHttp(req, res, code, host) {
@@ -408,7 +445,7 @@ export class RelayCore {
     })
     req.on('error', () => { failed = true })
     req.on('end', () => { done = true })
-    const op = { res, timer: undefined, done: false }
+    const op = { res, timer: undefined, done: false, method: req.method }
     host.httpOps.set(id, op)
     op.timer = this.later(() => {
       if (!op.done) {
@@ -487,6 +524,15 @@ export class RelayCore {
     const headers = { ...(frame.h ?? {}) }
     const setCookies = Array.isArray(frame.sc) ? frame.sc.map((line) => this.rewriteSetCookie(line, host.code)) : []
     if (setCookies.length > 0) headers['set-cookie'] = setCookies
+    // HTML 响应缓冲注入访客 shim（GET/HEAD 才有 body；上限见 MAX_HTML_INJECT_BYTES）。
+    if (
+      (op.method === 'GET' || op.method === 'HEAD') &&
+      /text\/html/i.test(String(headers['content-type'] ?? ''))
+    ) {
+      op.htmlInject = true
+      op.parts = []
+      op.htmlBytes = 0
+    }
     try {
       op.res.writeHead(frame.s ?? 502, headers)
     } catch (error) {
@@ -504,7 +550,14 @@ export class RelayCore {
     host.httpOps.delete(id)
     this.disposeTimer(op.timer)
     op.done = true
-    try { op.res.end() } catch { op.res.destroy() }
+    try {
+      if (op.htmlInject) {
+        const html = this.injectVisitorShim(Buffer.concat(op.parts).toString('utf8'), host.code)
+        op.res.end(html)
+      } else {
+        op.res.end()
+      }
+    } catch { op.res.destroy() }
   }
 
   routeText(host, frame) {
@@ -518,6 +571,17 @@ export class RelayCore {
     if (meta.t === 'hchunk') {
       const op = host.httpOps.get(meta.id)
       if (!op || op.res.writableEnded) return
+      if (op.htmlInject) {
+        op.htmlBytes += payload.length
+        if (op.htmlBytes <= MAX_HTML_INJECT_BYTES) {
+          op.parts.push(payload)
+          return
+        }
+        // 超限放弃注入：先冲掉已缓冲内容再直写当前块，保持字节顺序。
+        op.htmlInject = false
+        for (const part of op.parts) op.res.write(part)
+        op.parts = []
+      }
       op.res.write(payload)
       return
     }

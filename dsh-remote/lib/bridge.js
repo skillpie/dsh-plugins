@@ -155,7 +155,7 @@ export class GuiBridge {
   onRequestAbort(id) {
     const entry = this.httpHandlers.get(id)
     if (!entry) return
-    entry.ended = true
+    entry.markEnded()
     entry.abort?.()
     this.httpHandlers.delete(id)
   }
@@ -185,12 +185,24 @@ export class GuiBridge {
     const { id, m, p } = frame
     if (typeof id !== 'string' || typeof m !== 'string' || typeof p !== 'string') return
     const entry = { chunks: [], size: 0, ended: false, abort: undefined }
+    // wss 路径上 hchunk/hend 是 hreq 之后的独立帧；fetch 必须等 body 到齐
+    // （pipe 同步送达时侥幸掩盖过这个时序问题）。
+    entry.markEnded = () => {
+      entry.ended = true
+      try { entry.readyResolve?.() } catch { /* noop */ }
+    }
+    entry.ready = new Promise((resolve) => { entry.readyResolve = resolve })
     entry.channel = channel
     this.httpHandlers.set(id, entry)
     try {
       const origin = this.origin()
       if (!origin) throw new Error('webServer 服务不可用')
       let cookie = await this.ensureSession()
+      // body 就绪后再发 fetch：hend 之前 entry.chunks 可能还是空的。
+      await Promise.race([
+        entry.ready,
+        new Promise((resolve) => setTimeout(resolve, 30_000)),
+      ])
       let status
       let res
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -242,7 +254,7 @@ export class GuiBridge {
     if (!entry || entry.ended) return
     entry.size += payload.length
     if (entry.size > MAX_REQUEST_BODY) {
-      entry.ended = true
+      entry.markEnded()
       entry.channel?.send({ t: 'hfail', id, error: 'request body too large' })
       return
     }
@@ -251,7 +263,7 @@ export class GuiBridge {
 
   onRequestEnd(id) {
     const entry = this.httpHandlers.get(id)
-    if (entry) entry.ended = true
+    if (entry) entry.markEnded()
   }
 
   async onWsOpen(frame, channel) {

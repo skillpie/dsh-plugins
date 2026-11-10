@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: "dsh-dba",
+  id: "@skillpie/dsh-dba",
   factory: (require) => {
     var module = { exports: {} };
     var exports = module.exports;
@@ -7,7 +7,7 @@ window.__ModuleLoader__.load({
     var ReactDOM = null;
     try { ReactDOM = require("react-dom"); } catch (error) { ReactDOM = null; }
     var h = React.createElement;
-    var NS = "dsh-dba";
+    var NS = "@skillpie/dsh-dba";
     var API = "/dsh-dba/api";
 
     // ── copy ────────────────────────────────────────────────────────────
@@ -846,17 +846,17 @@ window.__ModuleLoader__.load({
      */
     function installStyles(ctx) {
       ctx.effect(function () {
-        var tagId = "dsh-dba/client.css";
+        var tagId = "@skillpie/dsh-dba/client.css";
         if (typeof document === "undefined") return;
         var existing = document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]");
         if (existing) return function () {};
         var style = document.createElement("style");
-        style.dataset.plugin = "dsh-dba";
+        style.dataset.plugin = "@skillpie/dsh-dba";
         style.dataset.pluginCss = tagId;
         style.textContent = css;
         document.head.appendChild(style);
         return function () { style.remove(); };
-      }, "dsh-dba: styles");
+      }, "@skillpie/dsh-dba: styles");
     }
 
     // ── small UI atoms ───────────────────────────────────────────────────
@@ -2691,14 +2691,14 @@ window.__ModuleLoader__.load({
       return h(DatabaseIcon, { size: props.size || 14 });
     }
 
-    exports.name = "dsh-dba";
+    exports.name = "@skillpie/dsh-dba";
     exports.inject = ["slots", "layout", "locale", "commandUi"];
     exports.apply = function (ctx) {
       APP_CTX = ctx;
       installStyles(ctx);
       ctx.effect(function () {
         return ctx.locale.register(NS, { zh: zh, en: en });
-      }, "dsh-dba: dictionaries");
+      }, "@skillpie/dsh-dba: dictionaries");
       var t = ctx.locale.bind(NS);
 
       // `/db` in the composer: same row treatment as the built-in commands,
@@ -2717,7 +2717,7 @@ window.__ModuleLoader__.load({
               run: function () { openGlobalPanel(); }
             }
           });
-        }, "dsh-dba: /db command");
+        }, "@skillpie/dsh-dba: /db command");
       }
 
       ctx.slots.inject("main", function () {
