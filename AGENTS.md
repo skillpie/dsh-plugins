@@ -62,7 +62,7 @@
 ## npm 发布
 
 - 发布统一走工作区根目录 `publish_npm.sh`:在插件目录里 `../publish_npm.sh`(先 `--dry-run` 预检),脚本依次做身份校验、语法/测试、打包清单检查、发布、等官方异步索引、触发 npmmirror 同步。
-- token 用 Granular Access Token(权限 Read and write);普通 token 发布会被 403 要求 2FA,只能 `npm publish --otp=xxxxxx` 人工给码。
+- npm 账号 `skillpie`;发布 token 已配置在 `~/.npmrc`(`//registry.npmjs.org/:_authToken=`,Granular/免 2FA),直接使用,**不要向用户重复索取或建议轮换**;失效时由用户重新生成后更新该行。
 - scoped 包必须在 package.json 设 `publishConfig.access: "public"`,否则按私有包收费拒绝发布。
 - 本机默认 registry 是 npmmirror;官方源操作(publish/whoami/view 新包)必须显式 `--registry=https://registry.npmjs.org/`。
 - 发布成功 ≠ 立刻可装:官方索引异步(数分钟),**新包首次发布可能先挂 `0.0.0-stage` 空壳占位版本**(无任何文件,按名安装会报 declares no dsh.bundle);`npm view <包名> version` 返回真实版本前不要分发安装。
