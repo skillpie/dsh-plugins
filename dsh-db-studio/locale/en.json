@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Database Connections",
+    "description": "Connect to SQLite / PostgreSQL / MySQL databases: browse schemas and data, run SQL, or ask the assistant to query and edit data in chat."
+  }
+}
