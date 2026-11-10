@@ -13,6 +13,7 @@ window.__ModuleLoader__.load({
     // ── copy ────────────────────────────────────────────────────────────
     var zh = {
       title: "数据库连接",
+      sidebarLabel: "数据库",
       subtitle: "连接、浏览和查询数据库，也可以直接在对话里让助手操作数据",
       connections: "连接",
       newConnection: "新建连接",
@@ -95,8 +96,6 @@ window.__ModuleLoader__.load({
       selectTableHint: "可以查看数据、结构和执行 SQL。",
       driverMissing: "未安装 {driver} 驱动，使用该类型连接前需要安装依赖。",
       demoNote: "示例数据库位于 {path}",
-      inChat: "在对话中操作",
-      inChatHint: "试试对助手说：「查一下示例数据库里最近 10 笔订单，按金额排序」或「把 users 表里杭州的用户城市改成杭州·西湖区」。",
       sqlHistory: "最近查询",
       clear: "清空",
       copy: "复制",
@@ -121,10 +120,7 @@ window.__ModuleLoader__.load({
       needDatabase: "请填写数据库名",
       needFile: "请填写 SQLite 文件路径",
       unsupportedAction: "这个操作在当前 DSH 版本不可用。",
-      selectAll: "全选",
-      clearAll: "清空",
-      done: "完成",
-      openPanel: "打开数据库面板",
+      openPanel: "管理数据源",
       selectDatabase: "选择数据库",
       noConnections: "还没有数据库连接",
       statusLabel: "数据库连接状态",
@@ -147,6 +143,10 @@ window.__ModuleLoader__.load({
       askInChat: "可以直接在对话里让助手查询或修改这些数据",
       commandLabel: "数据库",
       commandDesc: "打开数据库面板",
+      dataSource: "数据源",
+      countShort: "{n} 个",
+      tagReadonly: "只读",
+      tagReadWrite: "读写",
       notes: "手册",
       notesFull: "查数手册",
       notesHint: "人工维护的查数口径与陷阱（租户过滤、单号规则、跨表关联、统计口径…），随连接保存，助手写 SQL 前会先读这里。",
@@ -156,6 +156,7 @@ window.__ModuleLoader__.load({
     };
     var en = {
       title: "Database",
+      sidebarLabel: "Database",
       subtitle: "Connect, browse and query databases — or ask the assistant to work with the data in chat",
       connections: "Connections",
       newConnection: "New connection",
@@ -238,8 +239,6 @@ window.__ModuleLoader__.load({
       selectTableHint: "Browse data, inspect the schema, or run SQL.",
       driverMissing: "The {driver} driver is not installed; install it before using this connection kind.",
       demoNote: "Demo database: {path}",
-      inChat: "Work with data in chat",
-      inChatHint: "Try: “show me the last 10 orders in the demo database, sorted by total” or “change every Hangzhou user's city to Hangzhou-West Lake”.",
       sqlHistory: "Recent queries",
       clear: "Clear",
       copy: "Copy",
@@ -264,10 +263,7 @@ window.__ModuleLoader__.load({
       needDatabase: "Enter a database name",
       needFile: "Enter a SQLite file path",
       unsupportedAction: "This action is not available in the current DSH version.",
-      selectAll: "Select all",
-      clearAll: "Clear",
-      done: "Done",
-      openPanel: "Open database panel",
+      openPanel: "Manage data sources",
       selectDatabase: "Select databases",
       noConnections: "No database connections yet",
       statusLabel: "Database connection status",
@@ -290,6 +286,10 @@ window.__ModuleLoader__.load({
       askInChat: "Ask the assistant to query or change this data in chat",
       commandLabel: "Database",
       commandDesc: "Open the database panel",
+      dataSource: "Data sources",
+      countShort: "{n}",
+      tagReadonly: "RO",
+      tagReadWrite: "RW",
       notes: "Handbook",
       notesFull: "Query handbook",
       notesHint: "Human-maintained query rules and pitfalls (tenant filters, ID formats, joins, statistics conventions…) stored with the connection; the assistant reads it before writing SQL.",
@@ -573,6 +573,13 @@ window.__ModuleLoader__.load({
     function PlugIcon(props) { return h(Svg, props, h("path", { d: "M9 3v5M15 3v5M6.5 8h11v3.5a5.5 5.5 0 0 1-11 0V8ZM12 17v4" })); }
     function BookIcon(props) { return h(Svg, props, h("path", { d: "M5 4.5A1.5 1.5 0 0 1 6.5 3H19v16H6.5A1.5 1.5 0 0 0 5 20.5V4.5Z" }), h("path", { d: "M9 7.5h6M9 11h4" })); }
     function DownloadIcon(props) { return h(Svg, props, h("path", { d: "M12 4v11M7 10.5l5 5 5-5M5 19.5h14" })); }
+    /* 滑杆调节图标（对齐「管理数据源」入口的设置语义）。 */
+    function TuneIcon(props) {
+      return h(Svg, props,
+        h("path", { d: "M4 8h4.6M13.4 8H20" }), h("circle", { cx: 11, cy: 8, r: 2 }),
+        h("path", { d: "M4 16h8.6M19.4 16H20" }), h("circle", { cx: 17, cy: 16, r: 2 })
+      );
+    }
 
     var KIND_ICON = { sqlite: DatabaseIcon, postgres: DatabaseIcon, mysql: DatabaseIcon };
     var KIND_LABEL = { sqlite: "SQLite", postgres: "PostgreSQL", mysql: "MySQL" };
@@ -582,6 +589,7 @@ window.__ModuleLoader__.load({
 .dshdb-page{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);box-sizing:border-box;padding-top:var(--dsh-frame-top-clearance,0px);overflow:hidden}
 .dshdb-page *{box-sizing:border-box}
 .dshdb-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:22px 28px 16px;flex:0 0 auto;border-bottom:1px solid var(--dsw-alias-border-l2)}
+.dshdb-sideheadtools{display:inline-flex;align-items:center;gap:2px}
 .dshdb-titlewrap{display:flex;align-items:center;gap:13px;min-width:0}
 .dshdb-titlemark{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 12%,transparent);color:var(--dsw-alias-brand-primary);flex:0 0 auto}
 .dshdb-title{font-size:20px;font-weight:600;line-height:1.25;letter-spacing:.01em;margin:0}
@@ -597,11 +605,13 @@ window.__ModuleLoader__.load({
 .dshdb-btn.small{font-size:12px;padding:6px 9px;border-radius:7px}
 .dshdb-iconbtn{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-tertiary);width:28px;height:28px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
 .dshdb-iconbtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.dshdb-body{flex:1 1 auto;min-height:0;display:flex}
+.dshdb-body{flex:1 1 auto;min-height:0;display:flex;border-top:1px solid var(--dsw-alias-border-l2)}
 .dshdb-sidebar{width:260px;flex:0 0 auto;border-right:1px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;min-height:0;background:color-mix(in srgb,var(--dsw-alias-bg-layer-2) 55%,var(--dsw-alias-bg-base))}
 .dshdb-sidehead{display:flex;align-items:center;justify-content:space-between;padding:14px 14px 8px;color:var(--dsw-alias-label-secondary);font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
 .dshdb-connlist{flex:0 1 auto;max-height:44%;min-height:96px;overflow-y:auto;padding:0 8px 10px}
 .dshdb-connrow{position:relative;display:flex;align-items:center;gap:9px;padding:9px 9px;border-radius:9px;cursor:pointer;border:1px solid transparent;transition:background .12s ease,border-color .12s ease}
+.dshdb-connactions{display:inline-flex;align-items:center;gap:2px;flex:0 0 auto;opacity:0;transition:opacity .12s ease}
+.dshdb-connrow:hover .dshdb-connactions,.dshdb-connrow:focus-within .dshdb-connactions{opacity:1}
 .dshdb-connrow:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .dshdb-connrow.active{background:var(--dsw-alias-bg-base);border-color:var(--dsw-alias-border-l2);box-shadow:var(--dsw-elevation-prominent)}
 .dshdb-connicon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,transparent);color:var(--dsw-alias-brand-primary);flex:0 0 auto}
@@ -632,13 +642,12 @@ window.__ModuleLoader__.load({
 .dshdb-tab.active{color:var(--dsw-alias-label-primary);border-bottom-color:var(--dsw-alias-brand-primary);font-weight:550}
 .dshdb-pane{flex:1 1 auto;min-height:0;display:flex}
 .dshdb-tablelist{width:214px;flex:0 0 auto;border-right:1px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;min-height:0;background:color-mix(in srgb,var(--dsw-alias-bg-layer-2) 35%,var(--dsw-alias-bg-base))}
-.dshdb-searchwrap{padding:11px 10px 7px;position:relative}
-.dshdb-searchwrap svg{position:absolute;left:20px;top:20px;color:var(--dsw-alias-label-tertiary);pointer-events:none}
+.dshdb-searchwrap{padding:7px 10px;position:relative}
+.dshdb-searchwrap svg{position:absolute;left:20px;top:50%;transform:translateY(-50%);color:var(--dsw-alias-label-tertiary);pointer-events:none}
 .dshdb-search{width:100%;appearance:none;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:12.5px;border-radius:8px;padding:7px 9px 7px 30px;outline:none}
 .dshdb-search:focus{border-color:var(--dsw-alias-brand-primary)}
 .dshdb-tablelistscroll{flex:1 1 auto;overflow-y:auto;padding:2px 7px 10px;min-height:0}
 .dshdb-tablesection{flex:1 1 0;min-height:0;display:flex;flex-direction:column;border-top:1px solid var(--dsw-alias-border-l2)}
-.dshdb-tablesection .dshdb-searchwrap{padding-top:4px}
 .dshdb-tablerow{display:flex;align-items:center;gap:7px;width:100%;appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12.5px;text-align:left;padding:7px 8px;border-radius:7px;cursor:pointer}
 .dshdb-tablerow:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dshdb-tablerow.active{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 11%,transparent);color:var(--dsw-alias-brand-primary);font-weight:550}
@@ -716,41 +725,36 @@ window.__ModuleLoader__.load({
 .dshdb-testmsg{font-size:11.5px;line-height:1.5;padding:8px 10px;border-radius:8px;margin-top:2px}
 .dshdb-testmsg.ok{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 8%,transparent)}
 .dshdb-testmsg.bad{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 8%,transparent)}
-.dshdb-chatbar{flex:0 0 auto;display:flex;align-items:flex-start;gap:9px;padding:11px 18px;border-top:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-2) 40%,var(--dsw-alias-bg-base));font-size:11.5px;color:var(--dsw-alias-label-tertiary);line-height:1.55}
-.dshdb-chatbar svg{color:var(--dsw-alias-brand-primary);flex:0 0 auto;margin-top:1px}
-.dshdb-chatbar b{color:var(--dsw-alias-label-secondary);font-weight:600}
 @media (max-width:1100px){.dshdb-sidebar{width:220px}.dshdb-tablelist{width:180px}.dshdb-subtitle{display:none}}
-@media (max-width:1240px){.dshdb-sidebar{display:none}.dshdb-connselect{display:inline-flex;align-items:center}.dshdb-activeconnname{display:none}.dshdb-tablelist{width:180px}.dshdb-header{padding:18px 20px 14px}.dshdb-mainhead{padding:14px 18px 0}.dshdb-gridbar{padding:10px 14px}.dshdb-gridscroll{padding:0 14px 12px}.dshdb-pager{padding:9px 14px}.dshdb-sqlpane{padding:14px 16px}.dshdb-chatbar{padding:10px 16px}}
+@media (max-width:1240px){.dshdb-sidebar{display:none}.dshdb-connselect{display:inline-flex;align-items:center}.dshdb-activeconnname{display:none}.dshdb-tablelist{width:180px}.dshdb-header{padding:18px 20px 14px}.dshdb-mainhead{padding:14px 18px 0}.dshdb-gridbar{padding:10px 14px}.dshdb-gridscroll{padding:0 14px 12px}.dshdb-pager{padding:9px 14px}.dshdb-sqlpane{padding:14px 16px}}}
 @media (max-width:900px){.dshdb-tablelist{display:none}.dshdb-tableselect{display:inline-flex;align-items:center}.dshdb-actions .dshdb-btn .dshdb-btnlabel{display:none}.dshdb-activeconn{flex:1 1 100%}.dshdb-header{align-items:center}.dshdb-header .dshdb-subtitle{display:none}}
 
 .dshdb-picker-wrap{position:relative;display:inline-flex;align-items:center;min-width:0;max-width:190px}
-.dshdb-picker-btn{appearance:none;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:1;padding:6px 7px;border-radius:7px;display:inline-flex;align-items:center;gap:5px;cursor:pointer;min-width:0;max-width:100%;transition:background .15s ease,border-color .15s ease,color .15s ease}
-.dshdb-picker-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.dshdb-picker-btn.has-selection{color:var(--dsw-alias-label-primary);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 40%,var(--dsw-alias-border-l2));background:color-mix(in srgb,var(--dsw-alias-brand-primary) 7%,transparent)}
-.dshdb-picker-btn.open{border-color:var(--dsw-alias-brand-primary)}
+/* 与宿主权限选择器（ui-permission-presets trigger）同一字体规格：13px/500/20px，28px 高。 */
+.dshdb-picker-btn{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;font-weight:500;line-height:20px;height:28px;padding:0 4px 0 8px;border-radius:var(--dsw-radius-sm,7px);display:inline-flex;align-items:center;gap:4px;cursor:pointer;min-width:0;max-width:100%;transition:background .15s ease,color .15s ease}
+.dshdb-picker-btn:hover,.dshdb-picker-btn.open{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.dshdb-picker-btn.has-selection{color:var(--dsw-alias-label-primary)}
+.dshdb-picker-btn > svg:last-child{color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary))}
 .dshdb-picker-btnlabel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.dshdb-picker-count{font-size:9.5px;font-weight:600;background:var(--dsw-alias-brand-primary);color:#fff;border-radius:999px;padding:1px 4px;min-width:13px;text-align:center}
-.dshdb-picker-pop{background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);border-radius:13px;box-shadow:0 18px 54px rgba(0,0,0,.25);padding:10px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);animation:dshdb-pop .12s ease}
+.dshdb-picker-pop{background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.16);padding:5px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);animation:dshdb-pop .12s ease;min-width:220px;max-width:260px}
 @keyframes dshdb-pop{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-.dshdb-picker-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:2px 4px 6px}
-.dshdb-picker-title{font-size:13px;font-weight:600}
-.dshdb-picker-sub{font-size:10.5px;color:var(--dsw-alias-label-tertiary);margin-top:2px}
-.dshdb-picker-headactions{display:flex;gap:2px;flex:0 0 auto}
-.dshdb-picker-link{appearance:none;border:0;background:transparent;color:var(--dsw-alias-brand-primary);font:inherit;font-size:11px;padding:3px 5px;border-radius:5px;cursor:pointer;white-space:nowrap}
-.dshdb-picker-link:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dshdb-picker-list{max-height:min(340px,50vh);overflow:auto;display:flex;flex-direction:column;gap:1px;margin:2px 0 4px}
-.dshdb-picker-item{display:flex;align-items:center;gap:8px;padding:7px 7px;border-radius:7px;cursor:pointer;border:1px solid transparent}
-.dshdb-picker-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dshdb-picker-item.checked{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 8%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 20%,transparent)}
-.dshdb-picker-item input{width:13px;height:13px;accent-color:var(--dsw-alias-brand-primary);flex:0 0 auto;margin:0}
-.dshdb-picker-icon{color:var(--dsw-alias-brand-primary);display:flex;flex:0 0 auto}
-.dshdb-picker-meta{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:1px}
-.dshdb-picker-name{font-size:12px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dshdb-picker-target{font-size:10px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--dsw-font-family-mono,var(--dsw-font-family))}
-.dshdb-picker-empty{padding:16px 10px;display:flex;flex-direction:column;align-items:center;gap:9px;text-align:center;font-size:12px;color:var(--dsw-alias-label-tertiary);line-height:1.5}
+/* 菜单行：与宿主权限选择菜单同一风格（13px/500、行高 34、hover 浅底、选中右侧打勾）。 */
+.dshdb-picker-menu{max-height:min(340px,50vh);overflow:auto;display:flex;flex-direction:column;gap:1px}
+.dshdb-picker-menutitle{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px 4px;font-size:11px;font-weight:600;color:var(--dsw-alias-label-tertiary);letter-spacing:.04em}
+.dshdb-picker-menutotal{font-weight:500;letter-spacing:0}
+.dshdb-picker-menuitem{appearance:none;border:0;background:transparent;display:flex;align-items:center;gap:8px;width:100%;height:34px;padding:0 9px;border-radius:8px;font:inherit;font-size:13px;font-weight:500;line-height:20px;color:var(--dsw-alias-label-primary);cursor:pointer;text-align:left;min-width:0}
+.dshdb-picker-menuitem:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.dshdb-picker-menuicon{display:inline-flex;color:var(--dsw-alias-label-secondary);flex:0 0 auto}
+.dshdb-picker-menulabel{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.dshdb-picker-menulabel.dim{color:var(--dsw-alias-label-tertiary);font-weight:400}
+.dshdb-picker-menucheck{display:inline-flex;color:var(--dsw-alias-label-primary);flex:0 0 auto;min-width:14px;justify-content:center}
+/* 只读/读写小标签（参考 ZCodeOnline 数据源菜单）：读写用暖色区分。 */
+.dshdb-picker-menutag{flex:0 0 auto;font-size:10px;font-weight:500;line-height:1;padding:2.5px 5px;border-radius:5px;color:var(--dsw-alias-label-secondary);background:color-mix(in srgb,var(--dsw-alias-label-secondary) 12%,transparent)}
+.dshdb-picker-menutag.rw{color:#a0601a;background:rgba(230,150,30,.16)}
+.dshdb-picker-menuempty{padding:12px 9px;font-size:12px;color:var(--dsw-alias-label-tertiary);line-height:1.5}
+.dshdb-picker-menusep{height:1px;background:var(--dsw-alias-border-l2);margin:4px 2px;flex:0 0 auto}
 .dshdb-picker-error{margin:4px 4px 0;color:var(--dsw-alias-state-error-primary);font-size:10.5px;line-height:1.4}
-.dshdb-picker-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 2px 0;border-top:1px solid var(--dsw-alias-border-l2);margin-top:4px}
-.dshdb-statusdock{display:flex;align-items:center;flex-wrap:nowrap;padding:0 4px 4px;max-width:min(300px,50vw);min-width:0;overflow:hidden;font-size:10.5px;line-height:1.35;color:var(--dsw-alias-label-tertiary)}
+.dshdb-statusdock{display:flex;align-items:center;flex-wrap:nowrap;padding:0 4px;max-width:min(300px,50vw);min-width:0;overflow:hidden;font-size:10.5px;line-height:1.35;color:var(--dsw-alias-label-tertiary)}
 .dshdb-statuspill{appearance:none;border:1px solid var(--dsw-alias-border-l2);background:color-mix(in srgb,var(--dsw-alias-bg-layer-2) 65%,transparent);color:var(--dsw-alias-label-tertiary);font:inherit;font-size:10.5px;line-height:1.3;padding:2px 6px 2px 6px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;cursor:pointer;white-space:nowrap;overflow:hidden}
 .dshdb-statuspill:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}
 .dshdb-statuspill.open{border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 35%,var(--dsw-alias-border-l2))}
@@ -761,7 +765,8 @@ window.__ModuleLoader__.load({
 .dshdb-dot.ok{background:var(--dsw-alias-state-success-primary)}
 .dshdb-dot.bad{background:var(--dsw-alias-state-error-primary)}
 .dshdb-dot.idle{background:var(--dsw-alias-label-caption)}
-.dshdb-statuspop-head{padding:2px 4px 7px;border-bottom:1px solid var(--dsw-alias-border-l2);margin-bottom:5px}
+/* 数据库工具执行中圆点常绿，空闲恢复灰色。 */
+.dshdb-dot.run{background:var(--dsw-alias-state-success-primary)}
 .dshdb-statuspop-list{display:flex;flex-direction:column;gap:1px;max-height:min(300px,45vh);overflow:auto}
 .dshdb-statuspop-row{display:flex;align-items:flex-start;gap:8px;padding:6px 7px;border-radius:7px}
 .dshdb-statuspop-row:hover{background:var(--dsw-alias-interactive-bg-hover)}
@@ -905,11 +910,15 @@ window.__ModuleLoader__.load({
         h("span", { className: "dshdb-connicon" }, h(DatabaseIcon, { size: 16 })),
         h("span", { className: "dshdb-connmeta" },
           h("span", { className: "dshdb-connname" }, connection.name),
-          h("span", { className: "dshdb-conntarget" }, connection.kind === "sqlite" ? connection.file : (connection.host + ":" + connection.port + "/" + connection.database))
+          h("span", { className: "dshdb-conntarget" }, connection.kind === "sqlite" ? connection.file : connection.database)
         ),
-        h(KindBadge, { kind: connection.kind, demo: connection.demo, t: props.t }),
-        h(IconButton, { title: props.t("edit"), onClick: function () { props.onEdit(connection); } }, h(EditIcon, { size: 14 })),
-        h(IconButton, { title: props.t("remove"), onClick: function () { props.onRemove(connection); } }, h(TrashIcon, { size: 14 }))
+        // 连接行不展示数据源类型徽标（MySQL/PostgreSQL…），示例标记保留；
+        // 编辑/删除按钮 hover（或键盘聚焦）时才浮现。
+        connection.demo ? h("span", { className: "dshdb-badge demo" }, props.t("demo")) : null,
+        h("span", { className: "dshdb-connactions" },
+          h(IconButton, { title: props.t("edit"), onClick: function () { props.onEdit(connection); } }, h(EditIcon, { size: 14 })),
+          h(IconButton, { title: props.t("remove"), onClick: function () { props.onRemove(connection); } }, h(TrashIcon, { size: 14 }))
+        )
       );
     }
 
@@ -1503,19 +1512,7 @@ window.__ModuleLoader__.load({
         if (!overview.drivers.mysql) missingDrivers.push("mysql2");
       }
 
-      var header = h("header", { className: "dshdb-header" },
-        h("div", { className: "dshdb-titlewrap" },
-          h("div", { className: "dshdb-titlemark" }, h(DatabaseIcon, { size: 21 })),
-          h("div", null,
-            h("h1", { className: "dshdb-title" }, t("title")),
-            h("p", { className: "dshdb-subtitle" }, t("subtitle"))
-          )
-        ),
-        h("div", { className: "dshdb-actions" },
-          h("button", { type: "button", className: "dshdb-btn ghost", title: t("refresh"), onClick: function () { reloadOverview(true); refreshTables(); }, disabled: busy }, h(RefreshIcon, { size: 15 })),
-          h("button", { type: "button", className: "dshdb-btn primary", onClick: openNew }, h(PlusIcon, { size: 15 }), h("span", { className: "dshdb-btnlabel" }, t("newConnection")))
-        )
-      );
+      // 顶部标题栏已移除（省一行高度）：新建/刷新都收进侧栏「连接」行。
 
       // 左侧栏上下两栏：连接列表（内容高自适应、超高滚动）+ 表列表（占满余量、
       // 独立滚动），把表列表从右侧数据区摘出来，给表格更多横向空间。
@@ -1555,7 +1552,10 @@ window.__ModuleLoader__.load({
       var sidebar = h("aside", { className: "dshdb-sidebar" },
         h("div", { className: "dshdb-sidehead" },
           h("span", null, t("connections") + " · " + (overview ? overview.connections.length : 0)),
-          h(IconButton, { title: t("newConnection"), onClick: openNew }, h(PlusIcon, { size: 14 }))
+          h("span", { className: "dshdb-sideheadtools" },
+            h(IconButton, { title: t("refresh"), disabled: busy, onClick: function () { reloadOverview(true); refreshTables(); } }, h(RefreshIcon, { size: 14 })),
+            h(IconButton, { title: t("newConnection"), onClick: openNew }, h(PlusIcon, { size: 14 }))
+          )
         ),
         h("div", { className: "dshdb-connlist" },
           overview && overview.connections.map(function (connection) {
@@ -1780,16 +1780,11 @@ window.__ModuleLoader__.load({
               h("button", { type: "button", role: "tab", "aria-selected": tab === "notes", className: "dshdb-tab" + (tab === "notes" ? " active" : ""), onClick: function () { setTab("notes"); } }, h(BookIcon, { size: 14 }), t("notes"))
             )
           ),
-          tab === "data" ? dataPane : tab === "sql" ? sqlPane : tab === "history" ? historyPane : h(NotesPane, { t: t, connectionId: activeId, connectionName: activeConnection ? activeConnection.name : "" }),
-          tab === "history" || tab === "notes" ? null : h("div", { className: "dshdb-chatbar" },
-            h(SparkIcon, { size: 14 }),
-            h("div", null, h("b", null, t("inChat") + " · "), t("inChatHint"))
-          )
+          tab === "data" ? dataPane : tab === "sql" ? sqlPane : tab === "history" ? historyPane : h(NotesPane, { t: t, connectionId: activeId, connectionName: activeConnection ? activeConnection.name : "" })
         );
       }
 
       return h("div", { className: "dshdb-page" },
-        header,
         h("div", { className: "dshdb-body" }, sidebar, main || h("div", { className: "dshdb-main" })),
         dialog ? h(ConnectionDialog, {
           t: t,
@@ -1891,20 +1886,16 @@ window.__ModuleLoader__.load({
       var selectedIds = state ? state.selectedIds || [] : [];
       var selected = state ? state.selected || [] : [];
       var count = selectedIds.length;
-      var label = "选择数据库";
+      // 未选择时不展示占位文案：按钮只留图标（对齐权限控件的无外框样式）。
+      var label = "";
       if (selected.length === 1) label = selected[0].name;
       else if (selected.length > 1) label = interpolate(t("databaseCount"), { n: selected.length });
-      else if (all.length === 0) label = "连接数据库";
 
       function toggle(id) {
         var next = selectedIds.includes(id)
           ? selectedIds.filter(function (item) { return item !== id; })
           : selectedIds.concat([id]);
         setSessionSelection(sessionId, next).catch(function () {});
-      }
-
-      function setAll(ids) {
-        setSessionSelection(sessionId, ids).catch(function () {});
       }
 
       function openStudio() {
@@ -1917,41 +1908,35 @@ window.__ModuleLoader__.load({
         rect: rect,
         label: t("title")
       },
-        h("div", { className: "dshdb-picker-head" },
-          h("div", null,
-            h("div", { className: "dshdb-picker-title" }, t("title")),
-            h("div", { className: "dshdb-picker-sub" }, count + " / " + all.length)
-          ),
-          h("div", { className: "dshdb-picker-headactions" },
-            h("button", { type: "button", className: "dshdb-picker-link", onClick: function () { setAll(all.map(function (row) { return row.id; })); } }, t("selectAll")),
-            h("button", { type: "button", className: "dshdb-picker-link", onClick: function () { setAll([]); } }, t("clearAll"))
-          )
+        // 对齐宿主权限菜单：紧凑行 + 选中打勾，无底栏，点击行即切换。
+        h("div", { className: "dshdb-picker-menutitle" },
+          h("span", null, t("dataSource")),
+          h("span", { className: "dshdb-picker-menutotal" }, interpolate(t("countShort"), { n: all.length }))
         ),
-        h("div", { className: "dshdb-picker-list" },
+        h("div", { className: "dshdb-picker-menu" },
           all.length === 0
-            ? h("div", { className: "dshdb-picker-empty" },
-                h("div", null, t("noConnections")),
-                h("button", { type: "button", className: "dshdb-btn primary", onClick: openStudio }, h(PlusIcon, { size: 14 }), t("newConnection")))
+            ? h("div", { className: "dshdb-picker-menuempty" }, t("noConnections"))
             : all.map(function (connection) {
-                return h("label", { key: connection.id, className: "dshdb-picker-item" + (selectedIds.includes(connection.id) ? " checked" : "") },
-                  h("input", {
-                    type: "checkbox",
-                    checked: selectedIds.includes(connection.id),
-                    onChange: function () { toggle(connection.id); }
-                  }),
-                  h("span", { className: "dshdb-picker-icon" }, h(DatabaseIcon, { size: 15 })),
-                  h("span", { className: "dshdb-picker-meta" },
-                    h("span", { className: "dshdb-picker-name" }, connection.name),
-                    h("span", { className: "dshdb-picker-target" }, sessionKindLabel(connection.kind) + " · " + connectionSubtitle(connection))
-                  ),
-                  connection.demo ? h("span", { className: "dshdb-badge demo" }, t("demo")) : null
+                var checked = selectedIds.includes(connection.id);
+                return h("button", {
+                  key: connection.id,
+                  type: "button",
+                  className: "dshdb-picker-menuitem",
+                  title: connectionSubtitle(connection),
+                  onClick: function () { toggle(connection.id); }
+                },
+                  h("span", { className: "dshdb-picker-menuicon" }, h(DatabaseIcon, { size: 14 })),
+                  h("span", { className: "dshdb-picker-menulabel" }, connection.name, connection.demo ? "（示例）" : ""),
+                  h("span", { className: "dshdb-picker-menutag" + (connection.readOnly ? "" : " rw") }, connection.readOnly ? t("tagReadonly") : t("tagReadWrite")),
+                  h("span", { className: "dshdb-picker-menucheck" }, checked ? h(CheckIcon, { size: 14 }) : null)
                 );
               })
         ),
         entry.error ? h("div", { className: "dshdb-picker-error" }, entry.error) : null,
-        h("div", { className: "dshdb-picker-foot" },
-          h("button", { type: "button", className: "dshdb-picker-link", onClick: openStudio }, t("openPanel")),
-          h("button", { type: "button", className: "dshdb-btn small primary", onClick: function () { setOpen(false); } }, t("done"))
+        h("div", { className: "dshdb-picker-menusep" }),
+        h("button", { type: "button", className: "dshdb-picker-menuitem", onClick: openStudio },
+          h("span", { className: "dshdb-picker-menuicon" }, h(TuneIcon, { size: 14 })),
+          h("span", { className: "dshdb-picker-menulabel" }, t("openPanel"))
         )
       ) : null;
 
@@ -1967,7 +1952,7 @@ window.__ModuleLoader__.load({
           onClick: function (event) { event.stopPropagation(); setOpen(function (value) { return !value; }); }
         },
           h(DatabaseIcon, { size: 14 }),
-          h("span", { className: "dshdb-picker-btnlabel" }, label),
+          label ? h("span", { className: "dshdb-picker-btnlabel" }, label) : null,
           h(ChevronDownIcon, { size: 11 })
         ),
         popover
@@ -1997,6 +1982,19 @@ window.__ModuleLoader__.load({
         var timer = window.setInterval(function () { loadSessionStatus(sessionId); }, 30000);
         return function () { window.clearInterval(timer); };
       }, [sessionId, key]);
+
+      // 轻量轮询工具在飞状态：agent 调数据库工具期间圆点绿/灰闪烁。
+      var [toolBusy, setToolBusy] = React.useState(false);
+      React.useEffect(function () {
+        if (!selected.length) { setToolBusy(false); return; }
+        var alive = true;
+        var timer = window.setInterval(function () {
+          api({ action: "activity" }).then(function (data) {
+            if (alive) setToolBusy(data.busy === true);
+          }).catch(function () {});
+        }, 1000);
+        return function () { alive = false; window.clearInterval(timer); };
+      }, [selected.length]);
 
       React.useEffect(function () {
         if (!open) return;
@@ -2047,10 +2045,11 @@ window.__ModuleLoader__.load({
         var one = selected[0];
         var oneStatus = statusById[one.id];
         label = one.name;
-        meta = sessionKindLabel(one.kind);
-        if (oneStatus && oneStatus.ok === true && typeof oneStatus.tableCount === "number") meta += " · " + interpolate(t("tableCount"), { n: oneStatus.tableCount });
-        else if (oneStatus && oneStatus.ok === false) meta += " · " + t("statusFailed");
-        else if (checking) meta += " · " + t("statusChecking");
+        // 底部药丸不展示数据源类型，只保留表数/状态。
+        meta = "";
+        if (oneStatus && oneStatus.ok === true && typeof oneStatus.tableCount === "number") meta = interpolate(t("tableCount"), { n: oneStatus.tableCount });
+        else if (oneStatus && oneStatus.ok === false) meta = t("statusFailed");
+        else if (checking) meta = t("statusChecking");
       } else {
         label = interpolate(t("databaseCount"), { n: selected.length });
         meta = failed > 0
@@ -2067,10 +2066,7 @@ window.__ModuleLoader__.load({
       }).join("\n");
 
       var popover = open ? h(PickerPopover, { rect: rect, label: t("statusLabel") },
-        h("div", { className: "dshdb-statuspop-head" },
-          h("div", { className: "dshdb-picker-title" }, t("statusLabel")),
-          h("div", { className: "dshdb-picker-sub" }, interpolate(t("databaseCount"), { n: selected.length }))
-        ),
+        // 与权限菜单同风格：仅保留状态行，去掉表头与底栏。
         h("div", { className: "dshdb-statuspop-list" }, selected.map(function (connection) {
           var status = statusById[connection.id];
           var ok = status ? status.ok : undefined;
@@ -2085,11 +2081,7 @@ window.__ModuleLoader__.load({
               h("span", { className: "dshdb-statuspop-detail" }, detail)
             )
           );
-        })),
-        h("div", { className: "dshdb-picker-foot" },
-          h("button", { type: "button", className: "dshdb-picker-link", onClick: function () { setOpen(false); } }, t("done")),
-          h("button", { type: "button", className: "dshdb-btn small primary", onClick: function () { setOpen(false); if (props.openStudio) props.openStudio(); else openGlobalPanel(); } }, t("openPanel"))
-        )
+        }))
       ) : null;
 
       return h("div", { className: "dshdb-statusdock", role: "status", "aria-label": t("statusLabel") },
@@ -2103,7 +2095,7 @@ window.__ModuleLoader__.load({
           onMouseDown: function (event) { event.stopPropagation(); },
           onClick: function (event) { event.stopPropagation(); setOpen(function (value) { return !value; }); }
         },
-          h("span", { className: "dshdb-dot" }),
+          h("span", { className: "dshdb-dot" + (toolBusy ? " run" : "") }),
           h("span", { className: "dshdb-statuspill-name" }, label),
           h("span", { className: "dshdb-statuspill-meta" }, meta),
           h(ChevronDownIcon, { size: 10 })
@@ -2741,7 +2733,7 @@ window.__ModuleLoader__.load({
           id: "dbstudio",
           order: 20,
           locale: NS,
-          label: function () { return t("title"); }
+          label: function () { return t("sidebarLabel"); }
         }, DbStudioIcon);
       });
 
@@ -2752,7 +2744,7 @@ window.__ModuleLoader__.load({
           id: "dbstudio",
           order: 5,
           locale: NS,
-          label: function () { return t("title"); }
+          label: function () { return t("sidebarLabel"); }
         }, ConversationDbView);
       });
 

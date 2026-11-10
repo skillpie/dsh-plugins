@@ -167,12 +167,14 @@ async function resolveConnectionId(studio, requested, session) {
   throw new Error(`当前会话选中了多个数据库，请用 connectionId 指定：${selected.map((id) => `${id} (${find(id)?.name ?? id})`).join(', ')}`)
 }
 
-/** Build the four model-facing tools. */
+/** Build the model-facing tools. Every execute toggles the activity counter
+ * so the composer status pill can blink while a database tool is running. */
 function buildToolDefinitions(studio) {
-  return [
+  const definitions = [
     {
       name: 'db_list_connections',
       description: 'List the database connections configured in DSH DB Studio, with their ids, kinds and targets, and mark which ones are selected for this conversation. '
+        + 'The result also carries each selected connection\'s query handbook (查数手册: human-maintained domain rules like tenant filters and known pitfalls) — read it before writing SQL. '
         + 'Call this first when the user asks about data but you do not know which connection to use. Only selected connections may be queried. Passwords are never returned.',
       parameters: {},
       output: {
@@ -198,12 +200,18 @@ function buildToolDefinitions(studio) {
         }
         const marked = rows.map((row) => ({ ...row, selected: selectedIds.includes(row.id) }))
         const selectedRows = marked.filter((row) => row.selected)
-        const summary = rows.length === 0
+        let summary = rows.length === 0
           ? '还没有配置数据库连接。'
           : (selectedRows.length === 0
               ? '当前会话还没有选择数据库。请让用户先在输入框旁的数据库多选下拉里选择。\n'
               : `当前会话已选择 ${selectedRows.length} 个数据库：\n` + selectedRows.map((row) => `- \`${row.id}\` · ${row.name} · ${row.kind}${row.demo ? '（示例）' : ''}`).join('\n') + '\n\n')
             + `全部 ${rows.length} 个连接：\n` + marked.map((row) => `- \`${row.id}\` · ${row.name} · ${row.kind}${row.selected ? ' ✓ 已选' : ''}`).join('\n')
+        // 手册随首次列表调用带给模型（插件侧最接近注入的通道；总量已在 notesBulk 截断）。
+        const notesById = await studio.notesBulk(selectedIds)
+        const notesBlocks = selectedRows
+          .filter((row) => notesById[row.id]?.notes)
+          .map((row) => `「${row.name}」查数手册（人工口径/陷阱，写 SQL 前先读）：\n${notesById[row.id].notes}${notesById[row.id].truncated ? '\n(手册过长已截断)' : ''}`)
+        if (notesBlocks.length) summary += '\n\n' + notesBlocks.join('\n\n')
         return { summary, connections: marked, selectedIds, drivers: overview.drivers }
       },
     },
@@ -425,6 +433,19 @@ function buildToolDefinitions(studio) {
       },
     },
   ]
+  // 每个工具执行期间标记活动状态（支持并发），状态条据此闪烁。
+  for (const definition of definitions) {
+    const original = definition.execute
+    definition.execute = async function (args, exec) {
+      studio.markActivity(1)
+      try {
+        return await original.call(this, args, exec)
+      } finally {
+        studio.markActivity(-1)
+      }
+    }
+  }
+  return definitions
 }
 
 /** Dispatch one HTTP request body. */
@@ -485,6 +506,8 @@ async function dispatch(studio, body, options = {}) {
       return { ok: true, ...(await studio.seedDemo()) }
     case 'ping':
       return { ok: true, time: Date.now() }
+    case 'activity':
+      return { ok: true, busy: studio.activityBusy() }
     default:
       throw new Error(`未知操作 / unknown action: ${action}`)
   }

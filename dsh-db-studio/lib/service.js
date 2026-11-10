@@ -141,6 +141,9 @@ INSERT INTO orders (id, user_id, product_id, quantity, total, status, created_at
 `
 
 export class DatabaseStudio {
+  /** Agent 工具在飞计数：底部状态条的圆点闪烁据此判断。 */
+  #activityCount = 0
+
   constructor(options = {}) {
     this.config = { ...DEFAULT_CONFIG, ...(options.config ?? {}) }
     this.home = resolveDshHome(options.dshHome, options.env ?? process.env)
@@ -208,6 +211,15 @@ export class DatabaseStudio {
         updatedAt: new Date().toISOString(),
       },
     ])
+  }
+
+  /** Agent 工具开始/结束各计一次（支持并发嵌套），busy = 计数 > 0。 */
+  markActivity(delta) {
+    this.#activityCount = Math.max(0, this.#activityCount + delta)
+  }
+
+  activityBusy() {
+    return this.#activityCount > 0
   }
 
   /** The browser-safe overview the panel and the list tool return. */
@@ -590,6 +602,28 @@ export class DatabaseStudio {
     if (options.sessionId) await this.assertSessionConnection(options.sessionId, id, options.cwd)
     const connection = await this.connection(id)
     return { connection: publicConnection(connection), notes: connection.notes ?? '' }
+  }
+
+  /**
+   * 查数手册批量读取（供 db_list_connections 随首次列表调用带给模型——插件侧
+   * 最接近注入的通道）。只接受连接 id 白名单，总量按字符预算截断防撑爆上下文。
+   */
+  async notesBulk(ids) {
+    await this.ready()
+    const out = {}
+    let budget = 48_000
+    for (const id of (Array.isArray(ids) ? ids : []).slice(0, 20)) {
+      const row = this.store.get(id)
+      if (!row?.notes) continue
+      if (budget <= 0) {
+        out[id] = { notes: '', truncated: true }
+        continue
+      }
+      const piece = row.notes.length > budget ? row.notes.slice(0, budget) : row.notes
+      budget -= piece.length
+      out[id] = { notes: piece, truncated: piece.length < row.notes.length }
+    }
+    return out
   }
 
   /** Replace one connection's query handbook; an empty string clears it. */

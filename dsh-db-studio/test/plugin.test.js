@@ -25,8 +25,14 @@ test('agent tools list, describe, query and execute', async () => {
   const studio = new DatabaseStudio({ dshHome: home, config: { demo: true } })
   try {
     const [list, describe, query, execute] = buildToolDefinitions(studio)
+
+    // 查数手册随首次列表调用带给模型（插件侧最接近注入的通道）。
+    const demoId = (await studio.listConnections()).connections[0].id
+    await studio.setNotes(demoId, '统计 GMV 一律排除已取消订单')
     const listed = await list.execute({})
     assert.match(listed.summary, /示例数据库/)
+    assert.match(listed.summary, /查数手册/)
+    assert.match(listed.summary, /GMV/)
     assert.equal(listed.connections.length, 1)
 
     const tables = await describe.execute({})
@@ -259,6 +265,23 @@ test('notes and export actions flow through dispatch', async () => {
     // describe 列表模式带回手册
     const tables = await dispatch(studio, { action: 'tables', id })
     assert.match(tables.notes, /统计/)
+  } finally {
+    await studio.dispose()
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('activity counter wraps tool executions', async () => {
+  const home = await mkdtemp(join(workspace, '.tmp-test-'))
+  const studio = new DatabaseStudio({ dshHome: home, config: { demo: true } })
+  try {
+    const definitions = buildToolDefinitions(studio)
+    assert.equal(studio.activityBusy(), false)
+    await definitions[2].execute({ sql: 'SELECT COUNT(*) AS n FROM users' })
+    assert.equal(studio.activityBusy(), false)
+    // dispatch 暴露 activity 动作
+    const activity = await dispatch(studio, { action: 'activity' })
+    assert.equal(activity.busy, false)
   } finally {
     await studio.dispose()
     await rm(home, { recursive: true, force: true })
