@@ -1,0 +1,51 @@
+<svg width="512" height="512" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 背景渐变 -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6A6DFF"/>
+      <stop offset="100%" stop-color="#B85EFF"/>
+    </linearGradient>
+
+    <!-- π 符号渐变 -->
+    <linearGradient id="piGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f0f0ff"/>
+    </linearGradient>
+
+    <!-- 黄色星星渐变 -->
+    <linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+
+    <!-- 阴影效果 -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- 圆角矩形背景 -->
+  <rect x="10" y="10" width="180" height="180" rx="40" fill="url(#bgGrad)" filter="url(#shadow)"/>
+
+  <!-- π 符号 - 圆润粗体样式(放大0.8倍) -->
+  <g transform="translate(97, 90) scale(1.8)" filter="url(#shadow)">
+    <!-- 顶部横线(带阴影) -->
+    <rect x="-32" y="-22" width="64" height="12" rx="6" fill="url(#piGrad)"/>
+
+    <!-- 左腿 -->
+    <rect x="-22" y="-16" width="12" height="52" rx="6" fill="url(#piGrad)"/>
+
+    <!-- 右腿 -->
+    <rect x="10" y="-16" width="12" height="38" rx="6" fill="url(#piGrad)"/>
+  </g>
+
+  <!-- 顶部横线(无阴影覆盖层) -->
+  <g transform="translate(97, 90) scale(1.8)">
+    <rect x="-32" y="-22" width="64" height="12" rx="6" fill="url(#piGrad)"/>
+  </g>
+
+  <!-- 黄色四角星（放大0.8倍） -->
+  <g transform="translate(161, 65) scale(1.224)" filter="url(#shadow)">
+    <path d="M 0 -16 Q 1 -1 10 0 Q 1 1 0 16 Q -1 1 -10 0 Q -1 -1 0 -16" fill="url(#starGrad)"/>
+  </g>
+</svg>
