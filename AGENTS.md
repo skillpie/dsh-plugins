@@ -7,7 +7,7 @@
 ## 技术栈
 
 **运行时**: dsh 0.2.2-rc.1(桌面/官方 npm 同版) | Node ≥22.13(桌面内置 24.21) | 纯 JS ESM,无构建步骤
-**插件依赖**: ws ^8.21.3(dsh-remote) | yauzl ^3.2.0(@skillpie/dsh-market) | pnpm 本地开发/测试依赖
+**插件依赖**: ws ^8.21.3(@skillpie/dsh-remote) | yauzl ^3.2.0(@skillpie/dsh-market) | pnpm 本地开发/测试依赖
 **测试**: node 独立冒烟脚本 `node test/*.mjs`(真实 http+ws 服务器) | agent-browser 无头浏览器验证 UI
 
 ## 新建插件最快路径
