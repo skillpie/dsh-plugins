@@ -1,5 +1,5 @@
 {
-  "name": "dsh-remote",
+  "name": "@skillpie/dsh-remote",
   "version": "1.0.0",
   "description": "Remote control for DeepSeek Harness: reach any host by its 8-digit code through a relay origin such as dsh.skillpie.cn.",
   "type": "module",
@@ -45,5 +45,8 @@
         "@deepseek-ai/dsh-client-ui-sidebar"
       ]
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -130,7 +130,7 @@ export const Config = {
 /* ── apply ───────────────────────────────────────────────────────────── */
 
 export default {
-  name: 'dsh-remote',
+  name: '@skillpie/dsh-remote',
   Config,
   inject: [],
   apply(ctx, rawConfig = null) {

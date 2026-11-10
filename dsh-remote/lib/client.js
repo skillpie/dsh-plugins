@@ -15,11 +15,11 @@
  * components with hooks rendered through h(Component, props).
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-remote',
+  id: '@skillpie/dsh-remote',
   factory(require) {
     var React = require('react')
     var h = React.createElement
-    var NS = 'dsh-remote'
+    var NS = '@skillpie/dsh-remote'
     var API = '/dsh-remote/api'
 
     var zh = {
@@ -452,7 +452,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      name: 'dsh-remote',
+      name: '@skillpie/dsh-remote',
       inject: ['slots', 'layout', 'locale'],
       apply: function (ctx) {
         ctx.effect(function () {

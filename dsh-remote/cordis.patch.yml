@@ -7,5 +7,5 @@
 # deployment such as dsh.skillpie.cn.
 - insert:
     - id: dsh-remote
-      name: dsh-remote
+      name: "@skillpie/dsh-remote"
       config: {}
