@@ -1,0 +1,64 @@
+# AGENTS.md
+
+## 编写规则
+
+本说明文档仅记录 AGENT 容易出错的场景或当前工程定制规则,经验需抽象精炼沉淀到「最佳实践」章节(一行一条),通用知识无需沉淀(基模能力会提升)
+
+## 技术栈
+
+**运行时**: dsh 0.2.2-rc.1(桌面/官方 npm 同版) | Node ≥22.13(桌面内置 24.21) | 纯 JS ESM,无构建步骤
+**插件依赖**: ws ^8.21.3(dsh-remote) | yauzl ^3.2.0(dsh-skillpie) | pnpm 本地开发/测试依赖
+**测试**: node 独立冒烟脚本 `node test/*.mjs`(真实 http+ws 服务器) | agent-browser 无头浏览器验证 UI
+
+## 新建插件最快路径
+
+1. 复制 `dsh-remote/` 的骨架:`package.json`、`cordis.patch.yml`、`locale/{en,zh}.json`、`icon.svg`,改名改造。
+2. Host 半:`lib/index.js` 导出 `export default { name, Config, inject, apply }`;Client 半:`lib/client.js` 为 module-loader 工厂。
+3. `for f in lib/*.js; do node --check "$f"; done` 逐文件语法检查。
+4. 写 `test/*.mjs` 冒烟(桩 webServer + 真实 ws),跑通再接 DSH。
+5. `plugin_manager install_bundle(target=插件目录)` 安装;`set_plugin(include:<id>, false→true)` 重载 host 代码。
+6. 属主 API `curl` 验状态 → agent-browser 打开 `/<code>/` 截图 → 刷新 GUI 页面看侧栏面板。
+
+## 最佳实践
+
+- 用中文交流和编写注释。
+- 开发前加载 `cordis-plugin-development` 技能;写 patch/预设时加载 `cordis-composition-reference`。
+- `cordis_inspect_query` 带 `input` 参数的调用会被 Provider 拒绝("input must be an object");精确契约改读 `~/Projects/deepseek-harness` 源码/`lib/types`,或已装包的 `lib/types/**/*.d.ts`。
+- 每个插件一个包目录 `dsh-<name>/`;包名、`cordis.patch.yml` 行 id、client loader id 三者保持一致。
+- `package.json` 必须声明 `dsh.bundle.patch`、`dsh.client.platform: "web"`、`exports`(含 `./locale/*.json`、`./icon`、`./client`)、`files`、`engines.dsh`。
+- Client 半固定形态:`window.__ModuleLoader__.load({ id: '<包名>', factory(require) { ... return { name, inject: ['slots','layout','locale'], apply } } })`。
+- Host 半所有注册(路由、监听、定时器)必须包在 `ctx.effect(() => () => disposal)` 里;注入可选服务用 `ctx.inject([...], child => ...)`。
+- 安装/启停只走 `plugin_manager`(`install_bundle`/`set_plugin`);禁止手改 profile 的 `package.json` 与 `cordis.patch.yml`。
+- Host 代码改动不会 HMR 重载,必须 `set_plugin` off→on;Client 改动需刷新 GUI 页面才生效。
+- 插件自有状态(身份、token、码)写凭据记录 `ctx.credentials.modifyRecord('<包名>/identity', ...)`,返回 `{ kind: 'grant', payload }`;禁止用 `configEditor.edit`(桌面 HMR 事务未关闭时报 "HMR transactions cannot be nested")。
+- `sessionController` 的 `list/state/events/observeEvent/observeState/prompt` 第二参必须传 AbortSignal,否则内部 `signal.throwIfAborted` 抛 TypeError;一次性读用 `AbortSignal.timeout(20_000)`。
+- 读会话历史:`sessionController.events({ address: { kind: 'session', sessionId }, maxMessages, turnWindow })`,返回 `{ records, hasMore }` 分页对象。
+- `webServer.register` 仅支持 `kind: 'exact' | 'prefix'`;`registerUpgrade` 只按精确 pathname 匹配;`registerFallback` 单席位且被 SPA 占用,插件禁止抢占。
+- 根路径动态挂载(如 `/<code>`)用 `webServer.register({ kind: 'prefix', path })` 在注册时动态挂载并保存 disposer。
+- GUI 透传:宿主 GUI 唯一 WS 端点是 `/api/remote.mux`,协议是 **JSON 文本帧**;拼接必须双向透传 text 与 binary 两种帧。
+- GUI 资源由宿主机注入 `<base href="./">` 相对解析,任意 path 前缀挂载均可用;索引请求需带宿主签发的会话 cookie。
+- Owner 会话 cookie 用 `ctx.get('connection').authenticatedUrl(origin + '/')` 铸造,只在宿主侧逐请求注入,禁止下发到访客浏览器。
+- ws 的 message data 可能是 `Buffer | Buffer[] | ArrayBuffer`;统一走 `toBuffer()` 容错,严禁 `Buffer.concat(非数组)`。
+- **所有** socket 监听器、升级回调、HTTP 路由体必须 try/catch:监听器内未捕获异常 = 宿主进程退出(已验证会把桌面端带崩)。
+- `handleUpgrade(req, socket, head, cb)` 回调参数是 ws 实例而非 Duplex;关闭用 `ws.close()`/`terminate()`,`socket.raw` 不保证存在。
+- Client 半组件用 `h()` 无 JSX;**带 hooks 的组件必须 `h(Component, props)` 渲染**,禁止当普通函数调用(React #310 会炸掉整个 main 槽)。
+- Client 样式只用 `--dsw-alias-*` 主题 token;可见文字走 `ctx.locale.register(NS, {zh, en})` + `ctx.locale.bind(NS)`。
+- 页面注册:侧栏 `sidebar.panellist` 用 `id`,主区 `main` 用同 `key`;slot 注册用 `ctx.slots.inject(ownerKey, () => ctx.slots.register(..., Component))`。
+- 属主 HTTP API 只挂宿主角色(enabled||direct);relay-only 服务器行禁止挂属主 API,否则暴露 regenerate 等操作。
+- 同源校验:插件 HTTP API 校验 `Origin` 与 `Host` 同源;访问凭据类操作一律同源限定。
+- 每个插件必须带 `test/*.mjs` 冒烟:桩 `webServer`(register/registerUpgrade 存表)+ 真实 http/ws 服务器,不依赖 DSH 进程可跑。
+- 真实进程验证:从属主 API 拿远程码 → `agent-browser open http://127.0.0.1:<port>/<code>/` → 截图并读 console 里的 `slot entry crashed`/`connection` 警告。
+- 浏览器打开的页面若停在 `about:blank`,先 `agent-browser get url` 确认导航成功,再判断页面是否空白。
+- 服务器中转部署用官方 npm 形态:`npm i -g @deepseek-ai/dsh` + `dsh plugin --profile web add <插件目录>`,profile 补丁层覆盖行开启 `relay.enabled`。
+- systemd 启动:`dsh web --no-open --host 127.0.0.1 --port <p> --public-url https://<域名> --trusted-host <域名>`;nginx 原样透传 Host 与 WebSocket 升级。
+- 服务器上插件依赖需在插件目录内 `npm install --registry=https://registry.npmmirror.com`(link 安装不会代装依赖)。
+- 桌面崩溃恢复会把 profile 的 `dsh.profile.bundles` 重置为出厂两项;用 `plugin_manager set_bundle` 逐个恢复用户 bundle。
+- 安装插件前校验其 peer 版本与 dsh 运行时匹配(`plugin-market 0.2.1-alpha.4` 对 `0.2.2-rc.1` 会启动即 exit 1)。
+
+## 禁止事项
+
+- 禁止在插件内注册 `process.on('uncaughtException')` 兜底。
+- 禁止用 iframe 内嵌 HTML 页充当 GUI 面板(practices.md 明确禁止,丢失主题与 locale)。
+- 禁止在插件激活期间直接改写 `cordis.patch.yml` 或 profile 的 `package.json`。
+- 禁止跨插件 `require` 别的 Harness Client 包(`dsh.client.inject` 仅用于激活排序)。
+- 禁止在未 `node --check` 与通读冒烟测试通过前执行 `install_bundle`。

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Remote control",
+    "description": "Lets a browser reach this host with an 8-digit code through a relay origin, view sessions, send prompts and interrupt runs."
+  }
+}

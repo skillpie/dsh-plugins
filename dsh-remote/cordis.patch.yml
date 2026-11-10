@@ -1,0 +1,11 @@
+# dsh-remote bundle patch.
+#
+# One dual-role row: the same apply() wires the host role (outbound relay
+# client, visitor command engine, owner panel API, optional local direct
+# routes) and, when config.relay.enabled is true, the relay role (registry,
+# /<code> console routes, host control-channel upgrade) for a server-side
+# deployment such as dsh.skillpie.cn.
+- insert:
+    - id: dsh-remote
+      name: dsh-remote
+      config: {}

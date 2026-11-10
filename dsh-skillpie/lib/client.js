@@ -39,14 +39,19 @@ window.__ModuleLoader__.load({
     }
 
     // ── icons (currentColor, theme-aware) ────────────────────────────────
+    // ZCodeOnline 同款技能市场图标（lucide Sparkles，24 网格 stroke 风格）。
     function PieIcon(props) {
-      var size = props && props.size ? props.size : 18
+      var size = props && props.size ? props.size : 16
       return h('svg', {
-        viewBox: '0 0 64 64', width: size, height: size, 'aria-hidden': true,
+        viewBox: '0 0 24 24', width: size, height: size, 'aria-hidden': true,
+        fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
         style: { display: 'block', flex: 'none' },
       },
-        h('circle', { cx: 26, cy: 36, r: 15, fill: 'currentColor', opacity: 0.9 }),
-        h('path', { d: 'M36 10 L36 27 L53 27 A17 17 0 0 0 36 10 Z', fill: 'currentColor', opacity: 0.55 }),
+        h('path', { d: 'M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z' }),
+        h('path', { d: 'M20 2v4' }),
+        h('path', { d: 'M22 4h-4' }),
+        h('circle', { cx: 4, cy: 20, r: 2 }),
       )
     }
 
