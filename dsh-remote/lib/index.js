@@ -28,7 +28,8 @@ import { HOST_UPGRADE_PATH, OWNER_API_PATH, PROTOCOL_VERSION, generateCode, gene
 import { HostEngine } from './engine.js'
 import { GuiBridge } from './bridge.js'
 import { RelayLink } from './remote.js'
-import { RelayCore } from './relay-core.js'
+import { RelayCore, serveServiceWorker } from './relay-core.js'
+import { registerFileRoute, fileRouteKey } from './file-route.js'
 import { consoleHtml } from './console.js'
 import { createPipePair } from './pipe.js'
 
@@ -285,6 +286,15 @@ export default {
         logLine('owner-api', `属主 API 已挂载（${OWNER_API_PATH}）`)
       }
 
+      // 5.5 Visitor file downloads: stream files from this host to the
+      //     remote browser with a save dialog (see lib/file-route.js).
+      //     Host roles only; the key derives from the host id, which the
+      //     relay also derives from the hello to stamp the visitor shim.
+      if (enabled || direct) {
+        disposers.push(registerFileRoute({ webServer, key: fileRouteKey(identity.hostId), log: logLine }))
+        logLine('file-route', '访客文件下载路由已挂载（/dsh-remote-file）')
+      }
+
       // 6. Direct mode: the same surface on the local web server.
       if (direct) {
         const [hostEnd, relayEnd] = createPipePair()
@@ -316,7 +326,20 @@ export default {
         logLine('direct', `本机直连路由已挂载（/${identity.code}/，模式 ${mode}）`)
       }
 
-      // 7. Relay face (server deployments only).
+      // 7. Visitor restore worker: conceals the code from the address bar and
+      //    keeps the bare origin reopening the tunnel (see concealScript). The
+      //    worker also probes 8-digit code paths and swaps a 404 (unknown or
+      //    offline-revoked code) for the code-entry dialog.
+      if (mode === 'gui' && (direct || relayFaceEnabled)) {
+        disposers.push(webServer.register({
+          kind: 'exact',
+          path: '/dsh-remote-sw.js',
+          handler: (req, res) => { try { serveServiceWorker(req, res) } catch { try { res.destroy() } catch { /* gone */ } } },
+        }))
+        logLine('sw', '访客恢复 Worker 已挂载（/dsh-remote-sw.js）')
+      }
+
+      // 8. Relay face (server deployments only).
       if (relayFaceEnabled) {
         const relayCore = new RelayCore({
           webServer,

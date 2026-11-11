@@ -1,0 +1,9 @@
+# dsh-project-report bundle patch.
+#
+# One dual-face row: the host half serves POST /dsh-project-report/api
+# (projects, report generation, Moka overtime, scheduler), the client half
+# registers the sidebar panel icon and the "Coder report" main view.
+- insert:
+    - id: project-report
+      name: "@skillpie/dsh-project-report"
+      config: {}

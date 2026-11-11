@@ -30,6 +30,8 @@
 - Host 半所有注册(路由、监听、定时器)必须包在 `ctx.effect(() => () => disposal)` 里;注入可选服务用 `ctx.inject([...], child => ...)`。
 - 安装/启停只走 `plugin_manager`(`install_bundle`/`set_plugin`);禁止手改 profile 的 `package.json` 与 `cordis.patch.yml`。
 - Host 代码改动不会 HMR 重载,必须 `set_plugin` off→on;Client 改动需刷新 GUI 页面才生效。
+- 可选服务(credentials 等)禁止进 `ctx.inject` 依赖——注入会永远 pending 且 fiber 仍显示 active,路由静默不注册;每请求 `ctx.get('credentials')` 惰性读取(dsh-remote 模式)。timer 服务 inject 子上下文不可达,插件自带定时用原生 setInterval + `ctx.effect` 清理。
+- `ctx.inject` 回调内任一 `child.effect` 抛错会让 cordis 回滚整个作用域并 dispose 已注册的路由(现象:探针显示 register 已执行、请求却 405,无任何日志);注入多个服务前先确认每个都在依赖列表里,排障时在 apply 各阶段写 /tmp 探针文件定位。
 - 插件自有状态(身份、token、码)写凭据记录 `ctx.credentials.modifyRecord('<包名>/identity', ...)`,返回 `{ kind: 'grant', payload }`;禁止用 `configEditor.edit`(桌面 HMR 事务未关闭时报 "HMR transactions cannot be nested")。
 - `sessionController` 的 `list/state/events/observeEvent/observeState/prompt` 第二参必须传 AbortSignal,否则内部 `signal.throwIfAborted` 抛 TypeError;一次性读用 `AbortSignal.timeout(20_000)`。
 - 读会话历史:`sessionController.events({ address: { kind: 'session', sessionId }, maxMessages, turnWindow })`,返回 `{ records, hasMore }` 分页对象。
@@ -58,6 +60,13 @@
 - 插件可选依赖(pg/mysql2)用裸 `import()` 惰性加载:一次解析失败会被 Node ESM 负缓存记住,进程内永久失败(磁盘 `node -e import()` 正常也无效),重启宿主进程才能恢复;诊断时先在磁盘验证解析再怀疑进程。
 - 宿主进程日志(journal/stdout)看不到插件 `logLine`——它只写内存环,经属主 API 暴露;relay-only 服务器上属主 API 关闭时日志不可见,排障要靠复现探针而不是服务器日志。
 - 安装插件前校验其 peer 版本与 dsh 运行时匹配(`plugin-market 0.2.1-alpha.4` 对 `0.2.2-rc.1` 会启动即 exit 1)。
+- patch 行定位:`id` 必须等于 profile 依赖键(如 `dsh-remote`),`name` 必须等于包内 package.json 的 name(如 `@skillpie/dsh-remote`)——包改名后只改一处会导致补丁静默失效,插件以默认 config 运行;服务器排障先加 console.error 引导 trace 进 journal 再猜。
+- 隐藏 URL 中的码用「conceal 脚本 + origin 级 Service Worker」:conceal 先把 `<base>` 钉到绝对隧道前缀再 `history.replaceState('/')`(顺序不能反,否则相对解析全错);SW 从自身 scriptURL query 读码,仅拦 origin 根路径的 navigate,带 `dsh-auth-` cookie 放行,回源 HTML 必须含 shim 标记防隧道下线兜回;SW 注册条件用 `window.isSecureContext`(https 与 localhost 都算),`location.protocol==='https:'` 会把 localhost 测试挡掉。
+- 给透传 GUI 注入页面级行为(如访客下载菜单):MutationObserver 盯 `[role=menu]` 新增,新行必须**整行克隆原生 wrapper**(`parentNode.cloneNode(true)` 后改内部 icon/label span)——裸 button 直插菜单根+inline 样式必然字号/对齐全错(原生行是 `div > button[role=menuitem] > [span.itemIcon][span.itemLabel]`);插入行可能被 React 重渲染摘除,patch 要按「行还在才跳过」而非「有标记即跳过」。菜单与触发器的关联**必须逐版本实测**(本机/服务器运行时产物才是真相,源码检出版本可能不同):rc.1 实测 chevron 有 `aria-haspopup` 但**无 `aria-controls`、菜单根 id 为空**,可靠判据是开启时 `aria-expanded="true"` + 限定 `[data-open-target] [aria-haspopup]`,再按弹出位置最近兜底。**菜单分类(isFile)判定只用严格触发器**(aria-controls / aria-expanded=true),就近兜底只能在判定之后用于找路径——否则任意弹窗(如头像菜单)靠近残留的文件卡 chevron 会被误注入下载项。路径来源要按组件逐个核实:聊天文件卡(ui-deliverables PresentedFileCard)的绝对路径在**预览按钮 title**、其菜单走 HTTP 不走 mux,文档预览页头才是 `[data-path-label]` title;宿主 GUI 无文件 HTTP 端点,自行挂 `/dsh-remote-file` 路由(密钥从 hostId 派生,relay 由 hello.hostId 同式派生,零协议改动)。验证按钮自身请求要按 URL 过滤捕获(页面后台请求会把 cap 覆盖掉)。
+- 冒烟桩的 webServer 若手动分发 prefix 路由,必须在分发前按 pathname 前缀过滤——处理器自身要守卫路径前缀,否则会在非匹配路径上被误调。
+- webServer prefix 匹配是「p 或 p/」语义(webserver index.ts:660):短前缀命中不了更长的单段路径(`/9` 不匹配 `/99999999/`),**任何通用捕获式数字路由都不可能**;匹配顺序 exact → 最长前缀 → fallback,重复 (kind,path) 注册抛错。想接管任意 `/<码>` 只能走 SW 导航探测或边缘层(nginx)。
+- SPA fallback(frontend-static)对未知子路径返回**裸 404**,仅 `/` 与 distIndex 的渲染走 `tapIndex`——插件想注入 `/<任意路径>` 的 404 场景,tapIndex 是死路;SW 内 fetch HEAD 探测 + `respondWith` 改写响应是插件侧通用解法(SW 内 fetch 不会重入自身 handler)。
+- nginx 反代后端响应默认**不触发** `error_page`,必须 `proxy_intercept_errors on`;nginx 的 location/rewrite 正则含 `{n}` 必须整体引号包裹(裸 `{` 被当块起始,`nginx -t` 报 directive not terminated);`error_page 404 = @named` 进 named location 后原 regex 捕获 `$1` 仍可用,可直接拼改写参数。
 
 ## npm 发布
 
