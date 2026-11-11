@@ -1,6 +1,6 @@
 {
   "name": "@skillpie/dsh-dba",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Connect to databases in DeepSeek Harness (DSH), then query and edit data right in the conversation.",
   "type": "module",
   "license": "MIT",

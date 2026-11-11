@@ -86,7 +86,6 @@ test('client bundle registers a sidebar entry and a main panel', async () => {
   client.apply(ctx)
   const main = registrations.find((row) => row.options.name === 'main')
   const sidebar = registrations.find((row) => row.options.name === 'sidebar.panellist')
-  const view = registrations.find((row) => row.options.name === 'conversation.view')
   const picker = registrations.find((row) => row.options.name === 'conversation.input.left')
   const status = registrations.find((row) => row.options.name === 'conversation.composer.dock')
   assert.ok(main, 'must register the main panel')
@@ -96,8 +95,11 @@ test('client bundle registers a sidebar entry and a main panel', async () => {
   assert.equal(sidebar.options.id, 'dba')
   assert.equal(typeof sidebar.options.order, 'number')
   assert.equal(typeof sidebar.options.label, 'function')
-  assert.ok(view, 'must register the conversation database tab')
-  assert.equal(view.options.order, 5, 'the tab sits between Chat (0) and Trajectory (10)')
+  assert.equal(
+    registrations.some((row) => row.options.name === 'conversation.view'),
+    false,
+    'the conversation header database tab must stay removed'
+  )
   assert.ok(picker, 'must register the composer multi-select')
   assert.equal(picker.options.id, 'dba')
   assert.ok(status, 'must register the composer status strip')

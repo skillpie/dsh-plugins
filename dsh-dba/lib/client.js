@@ -29,21 +29,15 @@ window.__ModuleLoader__.load({
       sql: "SQL",
       history: "查询历史",
       historyEmpty: "还没有查询记录。在 SQL 页运行查询后会出现在这里。",
-      historyClear: "清空历史",
-      historyReproduce: "复现",
-      historyReproduceHint: "载入到 SQL 页，不会自动执行",
       historySuccess: "成功",
       historyFailed: "失败",
       historyRows: "{n} 行",
       historyChanges: "影响 {n} 行",
       historyAgent: "助手",
       historyConsole: "控制台",
-      historyUnavailable: "连接 {name} 已不在当前会话的选择范围内",
       historyOpen: "进入对话",
       historyOpenFailed: "无法打开对话",
       historyOpenFailedDetail: "打开对话失败：{error}",
-      historyTurn: "第 {n} 轮",
-      historyManual: "手动查询",
       historyTurnNoPrompt: "未命名输入",
       run: "运行",
       running: "运行中…",
@@ -127,20 +121,12 @@ window.__ModuleLoader__.load({
       tableCount: "{n} 张表",
       statusFailed: "连接失败",
       statusChecking: "检查中",
-      noSelectionTitle: "还没有选择数据库",
-      noSelectionDesc: "在输入框旁的多选下拉里选择要在这个对话中使用的数据库。",
-      selectAllRecent: "全选最近使用",
-      openGlobal: "打开全局面板",
-      conversationEmptyTitle: "这个对话还没有数据库",
-      conversationEmptyDesc: "先新建一个连接，或使用内置示例数据库开始。",
       selected: "已选",
       databases: "数据库",
-      connectionCount: "{n} 个连接",
       databaseCount: "{n} 个数据库",
       connectedOf: "{ok}/{n} 已连接",
       allConnected: "已连接",
       schemaHint: "点击「结构」查看字段",
-      askInChat: "可以直接在对话里让助手查询或修改这些数据",
       commandLabel: "数据库",
       commandDesc: "打开数据库面板",
       dataSource: "数据源",
@@ -172,21 +158,15 @@ window.__ModuleLoader__.load({
       sql: "SQL",
       history: "Query history",
       historyEmpty: "No queries yet. Run one from the SQL tab and it will show up here.",
-      historyClear: "Clear history",
-      historyReproduce: "Reproduce",
-      historyReproduceHint: "Load into the SQL tab without running it",
       historySuccess: "OK",
       historyFailed: "Failed",
       historyRows: "{n} rows",
       historyChanges: "{n} rows affected",
       historyAgent: "Assistant",
       historyConsole: "Console",
-      historyUnavailable: "Connection {name} is no longer selected for this conversation",
       historyOpen: "Open conversation",
       historyOpenFailed: "Could not open the conversation",
       historyOpenFailedDetail: "Could not open the conversation: {error}",
-      historyTurn: "Turn {n}",
-      historyManual: "Manual queries",
       historyTurnNoPrompt: "Untitled input",
       run: "Run",
       running: "Running…",
@@ -270,20 +250,12 @@ window.__ModuleLoader__.load({
       tableCount: "{n} tables",
       statusFailed: "Connection failed",
       statusChecking: "Checking",
-      noSelectionTitle: "No databases selected",
-      noSelectionDesc: "Pick the databases this conversation should use in the multi-select beside the composer.",
-      selectAllRecent: "Select recently used",
-      openGlobal: "Open full panel",
-      conversationEmptyTitle: "No database in this conversation",
-      conversationEmptyDesc: "Create a connection, or start with the built-in demo database.",
       selected: "Selected",
       databases: "Databases",
-      connectionCount: "{n} connections",
       databaseCount: "{n} databases",
       connectedOf: "{ok}/{n} connected",
       allConnected: "Connected",
       schemaHint: "Use Schema to inspect columns",
-      askInChat: "Ask the assistant to query or change this data in chat",
       commandLabel: "Database",
       commandDesc: "Open the database panel",
       dataSource: "Data sources",
@@ -345,7 +317,7 @@ window.__ModuleLoader__.load({
 
     // ── per-session database state ──────────────────────────────────────
     //
-    // The picker, the conversation tab and the status strip are three seats
+    // The picker and the status strip are two seats
     // over one host-owned answer. They share this small store so a checkbox
     // flips every surface at once; the host remains the authority and every
     // mutation round-trips through /dsh-dba/api.
@@ -400,7 +372,7 @@ window.__ModuleLoader__.load({
       } catch (error) {
         // An older host (one that predates per-conversation selection) does
         // not know session-state/session-set. Fall back to the global
-        // overview so the picker, tab and status strip keep working; the
+        // overview so the picker and status strip keep working; the
         // selection is then page-local until the host is restarted.
         try {
           var overview = await api({ action: "overview" });
@@ -774,32 +746,6 @@ window.__ModuleLoader__.load({
 .dshdb-statuspop-name{font-size:12px;font-weight:550;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dshdb-statuspop-detail{font-size:10.5px;color:var(--dsw-alias-label-tertiary);line-height:1.4;word-break:break-word}
 .dshdb-statuspop-row:has(.dshdb-dot.bad) .dshdb-statuspop-detail{color:var(--dsw-alias-state-error-primary)}
-.dshdb-cv{height:100%;min-height:0;display:flex;flex-direction:column;padding:14px 22px 16px;box-sizing:border-box;overflow:hidden;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);background:var(--dsw-alias-bg-base)}
-/* The conversation shell gives a view an auto-height flex row; without bounding
-   that ancestor the workbench grows with the table list and drags the data pane
-   with it. Bounding it keeps the table list and the data grid on separate
-   scroll ports, exactly like the global panel. */
-*:has(> * > .dshdb-cv){flex:1 1 0!important;min-height:0!important;overflow:hidden!important}
-.dshdb-cv *{box-sizing:border-box}
-.dshdb-cvhead{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;flex:0 0 auto}
-.dshdb-cvtitlewrap{display:flex;align-items:center;gap:10px;min-width:0}
-.dshdb-cvtitle{font-size:16px;font-weight:600;margin:0;line-height:1.2}
-.dshdb-cvsub{font-size:11px;color:var(--dsw-alias-label-tertiary);margin:3px 0 0}
-.dshdb-cvactions{display:flex;align-items:center;gap:7px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
-.dshdb-cvpills{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:10px 0 0;flex:0 0 auto}
-.dshdb-cvpill{appearance:none;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11.5px;padding:5px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;cursor:pointer;max-width:230px}
-.dshdb-cvpill:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.dshdb-cvpill.active{border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent);color:var(--dsw-alias-brand-primary);background:color-mix(in srgb,var(--dsw-alias-brand-primary) 8%,transparent);font-weight:550}
-.dshdb-cvpill.active .dshdb-dot{background:var(--dsw-alias-brand-primary)}
-.dshdb-cvpillhint{font-size:10.5px;color:var(--dsw-alias-label-caption);margin-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.dshdb-cvbody{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;border:1px solid var(--dsw-alias-border-l2);border-radius:11px;overflow:hidden;margin-top:10px;background:var(--dsw-alias-bg-base)}
-.dshdb-cvdata{flex:1 1 auto;min-height:0;display:flex}
-.dshdb-cv .dshdb-tablelist{width:190px}
-.dshdb-cv .dshdb-gridbar{padding:9px 12px}
-.dshdb-cv .dshdb-gridscroll{padding:0 12px 8px}
-.dshdb-cv .dshdb-pager{padding:7px 12px}
-.dshdb-cv .dshdb-sqlpane{padding:12px 14px;gap:10px;height:100%}
-.dshdb-cv .dshdb-tabs{margin-top:3px;flex:0 0 auto}
 .dshdb-historypage{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:14px 18px;gap:8px;overflow:hidden}
 .dshdb-historypagehead{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 2px 8px;border-bottom:1px solid var(--dsw-alias-border-l2)}
 .dshdb-historygroups{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px 6px}
@@ -812,17 +758,8 @@ window.__ModuleLoader__.load({
 .dshdb-historygroupcount{font-size:9.5px;font-weight:600;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);border-radius:999px;padding:1px 6px;flex:0 0 auto}
 .dshdb-historyopen{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:var(--dsw-alias-brand-primary);flex:0 0 auto}
 .dshdb-historygrouprows{display:flex;flex-direction:column;gap:4px;padding:6px}
-.dshdb-historypane{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:12px 14px;gap:8px;overflow:hidden}
 .dshdb-historybar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 2px 8px;border-bottom:1px solid var(--dsw-alias-border-l2)}
 .dshdb-historytitle{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600}
-.dshdb-historyturn{border:1px solid var(--dsw-alias-border-l2);border-radius:8px;overflow:hidden;background:var(--dsw-alias-bg-base)}
-.dshdb-historyturnhead{appearance:none;border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;width:100%;text-align:left;display:flex;align-items:center;gap:7px;padding:7px 9px;cursor:pointer}
-.dshdb-historyturnhead:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dshdb-historyturnlabel{font-size:11px;font-weight:600;flex:0 0 auto;white-space:nowrap}
-.dshdb-historyturnprompt{font-size:11px;color:var(--dsw-alias-label-tertiary);min-width:0;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dshdb-historyturncount{font-size:9.5px;color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-interactive-bg-hover);border-radius:999px;padding:1px 6px;flex:0 0 auto}
-.dshdb-historyturnrows{display:flex;flex-direction:column;gap:4px;padding:6px;border-top:1px solid var(--dsw-alias-border-l2)}
-.dshdb-historylist{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:8px 2px}
 .dshdb-historyrow{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;appearance:none;border:1px solid var(--dsw-alias-border-l2);background:transparent;border-radius:8px;padding:8px 9px;cursor:pointer;font:inherit;color:var(--dsw-alias-label-primary)}
 .dshdb-historyrow:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .dshdb-historyrow.bad{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 28%,var(--dsw-alias-border-l2))}
@@ -831,12 +768,9 @@ window.__ModuleLoader__.load({
 .dshdb-historymain{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:3px}
 .dshdb-historysql{font-family:var(--ds-font-family-code);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-secondary)}
 .dshdb-historymeta{display:flex;gap:7px;flex-wrap:wrap;font-size:10px;color:var(--dsw-alias-label-tertiary);line-height:1.4}
-.dshdb-historyaction{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;font-size:10.5px;color:var(--dsw-alias-brand-primary);padding:2px 3px;white-space:nowrap}
-.dshdb-cvempty{flex:1;display:flex;align-items:center;justify-content:center;padding:26px;min-height:300px}
-.dshdb-cvloading{flex:1;display:flex;align-items:center;justify-content:center;min-height:300px}
 .dshdb-cvmessage{padding:6px 0;flex:0 0 auto}
 @media (max-width:1100px){.dshdb-statuspill-meta{display:none}.dshdb-statuspill-name{max-width:110px}}
-@media (max-width:900px){.dshdb-cv{padding:12px 14px 14px}.dshdb-cv .dshdb-tablelist{display:none}.dshdb-cv .dshdb-tableselect{display:inline-flex}.dshdb-cvpillhint{display:none}.dshdb-picker-wrap{max-width:150px}}
+@media (max-width:900px){.dshdb-picker-wrap{max-width:150px}}
 
 `;
 
@@ -2104,583 +2038,6 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** Column chips shared by the global panel and the conversation tab. */
-    function SchemaChips(props) {
-      var t = props.t;
-      var schema = props.schema;
-      if (!schema || !schema.columns) return null;
-      return h("div", { className: "dshdb-schemaPanel" },
-        h("div", { className: "dshdb-cols" }, schema.columns.map(function (column) {
-          return h("span", { key: column.name, className: "dshdb-col" + (column.primaryKey ? " pk" : ""), title: column.type },
-            h("b", null, column.name),
-            h("em", null, column.type),
-            column.primaryKey ? h("em", null, t("pk")) : null,
-            column.notNull ? h("em", null, "NOT NULL") : null,
-            column.defaultValue !== null && column.defaultValue !== undefined ? h("em", null, "=" + String(column.defaultValue)) : null
-          );
-        }))
-      );
-    }
-
-    /** Empty state shared by both "no connections" and "nothing selected". */
-    function ConversationDbEmpty(props) {
-      var t = props.t;
-      return h("div", { className: "dshdb-cvempty" },
-        h("div", { className: "dshdb-emptycard" },
-          h("div", { className: "dshdb-emptyart" }, h(DatabaseIcon, { size: 38 })),
-          h("h2", { className: "dshdb-emptytitle" }, props.title),
-          h("p", { className: "dshdb-emptydesc" }, props.description),
-          h("div", { className: "dshdb-emptyactions" },
-            props.onDemo ? h("button", { type: "button", className: "dshdb-btn", onClick: props.onDemo, disabled: props.busy }, h(SparkIcon, { size: 15 }), t("useDemo")) : null,
-            props.onSelectAll ? h("button", { type: "button", className: "dshdb-btn", onClick: props.onSelectAll }, h(CheckIcon, { size: 15 }), t("selectAllRecent")) : null,
-            h("button", { type: "button", className: "dshdb-btn primary", onClick: props.onNew }, h(PlusIcon, { size: 15 }), t("newConnection")),
-            props.onOpenPanel ? h("button", { type: "button", className: "dshdb-btn ghost", onClick: props.onOpenPanel }, t("openGlobal")) : null
-          )
-        )
-      );
-    }
-
-    // ── conversation tab: the selected databases ────────────────────────
-    function messageContentText(content) {
-      if (typeof content === "string") return content;
-      if (!Array.isArray(content)) return "";
-      return content.map(function (block) {
-        return block && block.type === "text" && typeof block.text === "string" ? block.text : "";
-      }).join(" ").replace(/\s+/g, " ").trim();
-    }
-
-    /** Group recorded SQL by the loaded conversation turn whose time window contains it. */
-    function sqlHistoryTurns(history, turns, nodes, t) {
-      var loaded = (Array.isArray(turns) ? turns : []).map(function (item) {
-        var node = nodes && typeof nodes.get === "function" ? nodes.get(item.anchorKey) : null;
-        return {
-          id: "turn-" + item.turn,
-          turn: Number(item.turn) || 0,
-          time: Number(node && node.data ? node.data.time : 0) || 0,
-          prompt: item.prompt || "",
-          entries: [],
-        };
-      });
-      if (loaded.length === 0) return [{ id: "manual", index: 0, label: t("historyManual"), prompt: "", entries: history }];
-      var groups = loaded.map(function (turn) {
-        return { id: turn.id, index: 0, label: interpolate(t("historyTurn"), { n: turn.turn }), prompt: turn.prompt, time: turn.time, entries: [] };
-      });
-      var orphans = [];
-      history.forEach(function (row) {
-        var at = Number(row.at) || 0;
-        var index = -1;
-        for (var cursor = 0; cursor < loaded.length; cursor += 1) {
-          if (loaded[cursor].time <= at) index = cursor;
-          else break;
-        }
-        if (index < 0) orphans.push(row);
-        else groups[index].entries.push(row);
-      });
-      var result = groups.filter(function (group) { return group.entries.length > 0; }).reverse();
-      if (orphans.length) result.push({ id: "orphans", index: result.length, label: t("historyManual"), prompt: "", entries: orphans });
-      result.forEach(function (group, index) { group.index = index; });
-      return result;
-    }
-
-    function ConversationDbView(props) {
-      var t = props.t || function (key) { return key; };
-      var sessionId = props.sessionId;
-      var entry = useSessionDb(sessionId);
-      var state = entry.state;
-      var all = state ? state.connections || [] : [];
-      var selected = state ? state.selected || [] : [];
-      var selectedKey = selected.map(function (row) { return row.id; }).join(",");
-
-      var [activeId, setActiveId] = React.useState(null);
-      var [tables, setTables] = React.useState([]);
-      var [tablesLoading, setTablesLoading] = React.useState(false);
-      var [tableQuery, setTableQuery] = React.useState("");
-      var [selectedTable, setSelectedTable] = React.useState(null);
-      var [schema, setSchema] = React.useState(null);
-      var [showSchema, setShowSchema] = React.useState(false);
-      var [page, setPage] = React.useState(0);
-      var [pageSize, setPageSize] = React.useState(50);
-      var [result, setResult] = React.useState(null);
-      var [rowsLoading, setRowsLoading] = React.useState(false);
-      var [rowsError, setRowsError] = React.useState(null);
-      var [tab, setTab] = React.useState("data");
-      var [sql, setSql] = React.useState("");
-      var [sqlResult, setSqlResult] = React.useState(null);
-      var [sqlError, setSqlError] = React.useState(null);
-      var [sqlLoading, setSqlLoading] = React.useState(false);
-      var [history, setHistory] = React.useState([]);
-      var [historyLoading, setHistoryLoading] = React.useState(false);
-      var [historyError, setHistoryError] = React.useState(null);
-      var [collapsedTurns, setCollapsedTurns] = React.useState({});
-      var fallbackUseChat = function () { return undefined; };
-      var useChat = typeof props.useChat === "function" ? props.useChat : fallbackUseChat;
-      var chatTurns = useChat(function (snapshot) { return snapshot.navigation ? snapshot.navigation.items() : undefined; });
-      var chatNodes = useChat(function (snapshot) { return snapshot.nodes; });
-      var turnGroups = sqlHistoryTurns(history, chatTurns, chatNodes, t);
-      var [dialog, setDialog] = React.useState(null);
-      var [busy, setBusy] = React.useState(false);
-      var [error, setError] = React.useState(null);
-
-      React.useEffect(function () {
-        if (!selected.length) { setActiveId(null); return; }
-        setActiveId(function (current) {
-          if (current && selected.some(function (row) { return row.id === current; })) return current;
-          return selected[0].id;
-        });
-      }, [selectedKey]);
-
-      React.useEffect(function () {
-        if (!activeId) {
-          setTables([]);
-          setSelectedTable(null);
-          setSchema(null);
-          setResult(null);
-          return;
-        }
-        var alive = true;
-        setTablesLoading(true);
-        setTables([]);
-        setSelectedTable(null);
-        setSchema(null);
-        setResult(null);
-        setRowsError(null);
-        api({ action: "tables", id: activeId, sessionId: sessionId }).then(function (data) {
-          if (!alive) return;
-          var rows = data.tables || [];
-          setTables(rows);
-          if (rows.length) selectTable(activeId, rows[0].name, 0, true);
-        }).catch(function (failure) {
-          if (alive) setRowsError(interpolate(t("loadFailed"), { error: failure.message }));
-        }).finally(function () {
-          if (alive) setTablesLoading(false);
-        });
-        return function () { alive = false; };
-      }, [activeId, sessionId]);
-
-      React.useEffect(function () {
-        if (tab === "history") loadHistory();
-      }, [tab, sessionId]);
-
-      function loadHistory() {
-        if (!sessionId) return;
-        setHistoryLoading(true);
-        setHistoryError(null);
-        api({ action: "history-list", sessionId: sessionId }).then(function (data) {
-          setHistory(Array.isArray(data.entries) ? data.entries : []);
-        }).catch(function (failure) {
-          setHistoryError(interpolate(t("loadFailed"), { error: failure.message }));
-        }).finally(function () { setHistoryLoading(false); });
-      }
-
-      function clearHistory() {
-        if (!sessionId) return;
-        api({ action: "history-clear", sessionId: sessionId }).then(function () {
-          setHistory([]);
-        }).catch(function (failure) {
-          setHistoryError(interpolate(t("saveFailed"), { error: failure.message }));
-        });
-      }
-
-      function reproduceHistory(row) {
-        var connection = selected.find(function (item) { return item.id === row.connectionId; });
-        if (!connection) {
-          setError(interpolate(t("historyUnavailable"), { name: row.connectionName || row.connectionId }));
-          return;
-        }
-        setError(null);
-        setActiveId(row.connectionId);
-        setSql(row.sql || "");
-        setSqlResult(null);
-        setSqlError(null);
-        setTab("sql");
-      }
-
-      function selectTable(connectionId, name, nextPage, internal) {
-        setSelectedTable(name);
-        setPage(nextPage || 0);
-        setRowsLoading(true);
-        setRowsError(null);
-        setResult(null);
-        setShowSchema(false);
-        if (!internal) setTab("data");
-        var target = nextPage || 0;
-        Promise.all([
-          api({ action: "describe", id: connectionId, table: name, sessionId: sessionId }),
-          api({ action: "rows", id: connectionId, table: name, limit: pageSize, offset: target * pageSize, sessionId: sessionId })
-        ]).then(function (values) {
-          setSchema(values[0]);
-          setResult(values[1]);
-        }).catch(function (failure) {
-          setRowsError(interpolate(t("loadFailed"), { error: failure.message }));
-        }).finally(function () { setRowsLoading(false); });
-      }
-
-      function loadRows(nextPage, size) {
-        if (!activeId || !selectedTable) return;
-        var limit = size || pageSize;
-        setRowsLoading(true);
-        setRowsError(null);
-        api({ action: "rows", id: activeId, table: selectedTable, limit: limit, offset: nextPage * limit, sessionId: sessionId }).then(function (data) {
-          setResult(data);
-        }).catch(function (failure) {
-          setRowsError(interpolate(t("loadFailed"), { error: failure.message }));
-        }).finally(function () { setRowsLoading(false); });
-      }
-
-      function changePage(nextPage) {
-        if (nextPage < 0) return;
-        var total = result && result.total ? result.total : 0;
-        var maxPage = Math.max(0, Math.ceil(total / pageSize) - 1);
-        if (nextPage > maxPage) return;
-        setPage(nextPage);
-        loadRows(nextPage);
-      }
-
-      function changePageSize(value) {
-        var size = Number(value) || 50;
-        setPageSize(size);
-        setPage(0);
-        loadRows(0, size);
-      }
-
-      function runSql() {
-        var text = sql.trim();
-        if (!text || !activeId) return;
-        setSqlLoading(true);
-        setSqlError(null);
-        setSqlResult(null);
-        var readOnly = isReadOnlySql(text);
-        var body = readOnly
-          ? { action: "query", id: activeId, sql: text, limit: Number(state && state.config && state.config.maxRows) || 200, sessionId: sessionId }
-          : { action: "execute", id: activeId, sql: text, sessionId: sessionId };
-        api(body).then(function (data) {
-          setSqlResult({ readOnly: readOnly, data: data });
-        }).catch(function (failure) {
-          setSqlError(interpolate(t("queryFailed"), { error: failure.message }));
-        }).finally(function () {
-          setSqlLoading(false);
-          loadHistory();
-        });
-      }
-
-      async function openDemo() {
-        setBusy(true);
-        setError(null);
-        try {
-          var data = await api({ action: "seed-demo" });
-          await loadSessionState(sessionId, true);
-          var current = sessionEntry(sessionId).state;
-          var ids = current ? current.selectedIds || [] : [];
-          var demo = (data.connections || []).find(function (row) { return row.demo; });
-          if (demo && !ids.includes(demo.id)) ids = ids.concat([demo.id]);
-          if (demo) {
-            await setSessionSelection(sessionId, ids);
-            setActiveId(demo.id);
-          } else {
-            await setSessionSelection(sessionId, ids);
-          }
-        } catch (failure) {
-          setError(interpolate(t("loadFailed"), { error: failure.message }));
-        } finally {
-          setBusy(false);
-        }
-      }
-
-      function selectAllRecent() {
-        setSessionSelection(sessionId, all.map(function (row) { return row.id; })).catch(function (failure) {
-          setError(interpolate(t("saveFailed"), { error: failure.message }));
-        });
-      }
-
-      async function onConnectionSaved(saved) {
-        setDialog(null);
-        try {
-          await loadSessionState(sessionId, true);
-          var current = sessionEntry(sessionId).state;
-          var ids = current ? current.selectedIds || [] : [];
-          if (saved && saved.id && !ids.includes(saved.id)) ids = ids.concat([saved.id]);
-          await setSessionSelection(sessionId, ids);
-          if (saved && saved.id) setActiveId(saved.id);
-        } catch (failure) {
-          setError(interpolate(t("saveFailed"), { error: failure.message }));
-        }
-      }
-
-      if (!state) {
-        return h("div", { className: "dshdb-cv" },
-          h("div", { className: "dshdb-cvloading" }, entry.error ? h("div", { className: "dshdb-error" }, entry.error) : h(Spinner)));
-      }
-
-      var dialogNode = dialog ? h(ConnectionDialog, {
-        t: t,
-        connection: dialog.connection || null,
-        onClose: function () { setDialog(null); },
-        onSaved: onConnectionSaved
-      }) : null;
-
-      if (all.length === 0) {
-        return h("div", { className: "dshdb-cv" },
-          error ? h("div", { className: "dshdb-cvmessage" }, h("div", { className: "dshdb-error" }, error)) : null,
-          h(ConversationDbEmpty, {
-            t: t,
-            title: t("conversationEmptyTitle"),
-            description: t("conversationEmptyDesc"),
-            busy: busy,
-            onDemo: openDemo,
-            onNew: function () { setDialog({ mode: "new" }); },
-            onOpenPanel: openGlobalPanel
-          }),
-          dialogNode
-        );
-      }
-
-      if (selected.length === 0) {
-        return h("div", { className: "dshdb-cv" },
-          error ? h("div", { className: "dshdb-cvmessage" }, h("div", { className: "dshdb-error" }, error)) : null,
-          h(ConversationDbEmpty, {
-            t: t,
-            title: t("noSelectionTitle"),
-            description: t("noSelectionDesc"),
-            busy: busy,
-            onSelectAll: selectAllRecent,
-            onNew: function () { setDialog({ mode: "new" }); },
-            onOpenPanel: openGlobalPanel
-          }),
-          dialogNode
-        );
-      }
-
-      var active = selected.find(function (row) { return row.id === activeId; }) || selected[0];
-      var filteredTables = tableQuery.trim()
-        ? tables.filter(function (row) { return row.name.toLowerCase().indexOf(tableQuery.trim().toLowerCase()) !== -1; })
-        : tables;
-      var total = result && result.total ? result.total : 0;
-      var maxPage = Math.max(0, Math.ceil(total / pageSize) - 1);
-
-      var tableList = h("div", { className: "dshdb-tablelist" },
-        h("div", { className: "dshdb-searchwrap" },
-          h(SearchIcon, { size: 14 }),
-          h("input", {
-            className: "dshdb-search",
-            value: tableQuery,
-            placeholder: t("searchTable"),
-            onChange: function (event) { setTableQuery(event.target.value); }
-          })
-        ),
-        h("div", { className: "dshdb-tablelistscroll" },
-          tablesLoading ? h("div", { className: "dshdb-placeholder" }, h(Spinner))
-            : filteredTables.length === 0 ? h("div", { className: "dshdb-placeholder" }, t("noTables"))
-            : filteredTables.map(function (row) {
-                var tableName = row.schema ? row.schema + "." + row.name : row.name;
-                return h("button", {
-                  key: tableName,
-                  type: "button",
-                  className: "dshdb-tablerow" + (selectedTable === tableName ? " active" : ""),
-                  onClick: function () { selectTable(active.id, tableName, 0); },
-                  title: tableName
-                }, h(TableIcon, { size: 14 }), h("span", null, row.name));
-              })
-        )
-      );
-
-      var dataPane = h("div", { className: "dshdb-cvdata" },
-        tableList,
-        h("div", { className: "dshdb-grid" },
-          h("div", { className: "dshdb-gridbar" },
-            h("div", { className: "dshdb-gridtitle" },
-              h(TableIcon, { size: 15 }),
-              h("span", null, selectedTable || t("selectTable")),
-              selectedTable ? h("span", { className: "dshdb-gridmeta" }, interpolate(t("totalRows"), { n: fmtNumber(total) })) : null
-            ),
-            h("div", { className: "dshdb-gridtools" },
-              h("select", {
-                className: "dshdb-tableselect",
-                value: selectedTable || "",
-                "aria-label": t("tables"),
-                onChange: function (event) { if (event.target.value) selectTable(active.id, event.target.value, 0); }
-              }, tables.map(function (row) {
-                var tableName = row.schema ? row.schema + "." + row.name : row.name;
-                return h("option", { key: tableName, value: tableName }, tableName);
-              })),
-              h("button", { type: "button", className: "dshdb-btn small", disabled: !selectedTable, onClick: function () { setShowSchema(function (value) { return !value; }); } },
-                h(ChevronDownIcon, { size: 13, style: { transform: showSchema ? "rotate(180deg)" : "none" } }), t("schema")),
-              h("button", { type: "button", className: "dshdb-btn small", disabled: !selectedTable || !result || !(result.rows || []).length, onClick: function () { downloadCsv(result, selectedTable); } },
-                h(DownloadIcon, { size: 13 }), t("exportCsv")),
-              h(IconButton, { title: t("refresh"), disabled: !selectedTable, onClick: function () { if (selectedTable) selectTable(active.id, selectedTable, page, true); } }, h(RefreshIcon, { size: 14 }))
-            )
-          ),
-          showSchema && schema ? h(SchemaChips, { t: t, schema: schema }) : null,
-          rowsError ? h("div", { className: "dshdb-cvmessage" }, h("div", { className: "dshdb-error" }, rowsError)) : null,
-          rowsLoading ? h("div", { className: "dshdb-placeholder" }, h(Spinner)) : null,
-          !rowsLoading && !rowsError && !selectedTable ? h("div", { className: "dshdb-placeholder" }, h("div", null, h("div", null, t("selectTable")), h("div", { className: "dshdb-gridmeta" }, t("selectTableHint")))) : null,
-          !rowsLoading && !rowsError && selectedTable ? h(DataGrid, { t: t, result: result }) : null,
-          selectedTable ? h("div", { className: "dshdb-pager" },
-            h("span", null, interpolate(t("page"), { page: page + 1 }) + " / " + (maxPage + 1)),
-            h("select", { value: pageSize, onChange: function (event) { changePageSize(event.target.value); }, "aria-label": t("pageSize") },
-              [25, 50, 100, 200].map(function (size) { return h("option", { key: size, value: size }, size + " / " + t("pageSize")); })
-            ),
-            h("button", { type: "button", className: "dshdb-btn small", onClick: function () { changePage(page - 1); }, disabled: page <= 0 }, h(ChevronLeftIcon, { size: 13 })),
-            h("button", { type: "button", className: "dshdb-btn small", onClick: function () { changePage(page + 1); }, disabled: page >= maxPage }, h(ChevronRightIcon, { size: 13 }))
-          ) : null
-        )
-      );
-
-      var sqlPane = h("div", { className: "dshdb-sqlpane" },
-        h("div", { className: "dshdb-editorwrap" },
-          h("div", { className: "dshdb-editortop" },
-            h("span", null, sessionKindLabel(active.kind) + " · " + (active.database || active.file || "")),
-            h("span", null, "⌘ / Ctrl + Enter")
-          ),
-          h("textarea", {
-            className: "dshdb-editor",
-            value: sql,
-            spellCheck: false,
-            placeholder: t("sqlPlaceholder"),
-            onChange: function (event) { setSql(event.target.value); },
-            onKeyDown: function (event) {
-              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); runSql(); }
-            }
-          })
-        ),
-        h("div", { className: "dshdb-sqlbar" },
-          h("div", { className: "dshdb-hint" }, t("sqlHint")),
-          h("div", { style: { display: "flex", gap: "7px", alignItems: "center" } },
-            sql ? h("button", { type: "button", className: "dshdb-btn small ghost", onClick: function () { setSql(""); setSqlResult(null); setSqlError(null); } }, t("clear")) : null,
-            h("button", { type: "button", className: "dshdb-btn primary", onClick: runSql, disabled: sqlLoading || !sql.trim() },
-              sqlLoading ? h(Spinner) : h(PlayIcon, { size: 13 }),
-              sqlLoading ? t("running") : t("run")
-            )
-          )
-        ),
-        sqlError ? h("div", { className: "dshdb-error" }, sqlError) : null,
-        sqlResult ? h("div", { className: "dshdb-result" },
-          h("div", { className: "dshdb-resulthead" },
-            h("span", null, t("result")),
-            h("span", { className: "dshdb-gridmeta" },
-              typeof sqlResult.data.elapsedMs === "number" ? sqlResult.data.elapsedMs + " ms" : "",
-              sqlResult.data.truncated ? " · " + t("truncated") : ""
-            )
-          ),
-          h("div", { className: "dshdb-resultbody" },
-            sqlResult.readOnly
-              ? h(DataGrid, { t: t, result: { columns: sqlResult.data.columns, rows: sqlResult.data.rows, offset: 0 } })
-              : h("div", { style: { padding: "10px 4px" } },
-                  h("div", { className: "dshdb-success" }, h(CheckIcon, { size: 15 }), interpolate(t("affected"), { n: sqlResult.data.changes ?? 0 })))
-          )
-        ) : h("div", { className: "dshdb-result" }, h("div", { className: "dshdb-placeholder" }, t("result")))
-      );
-
-      var historyPane = h("div", { className: "dshdb-historypane" },
-        h("div", { className: "dshdb-historybar" },
-          h("div", { className: "dshdb-historytitle" },
-            h(HistoryIcon, { size: 14 }),
-            t("history"),
-            h("span", { className: "dshdb-gridmeta" }, history.length)
-          ),
-          h("button", {
-            type: "button",
-            className: "dshdb-btn small ghost",
-            disabled: historyLoading || history.length === 0,
-            onClick: clearHistory
-          }, h(TrashIcon, { size: 13 }), t("historyClear"))
-        ),
-        historyError ? h("div", { className: "dshdb-cvmessage" }, h("div", { className: "dshdb-error" }, historyError)) : null,
-        historyLoading
-          ? h("div", { className: "dshdb-placeholder" }, h(Spinner))
-          : history.length === 0
-            ? h("div", { className: "dshdb-placeholder" }, t("historyEmpty"))
-            : h("div", { className: "dshdb-historylist" }, turnGroups.map(function (group) {
-                var collapsed = collapsedTurns[group.id] !== undefined ? collapsedTurns[group.id] : group.index > 0;
-                return h("div", { key: group.id, className: "dshdb-historyturn" },
-                  h("button", {
-                    type: "button",
-                    className: "dshdb-historyturnhead",
-                    "aria-expanded": !collapsed,
-                    onClick: function () {
-                      setCollapsedTurns(function (previous) {
-                        var next = Object.assign({}, previous);
-                        next[group.id] = !collapsed;
-                        return next;
-                      });
-                    }
-                  },
-                    h(ChevronDownIcon, { size: 13, style: { transform: collapsed ? "rotate(-90deg)" : "none", transition: "transform .12s ease" } }),
-                    h("span", { className: "dshdb-historyturnlabel" }, group.label),
-                    group.prompt ? h("span", { className: "dshdb-historyturnprompt", title: group.prompt }, group.prompt) : null,
-                    h("span", { className: "dshdb-historyturncount" }, group.entries.length)
-                  ),
-                  collapsed ? null : h("div", { className: "dshdb-historyturnrows" }, group.entries.map(function (row) {
-                    var ok = row.ok !== false;
-                    var source = row.source === "agent" ? t("historyAgent") : t("historyConsole");
-                    var count = row.changes != null
-                      ? interpolate(t("historyChanges"), { n: fmtNumber(row.changes) })
-                      : interpolate(t("historyRows"), { n: fmtNumber(row.rows || 0) });
-                    return h("button", {
-                      key: row.id,
-                      type: "button",
-                      className: "dshdb-historyrow" + (ok ? "" : " bad"),
-                      title: ok ? t("historyReproduceHint") : (row.error || t("historyFailed")),
-                      onClick: function () { reproduceHistory(row); }
-                    },
-                      h("span", { className: "dshdb-historystatus" }, h(ok ? CheckIcon : CloseIcon, { size: 13 })),
-                      h("span", { className: "dshdb-historymain" },
-                        h("span", { className: "dshdb-historysql" }, row.sql),
-                        h("span", { className: "dshdb-historymeta" },
-                          h("span", null, row.connectionName || row.connectionId),
-                          h("span", null, source),
-                          h("span", null, new Date(row.at).toLocaleString()),
-                          h("span", null, count)
-                        )
-                      ),
-                      h("span", { className: "dshdb-historyaction" }, h(PlayIcon, { size: 11 }), t("historyReproduce"))
-                    );
-                  }))
-                );
-              }))
-      );
-
-      return h("div", { className: "dshdb-cv" },
-        h("div", { className: "dshdb-cvhead" },
-          h("div", { className: "dshdb-cvtitlewrap" },
-            h("div", { className: "dshdb-titlemark" }, h(DatabaseIcon, { size: 20 })),
-            h("div", null,
-              h("h2", { className: "dshdb-cvtitle" }, t("title")),
-              h("p", { className: "dshdb-cvsub" }, interpolate(t("connectionCount"), { n: selected.length }))
-            )
-          ),
-          h("div", { className: "dshdb-cvactions" },
-            h("button", { type: "button", className: "dshdb-btn small", onClick: function () { selectTable(active.id, selectedTable, page, true); } }, h(RefreshIcon, { size: 13 }), t("refresh")),
-            h("button", { type: "button", className: "dshdb-btn small", onClick: openGlobalPanel }, t("openGlobal")),
-            h("button", { type: "button", className: "dshdb-btn small primary", onClick: function () { setDialog({ mode: "new" }); } }, h(PlusIcon, { size: 13 }), t("newConnection"))
-          )
-        ),
-        h("div", { className: "dshdb-cvpills" },
-          selected.map(function (connection) {
-            return h("button", {
-              key: connection.id,
-              type: "button",
-              className: "dshdb-cvpill" + (connection.id === active.id ? " active" : ""),
-              onClick: function () { setActiveId(connection.id); }
-            },
-              h("span", { className: "dshdb-dot" }),
-              connection.name,
-              connection.demo ? h("span", { className: "dshdb-badge demo" }, t("demo")) : null
-            );
-          }),
-          h("span", { className: "dshdb-cvpillhint" }, t("askInChat"))
-        ),
-        h("div", { className: "dshdb-tabs", role: "tablist", "aria-label": t("tabsAria") },
-          h("button", { type: "button", role: "tab", "aria-selected": tab === "data", className: "dshdb-tab" + (tab === "data" ? " active" : ""), onClick: function () { setTab("data"); } }, h(TableIcon, { size: 14 }), t("data")),
-          h("button", { type: "button", role: "tab", "aria-selected": tab === "sql", className: "dshdb-tab" + (tab === "sql" ? " active" : ""), onClick: function () { setTab("sql"); } }, h(PlayIcon, { size: 13 }), t("sql")),
-          h("button", { type: "button", role: "tab", "aria-selected": tab === "history", className: "dshdb-tab" + (tab === "history" ? " active" : ""), onClick: function () { setTab("history"); } }, h(HistoryIcon, { size: 14 }), t("history")),
-          h("button", { type: "button", role: "tab", "aria-selected": tab === "notes", className: "dshdb-tab" + (tab === "notes" ? " active" : ""), onClick: function () { setTab("notes"); } }, h(BookIcon, { size: 14 }), t("notes"))
-        ),
-        error ? h("div", { className: "dshdb-cvmessage" }, h("div", { className: "dshdb-error" }, error)) : null,
-        h("div", { className: "dshdb-cvbody" }, tab === "data" ? dataPane : tab === "sql" ? sqlPane : tab === "history" ? historyPane : h(NotesPane, { t: t, connectionId: active.id, connectionName: active.name, sessionId: sessionId })),
-        dialogNode
-      );
-    }
-
     /** Decorative database glyph for the sidebar row. */
     function DbaIcon(props) {
       return h(DatabaseIcon, { size: props.size || 18 });
@@ -2735,17 +2092,6 @@ window.__ModuleLoader__.load({
           locale: NS,
           label: function () { return t("sidebarLabel"); }
         }, DbaIcon);
-      });
-
-      // Conversation tab, right after Chat and before Trajectory (order 10).
-      ctx.slots.inject("conversation.view", function () {
-        return ctx.slots.register({
-          name: "conversation.view",
-          id: "dba",
-          order: 5,
-          locale: NS,
-          label: function () { return t("sidebarLabel"); }
-        }, ConversationDbView);
       });
 
       // Composer control, beside the workspace/permission seats.
