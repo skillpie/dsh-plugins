@@ -14,7 +14,8 @@ import { shouldFire } from './schedule.js'
 import { collectSessions } from './sessions.js'
 
 export const ROUTE = '/dsh-project-report/api'
-const MOKA_RECORD = '@skillpie/dsh-project-report/moka'
+// 凭据键格式是 "<scope>/<id>",scope 本身不能再含 "/",scoped 包名只能取短名部分
+const MOKA_RECORD = 'project-report/moka'
 const BODY_LIMIT = 256 * 1024
 
 /* ── config ─────────────────────────────────────────────────────────── */

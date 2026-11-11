@@ -32,7 +32,7 @@
 - Host 代码改动不会 HMR 重载,必须 `set_plugin` off→on;Client 改动需刷新 GUI 页面才生效。
 - 可选服务(credentials 等)禁止进 `ctx.inject` 依赖——注入会永远 pending 且 fiber 仍显示 active,路由静默不注册;每请求 `ctx.get('credentials')` 惰性读取(dsh-remote 模式)。timer 服务 inject 子上下文不可达,插件自带定时用原生 setInterval + `ctx.effect` 清理。
 - `ctx.inject` 回调内任一 `child.effect` 抛错会让 cordis 回滚整个作用域并 dispose 已注册的路由(现象:探针显示 register 已执行、请求却 405,无任何日志);注入多个服务前先确认每个都在依赖列表里,排障时在 apply 各阶段写 /tmp 探针文件定位。
-- 插件自有状态(身份、token、码)写凭据记录 `ctx.credentials.modifyRecord('<包名>/identity', ...)`,返回 `{ kind: 'grant', payload }`;禁止用 `configEditor.edit`(桌面 HMR 事务未关闭时报 "HMR transactions cannot be nested")。
+- 插件自有状态(身份、token、码)写凭据记录 `ctx.credentials.modifyRecord('<包名>/identity', ...)`,返回 `{ kind: 'grant', payload }`;禁止用 `configEditor.edit`(桌面 HMR 事务未关闭时报 "HMR transactions cannot be nested")。凭据键是 `<scope>/<id>` 两段且写时不校验读时校验:scope 不得含 `/`,scoped 包名只能取短名(如 `project-report/moka`);坏键会让 credentials-local 启动即崩,连锁挂掉 connection 等 12+ 插件、整个桌面起不来;卸载插件不清理凭据记录,残留坏键要手改 `~/.dsh/.credentials.yaml` 后重启宿主。
 - `sessionController` 的 `list/state/events/observeEvent/observeState/prompt` 第二参必须传 AbortSignal,否则内部 `signal.throwIfAborted` 抛 TypeError;一次性读用 `AbortSignal.timeout(20_000)`。
 - 读会话历史:`sessionController.events({ address: { kind: 'session', sessionId }, maxMessages, turnWindow })`,返回 `{ records, hasMore }` 分页对象。
 - `webServer.register` 仅支持 `kind: 'exact' | 'prefix'`;`registerUpgrade` 只按精确 pathname 匹配;`registerFallback` 单席位且被 SPA 占用,插件禁止抢占。
