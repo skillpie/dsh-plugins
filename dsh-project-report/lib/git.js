@@ -56,10 +56,33 @@ export function isValidDateStr(s) {
   return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d
 }
 
-// 统计窗口:起始日 06:00:00 → 结束日次日 06:00:00(dateEnd 缺省 = 单日窗口)
-export function windowFor(dateStr, dateEnd) {
+// 每日割接偏移:汇报日 D 的窗口 = D 00:00 + 偏移小时 → 次日 00:00 + 偏移小时。
+// 偏移可用整数小时(6 → '06:00')或 'HH:MM' 字符串;默认 6(凌晨 6 点前仍算前一汇报日,
+// 加班到次日凌晨的提交/会话都归到前一天,与 Moka 加班日界一致)。
+export const DEFAULT_CUTOVER = '06:00'
+// 割接偏移是否合法:整数小时 0-23(数字或数字串)或 'HH:MM'
+export function isValidCutover(cutover) {
+  if (typeof cutover === 'number') return Number.isInteger(cutover) && cutover >= 0 && cutover <= 23
+  if (cutover == null || typeof cutover === 'object' || cutover === '') return false
+  const n = Number(cutover)
+  if (Number.isInteger(n) && n >= 0 && n <= 23) return true
+  return /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(cutover).trim())
+}
+export function normalizeCutover(cutover) {
+  if (typeof cutover === 'number' && isValidCutover(cutover)) return `${String(cutover).padStart(2, '0')}:00`
+  if (isValidCutover(cutover)) {
+    const n = Number(cutover)
+    if (Number.isInteger(n)) return `${String(n).padStart(2, '0')}:00`
+    return String(cutover).trim()
+  }
+  return DEFAULT_CUTOVER
+}
+
+// 统计窗口:汇报日起始日割接时刻 → 结束日次日割接时刻(dateEnd 缺省 = 单日窗口)
+export function windowFor(dateStr, dateEnd, cutover = DEFAULT_CUTOVER) {
   const end = isValidDateStr(dateEnd) && dateEnd > dateStr ? dateEnd : dateStr
-  return { since: `${dateStr} 06:00:00`, until: `${addDays(end, 1)} 06:00:00`, days: Math.round((new Date(end) - new Date(dateStr)) / 86_400_000) + 1 }
+  const cut = normalizeCutover(cutover)
+  return { since: `${dateStr} ${cut}:00`, until: `${addDays(end, 1)} ${cut}:00`, days: Math.round((new Date(end) - new Date(dateStr)) / 86_400_000) + 1 }
 }
 
 // 逐仓库作者:设置覆盖 > 该仓库 git config user.name
@@ -118,8 +141,8 @@ export async function discoverRepos(roots) {
   return { rootInfo, projects }
 }
 
-export async function collectRepoCommits(repoPath, { author, date, dateEnd }) {
-  const { since, until } = windowFor(date, dateEnd)
+export async function collectRepoCommits(repoPath, { author, date, dateEnd, cutover }) {
+  const { since, until } = windowFor(date, dateEnd, cutover)
   const args = ['log']
   if (author) args.push(`--author=${author}`)
   args.push('--since', since, '--until', until, '--all', '--pretty=format:%h|%s|%ci')
@@ -148,11 +171,11 @@ export async function collectRepoCommits(repoPath, { author, date, dateEnd }) {
 // 按显式仓库路径列表采集(null/空 = 由调用方先 discoverRepos)
 // mineOnly: 仅统计本人的提交(author 覆盖或各仓库 git config user.name);false = 全部作者
 // 返回 { projects: [{ name, path, author, commits }], total }
-export async function collectPaths({ paths, date, dateEnd, authorOverride, mineOnly = true }) {
+export async function collectPaths({ paths, date, dateEnd, authorOverride, mineOnly = true, cutover }) {
   const results = []
   for (const p of paths || []) {
     const author = mineOnly ? await resolveAuthor(p, authorOverride) : null
-    const commits = await collectRepoCommits(p, { author, date, dateEnd })
+    const commits = await collectRepoCommits(p, { author, date, dateEnd, cutover })
     results.push({ name: path.basename(p) || p, path: p, author: author || '', commits })
   }
   return { projects: results, total: results.reduce((n, p) => n + p.commits.length, 0) }

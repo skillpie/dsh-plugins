@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "title": "终端栏",
+    "description": "在 Web GUI 右上角添加终端开关按钮，点按打开/关闭底部终端面板。"
+  },
+  "openPanel": "打开终端",
+  "closePanel": "收起终端",
+  "panelTitle": "终端",
+  "newTab": "新建终端标签",
+  "closeTab": "关闭终端",
+  "reconnecting": "连接已断开，正在重连…",
+  "loading": "正在加载终端组件…"
+}

@@ -7,7 +7,7 @@
 import path from 'node:path'
 import { MokaClient, MokaError } from './moka.js'
 import { PluginState } from './state.js'
-import { collectPaths, discoverRepos, localDateStr, isValidDateStr } from './git.js'
+import { collectPaths, discoverRepos, localDateStr, isValidDateStr, addDays } from './git.js'
 import { buildReport, buildReason } from './report.js'
 import { renderAttachment } from './render.js'
 import { shouldFire } from './schedule.js'
@@ -167,13 +167,13 @@ export default {
           : `项目目录不存在: ${root}`)
       }
       const results = wantCommits
-        ? await collectPaths({ paths: projects.map((p) => p.path), date: d, dateEnd: dEnd, authorOverride: s.gitAuthor, mineOnly: only })
+        ? await collectPaths({ paths: projects.map((p) => p.path), date: d, dateEnd: dEnd, authorOverride: s.gitAuthor, mineOnly: only, cutover: s.cutover })
         : { projects: projects.map((p) => ({ name: p.name, path: p.path, author: '', commits: [] })), total: 0 }
       // 会话记录:智能提取项目(或其父工作区)在采集窗口内活跃的会话标题与用户指令
       let sessionInfo = null
       if (wantSessions) {
         const controller = ctx.get('sessionController')
-        sessionInfo = await collectSessions({ controller, root, dateStart: d, dateEnd: dEnd })
+        sessionInfo = await collectSessions({ controller, root, dateStart: d, dateEnd: dEnd, cutover: s.cutover })
       }
       const rep = buildReport({ date: d, dateEnd: dEnd, projects: results.projects, sessions: sessionInfo ? sessionInfo.items : [] })
       return {
@@ -192,8 +192,12 @@ export default {
       if (running) return { ok: false, busy: true, error: '已有任务在运行中' }
       running = true
       try {
-        const d = date || localDateStr(new Date())
+        const d0 = date || localDateStr(new Date())
         const s = state.settings
+        // 「汇报前一天」:仅定时自动跑生效——目标汇报日为前一天(窗口=前一天割接→当天割接;
+        // 跨零点加班第二天早上到点自动补交)。手动 runNow/generate 用户显式选日期,不偏移。
+        const schedPrevDay = cwd ? state.getSchedule(normalizeCwd(cwd)).prevDay : s.schedule.prevDay
+        const d = !date && trigger === 'schedule' && schedPrevDay ? addDays(d0, -1) : d0
         // cwd 给定 → 只跑该项目;否则跑全部项目(工作区+附加目录)
         const roots = cwd ? [normalizeCwd(cwd)] : allRoots()
         if (!roots.length) throw new Error('DSH 没有已打开的项目(工作区),请先在 GUI 侧栏打开项目目录')
@@ -217,11 +221,14 @@ export default {
         const repoNames = perProject.map((p) => p.name)
         const entry = {
           date: d, at: new Date().toISOString(), trigger,
+          cwd: cwd ? normalizeCwd(cwd) : '',
           commits: grandTotal, projects: repoNames,
           perProject: perProject.map((p) => ({ cwd: p.cwd, name: p.name, total: p.total })),
           report: primary.markdown, overtime: null,
         }
-        const wantOvertime = autoOvertime ?? state.settings.schedule.autoOvertime
+        // 自动加班开关:显式参数 > 该项目 schedule.autoOvertime > 全局模板
+        const projSched = cwd ? state.getSchedule(normalizeCwd(cwd)) : null
+        const wantOvertime = autoOvertime ?? (projSched ? projSched.autoOvertime : state.settings.schedule.autoOvertime)
         if (wantOvertime && primary.total > 0) {
           const acct = await readMoka(getCredentials())
           if (!acct) {
@@ -239,7 +246,9 @@ export default {
           }
         }
         state.pushHistory(entry)
-        state.markRun(d, `${grandTotal} commits${entry.overtime ? (entry.overtime.ok ? ' · 加班已提交' : ` · 加班失败: ${entry.overtime.error}`) : ''}`)
+        // 每个项目各自的运行游标(项目隔离:只在命中该项目自己的时间点时触发)
+        const otSuffix = entry.overtime ? (entry.overtime.ok ? ' · 加班已提交' : ` · 加班失败: ${entry.overtime.error}`) : ''
+        for (const p of perProject) state.markRun(p.cwd, d, `${p.total} commits${otSuffix}`)
         return { ok: true, entry }
       } finally {
         running = false
@@ -251,20 +260,29 @@ export default {
         const action = body?.action
         switch (action) {
           case 'ping':
-            return { name: '@skillpie/dsh-project-report', version: '0.1.0', route: ROUTE, time: new Date().toISOString() }
+            return { name: '@skillpie/dsh-project-report', version: '0.1.5', route: ROUTE, time: new Date().toISOString() }
           case 'getState': {
             const acct = await readMoka(getCredentials())
+            const cwd = body?.cwd ? normalizeCwd(body.cwd) : null
+            const run = cwd ? state.getRun(cwd) : { lastRunDate: null, lastRunAt: null, lastRunSummary: '' }
             return {
               settings: state.settings,
+              // 项目隔离:cwd 给定时返回该项目自己的每日收集设置与运行游标
+              schedule: cwd ? state.getSchedule(cwd) : state.settings.schedule,
               mokaConfigured: !!acct,
               mokaEmail: acct?.email || '',
-              lastRunDate: state.data.lastRunDate,
-              lastRunAt: state.data.lastRunAt,
-              lastRunSummary: state.data.lastRunSummary || '',
+              lastRunDate: run.lastRunDate,
+              lastRunAt: run.lastRunAt,
+              lastRunSummary: run.lastRunSummary || '',
               historyCount: state.data.history.length,
             }
           }
           case 'setSettings': {
+            // 项目隔离:{cwd, schedule} 写该项目自己的每日收集设置;不带 cwd 走旧全局设置(schedule 字段忽略)
+            if (body?.cwd && body?.schedule) {
+              const schedule = state.setSchedule(normalizeCwd(body.cwd), body.schedule)
+              return { settings: state.settings, schedule }
+            }
             const settings = state.patchSettings(body || {})
             return { settings }
           }
@@ -317,8 +335,9 @@ export default {
             return { ok: true, employeeId: me.employeeId, tenantId: me.tenantId, message: '登录成功' }
           }
           case 'submitOvertime': {
-            const date = body?.date || localDateStr(new Date())
-            if (!isValidDateStr(date)) throw new Error(`日期格式应为 YYYY-MM-DD: "${date}"`)
+            // 加班单日期 = 所选汇报日(客户端传汇报日区间的最后一天;单日即该汇报日本身)
+            const otDate = body?.date || localDateStr(new Date())
+            if (!isValidDateStr(otDate)) throw new Error(`日期格式应为 YYYY-MM-DD: "${otDate}"`)
             const acct = await readMoka(getCredentials())
             if (!acct) throw new Error('尚未配置 Moka 账号,请先在设置里保存')
             const markdown = String(body?.reportMarkdown || '')
@@ -328,19 +347,26 @@ export default {
             if (!reason) throw new Error('缺少加班事由:请先生成日报或手动填写 reason')
             const repoNames = body?.projects || []
             const attachment = renderAttachment({
-              date, repoNames: repoNames.length ? repoNames : ['workspace'], total: body?.commits ?? items.length, items, overtime: null,
+              date: otDate, repoNames: repoNames.length ? repoNames : ['workspace'], total: body?.commits ?? items.length, items, overtime: null,
             })
             const client = new MokaClient({ email: acct.email, password: acct.password })
-            const result = await client.submitOvertime({ date, reason, attachment })
+            const result = await client.submitOvertime({ date: otDate, reason, attachment })
             state.pushHistory({
-              date, at: new Date().toISOString(), trigger: 'manual-submit',
+              date: otDate, at: new Date().toISOString(), trigger: 'manual-submit',
+              cwd: body?.cwd ? normalizeCwd(body.cwd) : '',
               commits: body?.commits ?? items.length, projects: repoNames, report: markdown,
               overtime: { ok: true, ...result },
             })
-            return { ok: true, result }
+            return { ok: true, result, date: otDate }
           }
-          case 'history':
-            return { entries: state.data.history.map((e) => ({ id: e.id, date: e.date, at: e.at, trigger: e.trigger, commits: e.commits, projects: e.projects, overtime: e.overtime ? { ok: e.overtime.ok, error: e.overtime.error || '', durationText: e.overtime.durationText || '', dayType: e.overtime.dayType || '' } : null })) }
+          case 'history': {
+            // 项目隔离:cwd 给定时只返回与该项目相关的条目(单项目运行 / 汇总运行里包含该项目)
+            const cwd = body?.cwd ? normalizeCwd(body.cwd) : null
+            const entries = state.data.history
+              .filter((e) => !cwd || e.cwd === cwd || (Array.isArray(e.perProject) && e.perProject.some((p) => p.cwd === cwd)))
+              .map((e) => ({ id: e.id, date: e.date, at: e.at, trigger: e.trigger, cwd: e.cwd || '', commits: e.commits, projects: e.projects, overtime: e.overtime ? { ok: e.overtime.ok, error: e.overtime.error || '', durationText: e.overtime.durationText || '', dayType: e.overtime.dayType || '' } : null }))
+            return { entries }
+          }
           case 'historyEntry': {
             const entry = state.findHistory(String(body?.id || ''))
             if (!entry) throw new Error(`历史记录不存在: ${body?.id}`)
@@ -374,14 +400,23 @@ export default {
       }), 'project-report.api')
     })
 
-    // 定时调度:每 20s tick。原生 setInterval + effect 清理,
+    // 定时调度:每 20s tick,按项目隔离判定。原生 setInterval + effect 清理,
     // 不依赖 timer 服务(可选服务在 inject 子上下文不可达,曾致作用域回滚)。
     ctx.effect(() => {
       const t = setInterval(() => {
         try {
-          const s = state.settings
-          if (shouldFire(new Date(), s.schedule, state.data.lastRunDate)) {
-            void runDaily({ trigger: 'schedule', credentials: getCredentials() }).catch(() => {})
+          // 候选项目 = 已打开工作区 ∪ 有独立定时设置的项目(项目可能已关闭,设置仍在)
+          const candidates = new Set(allRoots().map((r) => normalizeCwd(r)))
+          for (const k of Object.keys(state.data.schedules)) candidates.add(k)
+          for (const cwd of candidates) {
+            const sched = state.getSchedule(cwd)
+            const run = state.getRun(cwd)
+            if (shouldFire(new Date(), sched, run.lastRunDate)) {
+              // 一次 tick 只跑一个,running 锁防并发;其余项目下一 tick 继续
+              void runDaily({ trigger: 'schedule', credentials: getCredentials(), cwd, autoOvertime: sched.autoOvertime })
+                .catch(() => {})
+              break
+            }
           }
         } catch { /* 调度错误不外抛 */ }
       }, 20_000)

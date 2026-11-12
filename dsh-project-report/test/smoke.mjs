@@ -12,7 +12,7 @@ import zlib from 'node:zlib'
 
 import { shouldFire, parseTimeStr } from '../lib/schedule.js'
 import { PluginState } from '../lib/state.js'
-import { listProjects, discoverRepos, collectPaths, windowFor, isValidDateStr, localDateStr } from '../lib/git.js'
+import { listProjects, discoverRepos, collectPaths, windowFor, isValidDateStr, localDateStr, normalizeCutover, DEFAULT_CUTOVER } from '../lib/git.js'
 import { buildReport, buildReason, cleanSubject } from '../lib/report.js'
 import { renderAttachment, buildSnippet } from '../lib/render.js'
 import { collectSessions } from '../lib/sessions.js'
@@ -73,6 +73,15 @@ commit(alpha, 'out of window commit', '2026-11-11T07:00:00+08:00') // 窗口外
 commit(alpha, 'feat: 其他人的提交', '2026-11-10T10:00:00+08:00', '李四 <li@test.local>') // 非本人
 commit(beta, 'feat: gateway route filter|含竖线主题', '2026-11-10T21:00:00+08:00')
 
+// gamma(TMP 下独立仓库):凌晨提交,验证割接偏移的归日能力
+const gamma = path.join(TMP, 'gamma')
+fs.mkdirSync(gamma, { recursive: true })
+sh(['init', '-b', 'main', gamma])
+sh(['config', 'user.name', '张三'], { cwd: gamma })
+sh(['config', 'user.email', 'zhang@test.local'], { cwd: gamma })
+commit(gamma, 'feat: 凌晨提交(跨零点加班)', '2026-11-11T02:00:00+08:00') // 默认割接 06:00 → 归汇报日 11-10
+commit(gamma, 'fix: 清晨提交', '2026-11-11T06:30:00+08:00') // 默认割接 → 归 11-11;偏移 8 → 归 11-10
+
 /* ── 1. schedule 纯函数 ─────────────────────────────────────────────── */
 console.log('\n[schedule]')
 await check('parseTimeStr 合法/非法', () => {
@@ -93,24 +102,95 @@ await check('shouldFire 触发/未触发/已跑/补跑', () => {
   assert.equal(shouldFire(new Date(2026, 10, 10, 21, 31), { enabled: true, time: 'bad' }, null), false)
 })
 
+await check('shouldFire 提交前一天:目标=昨天,游标按前一天记', () => {
+  const sched = { enabled: true, time: '09:00', prevDay: true }
+  const now = new Date(2026, 10, 12, 9, 1) // 2026-11-12 09:01
+  assert.equal(shouldFire(now, sched, null), true)
+  assert.equal(shouldFire(now, sched, '2026-11-11'), false) // 昨天(目标日)已跑
+  assert.equal(shouldFire(now, sched, '2026-11-12'), true) // 只跑过今天 ≠ 目标(昨天) → 仍补跑
+  assert.equal(shouldFire(now, { ...sched, prevDay: false }, '2026-11-12'), false) // 不偏移:今天已跑不重跑
+  assert.equal(shouldFire(new Date(2026, 10, 12, 8, 59), sched, null), false) // 未到触发点
+  assert.equal(shouldFire(new Date(2026, 10, 1, 9, 0), sched, '2026-10-31'), false) // 跨月:11-01 的昨天=10-31
+  assert.equal(shouldFire(new Date(2026, 0, 1, 9, 0), sched, '2025-12-31'), false) // 跨年
+})
+
 /* ── 2. PluginState ─────────────────────────────────────────────────── */
 console.log('\n[state]')
 await check('默认值 → patchSettings → 持久化往返', () => {
   const st = new PluginState()
   assert.equal(st.settings.workspace, '')
-  st.patchSettings({ workspace: `/tmp/x `, schedule: { enabled: true, time: '23:45', autoOvertime: true } })
+  st.patchSettings({ workspace: `/tmp/x ` })
   assert.equal(st.settings.workspace, '/tmp/x')
   const st2 = new PluginState()
   assert.equal(st2.settings.workspace, '/tmp/x')
-  assert.equal(st2.settings.schedule.time, '23:45')
-  assert.equal(st2.settings.schedule.enabled, true)
-  assert.equal(st2.settings.schedule.autoOvertime, true)
+})
+await check('settings.cutover 默认/patch(数字/字符串/非法)/持久化', () => {
+  const st = new PluginState()
+  assert.equal(st.settings.cutover, '06:00')
+  st.patchSettings({ cutover: 5 })
+  assert.equal(st.settings.cutover, '05:00')
+  st.patchSettings({ cutover: '25:00' }) // 非法,保持
+  assert.equal(st.settings.cutover, '05:00')
+  st.patchSettings({ cutover: '05:30' })
+  assert.equal(st.settings.cutover, '05:30')
+  const st2 = new PluginState()
+  assert.equal(st2.settings.cutover, '05:30') // 持久化往返
+})
+await check('每项目 schedule 隔离:setSchedule/getSchedule/回退模板', () => {
+  const st = new PluginState()
+  // 默认:enabled 不回退模板,一律 false;time/autoOvertime 回退全局模板
+  assert.equal(st.getSchedule('/a').enabled, false)
+  assert.equal(st.getSchedule('/a').time, '21:30')
+  st.setSchedule('/a', { enabled: true, time: '23:45', autoOvertime: true })
+  st.setSchedule('/b', { enabled: false })
+  const st2 = new PluginState()
+  assert.equal(st2.getSchedule('/a').enabled, true)
+  assert.equal(st2.getSchedule('/a').time, '23:45')
+  assert.equal(st2.getSchedule('/a').autoOvertime, true)
+  assert.equal(st2.getSchedule('/b').enabled, false)
+  // 隔离:改 /a 不影响 /b;/b.time 仍回退模板
+  st2.setSchedule('/a', { time: '20:00' })
+  assert.equal(st2.getSchedule('/a').time, '20:00')
+  assert.equal(st2.getSchedule('/b').time, st2.settings.schedule.time)
+  assert.equal(st2.getSchedule('/b').enabled, false)
+  // 尾斜杠归一
+  st2.setSchedule('/c/', { enabled: true })
+  assert.equal(st2.getSchedule('/c').enabled, true)
+})
+
+await check('schedule.prevDay:默认 false/显式覆盖/回退模板', () => {
+  const st = new PluginState()
+  assert.equal(st.getSchedule('/pd-a').prevDay, false) // 默认关闭
+  st.settings.schedule.prevDay = true // 模板改 true(applyConfigDefaults 场景)
+  assert.equal(st.getSchedule('/pd-b').prevDay, true) // 未显式设置 → 回退模板
+  st.setSchedule('/pd-b', { prevDay: false })
+  assert.equal(st.getSchedule('/pd-b').prevDay, false) // 显式覆盖模板
+  assert.equal(st.getSchedule('/pd-c').prevDay, true) // 仍未设置的项目继续回退模板
+  st.setSchedule('/pd-d', { prevDay: 'yes' }) // 非法值被忽略
+  assert.equal(st.getSchedule('/pd-d').prevDay, true)
+})
+await check('每项目运行游标:getRun/markRun 隔离', () => {
+  const st = new PluginState()
+  assert.equal(st.getRun('/x').lastRunDate, null)
+  st.markRun('/x', '2026-11-11', '3 commits')
+  st.markRun('/y', '2026-11-11', '7 commits')
+  assert.equal(st.getRun('/x').lastRunDate, '2026-11-11')
+  assert.equal(st.getRun('/x').lastRunSummary, '3 commits')
+  assert.equal(st.getRun('/y').lastRunSummary, '7 commits')
+  assert.notEqual(st.getRun('/x').lastRunAt, null)
 })
 await check('非法 schedule 字段被忽略', () => {
   const st = new PluginState()
-  st.patchSettings({ schedule: { time: '99:99', enabled: 'yes' } })
-  assert.notEqual(st.settings.schedule.time, '99:99')
-  assert.equal(typeof st.settings.schedule.enabled, 'boolean')
+  st.setSchedule('/pd-bad', { time: '99:99', enabled: 'yes' }) // 非法值丢弃,不落任何字段
+  assert.notEqual(st.getSchedule('/pd-bad').time, '99:99')
+  assert.equal(typeof st.getSchedule('/pd-bad').enabled, 'boolean')
+  assert.equal(st.getSchedule('/pd-bad').enabled, false) // enabled 非布尔 → 默认关闭(不回退模板)
+  assert.equal(st.getSchedule('/pd-bad').time, st.settings.schedule.time) // 回退模板
+  st.setSchedule('/pd-bad2', { time: 'bad', prevDay: 'yes', autoOvertime: 'x' }) // 全非法 → 空存储
+  const g = st.getSchedule('/pd-bad2')
+  assert.equal(g.time, st.settings.schedule.time)
+  assert.equal(g.prevDay, st.settings.schedule.prevDay)
+  assert.equal(g.autoOvertime, st.settings.schedule.autoOvertime)
 })
 await check('history 上限 60 + findHistory', () => {
   const st = new PluginState()
@@ -120,14 +200,16 @@ await check('history 上限 60 + findHistory', () => {
   assert.equal(st.findHistory(first.id)?.commits, 62)
   assert.equal(st.findHistory('nope'), null)
 })
-await check('applyConfigDefaults 只补默认项', () => {
+await check('applyConfigDefaults 只补默认项(scheduleEnabled 不再全局启用)', () => {
   const st = new PluginState()
   st.patchSettings({ workspace: '/already/set' })
   st.applyConfigDefaults({ workspace: '/from/config', gitAuthor: '张三', scheduleTime: '22:00', scheduleEnabled: true })
   assert.equal(st.settings.workspace, '/already/set') // 不覆盖已设置项
   assert.equal(st.settings.gitAuthor, '张三')
   assert.equal(st.settings.schedule.time, '22:00')
-  assert.equal(st.settings.schedule.enabled, true)
+  // 模板 enabled 仍为 false,项目未显式开启前不全局启用
+  assert.equal(st.settings.schedule.enabled, false)
+  assert.equal(st.getSchedule('/any').enabled, false)
 })
 
 /* ── 3. git 采集 ────────────────────────────────────────────────────── */
@@ -141,6 +223,38 @@ await check('windowFor = 当天 6:00 → 次日 6:00;区间 → 结束日次日 
   // dateEnd 非法或早于起始 → 退化为单日
   assert.equal(windowFor('2026-11-10', '2026-11-09').until, '2026-11-11 06:00:00')
   assert.equal(windowFor('2026-11-10', 'bad').until, '2026-11-11 06:00:00')
+})
+await check('normalizeCutover:整数小时/数字串/HH:MM/非法回退', () => {
+  assert.equal(DEFAULT_CUTOVER, '06:00')
+  assert.equal(normalizeCutover(undefined), '06:00')
+  assert.equal(normalizeCutover(6), '06:00') // 用户语义:设置 6 = 窗口整体 +6 小时
+  assert.equal(normalizeCutover(0), '00:00')
+  assert.equal(normalizeCutover(23), '23:00')
+  assert.equal(normalizeCutover('9'), '09:00')
+  assert.equal(normalizeCutover('05:30'), '05:30') // 半小时割接也支持
+  assert.equal(normalizeCutover(24), '06:00') // 越界
+  assert.equal(normalizeCutover(-1), '06:00')
+  assert.equal(normalizeCutover('25:00'), '06:00')
+  assert.equal(normalizeCutover('abc'), '06:00')
+})
+await check('windowFor 割接偏移:窗口整体平移', () => {
+  assert.deepEqual(windowFor('2026-11-10', null, '02:00'), { since: '2026-11-10 02:00:00', until: '2026-11-11 02:00:00', days: 1 })
+  const r = windowFor('2026-11-10', '2026-11-11', 8) // 数字偏移
+  assert.equal(r.since, '2026-11-10 08:00:00')
+  assert.equal(r.until, '2026-11-12 08:00:00')
+})
+await check('割接偏移归日:凌晨提交算前一汇报日(偏移 0 除外)', async () => {
+  // 默认偏移 6:11-11 02:00 ∈ [11-10 06:00, 11-11 06:00) → 汇报日 11-10
+  let r = await collectPaths({ paths: [gamma], date: '2026-11-10' })
+  let subs = r.projects[0].commits.map((c) => c.subject)
+  assert.ok(subs.includes('feat: 凌晨提交(跨零点加班)'), '凌晨提交应归前一天')
+  assert.equal(subs.length, 1)
+  // 偏移 8:窗口 [11-10 08:00, 11-11 08:00) → 两条都归 11-10
+  r = await collectPaths({ paths: [gamma], date: '2026-11-10', cutover: 8 })
+  assert.equal(r.projects[0].commits.length, 2)
+  // 偏移 0:窗口 [11-11 00:00, 11-12 00:00) → 两条都归 11-11
+  r = await collectPaths({ paths: [gamma], date: '2026-11-11', cutover: 0 })
+  assert.equal(r.projects[0].commits.length, 2)
 })
 await check('isValidDateStr / localDateStr', () => {
   assert.equal(isValidDateStr('2026-11-10'), true)
@@ -416,11 +530,39 @@ try {
     assert.equal(body.data.settings.workspace, '')
     assert.equal(body.data.mokaConfigured, false)
   })
-  await check('setSettings 保存定时', async () => {
-    const { body } = await call('setSettings', { schedule: { enabled: true, time: '22:15', autoOvertime: false } })
-    assert.equal(body.data.settings.schedule.time, '22:15')
-    const disk = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))
-    assert.equal(disk.settings.schedule.enabled, true)
+  await check('setSettings cutover(全局,数字归一化为 HH:MM)', async () => {
+    const { body } = await call('setSettings', { cutover: 8 })
+    assert.equal(body.ok, true)
+    assert.equal(body.data.settings.cutover, '08:00')
+    const { body: gs } = await call('getState')
+    assert.equal(gs.data.settings.cutover, '08:00')
+    await call('setSettings', { cutover: 'bad' })
+    const { body: gs2 } = await call('getState')
+    assert.equal(gs2.data.settings.cutover, '08:00') // 非法保持
+    await call('setSettings', { cutover: 6 }) // 恢复默认,避免污染后续用例的窗口断言
+  })
+  await check('setSettings {cwd,schedule}:项目隔离保存', async () => {
+    const { body } = await call('setSettings', { cwd: WORKSPACE, schedule: { enabled: true, time: '22:15', autoOvertime: false, prevDay: true } })
+    assert.equal(body.ok, true)
+    assert.equal(body.data.schedule.time, '22:15')
+    assert.equal(body.data.schedule.enabled, true)
+    assert.equal(body.data.schedule.prevDay, true)
+    const disk = JSON.parse(fs.readFileSync(path.join(TMP, 'api-state.json'), 'utf8')) // API 段独立 state
+    const mine = Object.values(disk.schedules).filter((s) => s.time === '22:15' && s.enabled === true && s.prevDay === true)
+    assert.equal(mine.length, 1, 'WORKSPACE 的 schedule 应已落盘')
+    // 隔离:另一项目不受影响(默认关闭)
+    const { body: gs2 } = await call('getState', { cwd: alpha })
+    assert.equal(gs2.data.schedule.enabled, false)
+    assert.equal(gs2.data.schedule.prevDay, false)
+    assert.notEqual(gs2.data.schedule.time, '22:15')
+  })
+  await check('getState {cwd}:返回该项目 schedule + 游标', async () => {
+    const { body } = await call('getState', { cwd: WORKSPACE })
+    assert.equal(body.ok, true)
+    assert.equal(body.data.schedule.enabled, true)
+    assert.equal(body.data.schedule.time, '22:15')
+    assert.equal(body.data.schedule.prevDay, true)
+    assert.equal(body.data.lastRunDate, null) // 尚未运行
   })
   await check('listProjects:工作区注册表来源', async () => {
     const { body } = await call('listProjects')
@@ -509,7 +651,7 @@ try {
   await check('saveMoka → 凭据记录 → getState 可见', async () => {
     const { body } = await call('saveMoka', { email: 'a@b.com', password: 'pw' })
     assert.equal(body.data.configured, true)
-    assert.ok(credStore.has('@skillpie/dsh-project-report/moka'))
+    assert.ok(credStore.has('project-report/moka')) // 凭据键:<scope短名>/<id>,scope 不得含 '/'
     const { body: gs } = await call('getState')
     assert.equal(gs.data.mokaConfigured, true)
     assert.equal(gs.data.mokaEmail, 'a@b.com')
@@ -522,15 +664,27 @@ try {
     const { body } = await call('runNow', { cwd: WORKSPACE, date: '2026-11-10' })
     assert.equal(body.ok, true)
     assert.equal(body.data.entry.trigger, 'manual')
+    assert.equal(body.data.entry.cwd, WORKSPACE)
     assert.equal(body.data.entry.commits, 5)
     assert.deepEqual(body.data.entry.projects, ['workspace']) // per-project 维度:项目根名
     assert.equal(body.data.entry.overtime, null)
-    const { body: h } = await call('history')
+    const { body: h } = await call('history', { cwd: WORKSPACE })
     assert.equal(h.data.entries.length, 1)
     assert.equal(h.data.entries[0].date, '2026-11-10')
     const id = h.data.entries[0].id
     const { body: he } = await call('historyEntry', { id })
     assert.equal(he.data.entry.id, id)
+    // 每项目运行游标已更新
+    const { body: gs } = await call('getState', { cwd: WORKSPACE })
+    assert.equal(gs.data.lastRunDate, '2026-11-10')
+  })
+  await check('history cwd 过滤:项目隔离(其他项目看不到该条目)', async () => {
+    const { body } = await call('history', { cwd: alpha })
+    assert.equal(body.ok, true)
+    assert.equal(body.data.entries.length, 0, 'alpha 项目不应看到 workspace 的运行记录')
+    // 旧全局条目(无 cwd 且不带过滤)仍可见
+    const { body: all } = await call('history')
+    assert.equal(all.data.entries.length, 1)
   })
   await check('historyEntry 不存在 → 报错', async () => {
     const { body } = await call('historyEntry', { id: 'zzz' })

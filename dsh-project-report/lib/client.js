@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
       tabLabel: '汇报',
       subtitle: '整理本项目的代码提交与会话记录,一键生成工作汇报(项目内所有会话共享同一份)',
       secReport: '汇报',
+      secSched: '定时汇报',
       secMoka: 'Moka 账号',
       secHistory: '历史记录',
       project: '项目',
@@ -32,7 +33,7 @@ window.__ModuleLoader__.load({
       collectCommits: '收集代码',
       collectSessions: '收集会话',
       date: '日期',
-      quick1d: '今天',
+      quick1d: '昨天',
       quick2d: '近一天',
       quickWeek: '本周',
       quickMonth: '本月',
@@ -49,6 +50,12 @@ window.__ModuleLoader__.load({
       otSettings: '加班提交设置',
       otSettingsHint: '配置加班单提交渠道与账号;提交加班申请时使用',
       channel: '提交渠道',
+      otSection: '加班申请',
+      otHint: '手动提交:以当前汇报内容为加班事由,加班单日期=所选日期区间的最后一天(单日即该日)。定时自动提交:在「定时汇报」勾选「生成后自动申请加班」。',
+      cutover: '割接偏移(小时)',
+      cutoverHint: '汇报日 D 的统计窗口 = D + 偏移小时 → 次日 + 偏移小时,提交/会话按此归日。偏移 6(默认):凌晨 6 点前仍算前一汇报日——加班到次日凌晨都归到前一天,与 Moka 加班日界一致',
+      prevDayReport: '汇报前一天',
+      prevDayHint: '第二天到点自动生成前一天的汇报(窗口=前一天割接→当天割接)并提交前一天的加班单,适合跨零点加班次日补交',
       cancel: '取消',
       settings: '账号设置',
       mokaChannelDesc: 'Moka 审批流提交',
@@ -62,7 +69,7 @@ window.__ModuleLoader__.load({
       mokaNotConfigured: '未配置',
       schedEnable: '每日收集',
       schedTime: '每日触发时间',
-      schedAutoOvertime: '汇总后自动申请加班',
+      schedAutoOvertime: '生成后自动申请加班',
       schedOn: '定时运行中',
       schedOff: '已停用',
       runNow: '立即运行',
@@ -91,6 +98,7 @@ window.__ModuleLoader__.load({
       tabLabel: 'Daily report',
       subtitle: 'Summarize this project\'s git commits into a daily report (shared by all sessions of the project)',
       secReport: 'Report',
+      secSched: 'Scheduled reports',
       secMoka: 'Moka account',
       secHistory: 'History',
       project: 'Project',
@@ -100,8 +108,8 @@ window.__ModuleLoader__.load({
       collectCommits: 'Collect code',
       collectSessions: 'Collect sessions',
       date: 'Date',
-      quick1d: 'Today',
-      quick2d: 'Last day',
+      quick1d: 'Yesterday',
+      quick2d: 'Today',
       quickWeek: 'This week',
       quickMonth: 'This month',
       generate: 'Generate report',
@@ -117,6 +125,12 @@ window.__ModuleLoader__.load({
       otSettings: 'Overtime submission settings',
       otSettingsHint: 'Configure the submission channel and account used when submitting overtime',
       channel: 'Channel',
+      otSection: 'Overtime',
+      otHint: 'Manual submit uses the current report as the reason; the sheet is dated the last day of the selected range. Or enable "auto-request after generate" in scheduled reports.',
+      cutover: 'Cutover offset (hours)',
+      cutoverHint: 'Report day D covers D + offset hours to next day + offset hours. Offset 6 (default): before 6 AM still counts as the previous report day — past-midnight work stays on the previous day, aligned with the Moka overtime boundary',
+      prevDayReport: 'Report previous day',
+      prevDayHint: 'Next day at the trigger time, generate the previous day report (window = previous day cutover to this day cutover) and submit its overtime sheet, for past-midnight work',
       cancel: 'Cancel',
       settings: 'Account settings',
       mokaChannelDesc: 'Submit via Moka approval flow',
@@ -130,7 +144,7 @@ window.__ModuleLoader__.load({
       mokaNotConfigured: 'Not configured',
       schedEnable: 'Daily collect',
       schedTime: 'Daily trigger time',
-      schedAutoOvertime: 'Auto-request overtime after summary',
+      schedAutoOvertime: 'Auto-request overtime after generate',
       schedOn: 'Schedule running',
       schedOff: 'Disabled',
       runNow: 'Run now',
@@ -173,6 +187,12 @@ window.__ModuleLoader__.load({
     }
 
     function todayStr() { return fmtDate(new Date()) }
+    // 割接偏移显示值:'06:00' → 6(非法回退 6)
+    function cutoverHours(cut) {
+      var m = /^(\d{1,2}):/.exec(String(cut || ''))
+      var n = m ? Number(m[1]) : NaN
+      return Number.isInteger(n) && n >= 0 && n <= 23 ? n : 6
+    }
 
     function daysAgoStr(n) {
       var d = new Date()
@@ -245,12 +265,13 @@ window.__ModuleLoader__.load({
 
     // 纯渲染辅助(无 hooks,按普通函数调用);inline = label 与组件同行
     function Field(props) {
+      var title = props.title || undefined
       if (props.inline) {
-        return h('label', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+        return h('label', { style: { display: 'flex', alignItems: 'center', gap: 6 }, title: title },
           h('span', { style: S.label }, props.label),
           props.children)
       }
-      return h('label', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+      return h('label', { style: { display: 'flex', flexDirection: 'column', gap: 4 }, title: title },
         h('span', { style: S.label }, props.label),
         props.children)
     }
@@ -280,7 +301,7 @@ window.__ModuleLoader__.load({
             }).join(' → ')))
         }
       } else if (ot.error) {
-        kids.push(h('div', { style: S.note(true) }, t('otError') + ': ' + ot.error))
+        kids.push(h('div', { style: S.note(true) }, (ot.date ? t('otDate') + ' ' + ot.date + ' · ' : '') + t('otError') + ': ' + ot.error))
       }
       return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }, kids)
     }
@@ -304,11 +325,13 @@ window.__ModuleLoader__.load({
       var summary = useSessions ? useSessions(function (s) { return s && s.byId ? s.byId[sessionId] : null }) : null
       var cwd = (summary && summary.cwd) ? String(summary.cwd).replace(/\/+$/, '') : ''
 
-      var dateStartState = React.useState(todayStr()) // 默认区间:今天 ~ 今天
+      var dateStartState = React.useState(daysAgoStr(1)) // 汇报日,默认:昨天 ~ 昨天(次日早上汇报前一天)
       var dateStart = dateStartState[0]; var setDateStart = dateStartState[1]
-      var dateEndState = React.useState(todayStr())
+      var dateEndState = React.useState(daysAgoStr(1))
       var dateEnd = dateEndState[0]; var setDateEnd = dateEndState[1]
       var quickState = React.useState('q1d') // 当前命中的快捷区间(手动改日期后置空)
+      var cutoverState = React.useState('06:00') // 每日割接时刻(全局设置;汇报日 D = D 割接 → 次日割接)
+      var cutover = cutoverState[0]; var setCutover = cutoverState[1]
       var quickKey = quickState[0]; var setQuickKey = quickState[1]
       var mineState = React.useState(true) // 默认勾选「仅整理我的提交」
       var mineOnly = mineState[0]; var setMineOnly = mineState[1]
@@ -344,18 +367,24 @@ window.__ModuleLoader__.load({
       var setBusyK = function (k, v) { setBusy(function (b) { var nb = Object.assign({}, b); nb[k] = v; return nb }) }
       var flash = function (err, text) { setNote({ err: !!err, text: text }) }
       var schedLoaded = React.useRef(false) // 自动保存闸:服务端值加载前不回写
+      var cwdRef = React.useRef(cwd) // 自动保存时取当前项目路径(项目隔离:写到该项目自己的 schedule)
+      cwdRef.current = cwd
 
+      // 项目隔离:getState/setSettings 携带 cwd,读取/保存该项目自己的每日收集设置
       var refreshState = React.useCallback(function () {
-        api('getState').then(function (data) {
+        schedLoaded.current = false // 项目(或首次)加载开始,先关闸防止旧值回写
+        api('getState', { cwd: cwdRef.current }).then(function (data) {
           setGs(data)
           setMokaEmail(data.mokaEmail || '')
-          if (data.settings && data.settings.schedule) {
-            setSched({
-              enabled: !!data.settings.schedule.enabled,
-              time: data.settings.schedule.time || '21:30',
-              autoOvertime: !!data.settings.schedule.autoOvertime,
-            })
-          }
+          // 每项目 schedule:enabled 不做全局回退,默认关闭
+          var sch = data.schedule || (data.settings && data.settings.schedule) || {}
+          setSched({
+            enabled: !!sch.enabled,
+            time: sch.time || '21:30',
+            autoOvertime: !!sch.autoOvertime,
+            prevDay: !!sch.prevDay,
+          })
+          if (data.settings && data.settings.cutover) setCutover(data.settings.cutover)
           if (data.settings && data.settings.collect) {
             setCollect({ commits: data.settings.collect.commits !== false, sessions: !!data.settings.collect.sessions })
           }
@@ -364,7 +393,7 @@ window.__ModuleLoader__.load({
       }, [])
 
       var refreshHistory = React.useCallback(function () {
-        api('history').then(function (data) { setHist(data.entries || []) }).catch(function () { setHist([]) })
+        api('history', { cwd: cwdRef.current }).then(function (data) { setHist(data.entries || []) }).catch(function () { setHist([]) })
       }, [])
 
       // 项目唯一日报:进入 Tab 时取当前项目已保存的那份(所有会话共享)
@@ -379,7 +408,7 @@ window.__ModuleLoader__.load({
             if (rep.date) {
               setDateStart(rep.date)
               setDateEnd(rep.dateEnd || rep.date)
-              setQuickKey(rep.date === todayStr() && (rep.dateEnd || rep.date) === todayStr() ? 'q1d' : null)
+              setQuickKey(inferQuick(rep.date, rep.dateEnd || rep.date))
             }
           }
         }).catch(function () { /* 无草稿,静默 */ })
@@ -387,13 +416,22 @@ window.__ModuleLoader__.load({
 
       React.useEffect(function () {
         refreshState(); refreshHistory()
-      }, [refreshState, refreshHistory])
+      }, [refreshState, refreshHistory, cwd]) // cwd 变化(会话切换项目)时按新项目重新加载
 
-      // 每日收集设置自动保存:勾选/时间变更即写服务端(服务端值加载完成前不回写)
+      // 每日收集设置自动保存:勾选/时间变更即写服务端(服务端值加载完成前不回写;项目隔离:写到 cwdRef 当前项目)
       React.useEffect(function () {
         if (!schedLoaded.current) return
-        api('setSettings', { schedule: sched }).catch(function (err) { flash(true, err.message) })
-      }, [sched.enabled, sched.time, sched.autoOvertime])
+        api('setSettings', { cwd: cwdRef.current, schedule: sched }).catch(function (err) { flash(true, err.message) })
+      }, [sched.enabled, sched.time, sched.autoOvertime, sched.prevDay])
+
+      // 快捷区间推断:匹配当前汇报日区间命中哪个快捷键(不匹配返回 null)
+      var inferQuick = function (st, ed) {
+        if (st === daysAgoStr(1) && ed === daysAgoStr(1)) return 'q1d'
+        if (st === todayStr() && ed === todayStr()) return 'q2d'
+        if (st === weekStartStr() && ed === todayStr()) return 'qw'
+        if (st === monthStartStr() && ed === todayStr()) return 'qm'
+        return null
+      }
 
       var applyQuick = function (key, start, end) {
         setQuickKey(key); setDateStart(start); setDateEnd(end < start ? start : end)
@@ -417,11 +455,11 @@ window.__ModuleLoader__.load({
           projects: gen && gen.repos ? gen.repos.map(function (r) { return r.name }) : (gen && gen.stats && gen.stats.repos ? gen.stats.repos.map(function (r) { return r.name }) : []),
           commits: gen ? (gen.total || 0) : 0,
         }).then(function (data) {
-          setOt(data && data.result ? data.result : { ok: true })
-          flash(false, t('historyOvertimeOk'))
+          setOt(data && data.result ? Object.assign({ ok: true }, data.result) : { ok: true })
+          flash(false, t('historyOvertimeOk') + (data && data.date ? ' (' + data.date + ')' : ''))
           refreshHistory()
         }).catch(function (err) {
-          setOt({ ok: false, error: err.message })
+          setOt({ ok: false, error: err.message, date: gen ? (gen.dateEnd || gen.date) : dateEnd })
         }).finally(function () { setBusyK('ot', false) })
       }
 
@@ -446,26 +484,15 @@ window.__ModuleLoader__.load({
         }).catch(function (err) { flash(true, err.message) }).finally(function () { setBusyK('mokaTest', false) })
       }
 
-      var doRunNow = function () {
-        setBusyK('runNow', true); setNote(null)
-        api('runNow', { cwd: cwd, autoOvertime: sched.autoOvertime }).then(function (data) {
-          var entry = data && data.entry
-          if (entry) {
-            setGen({ cwd: cwd, project: baseName(cwd), date: entry.date, report: entry.report, total: entry.commits, repos: (entry.projects || []).map(function (n) { return { name: n } }), items: [] })
-            setDraft(entry.report || '')
-            if (entry.overtime) setOt(entry.overtime)
-          }
-          flash(false, 'OK')
-          refreshHistory()
-        }).catch(function (err) { flash(true, err.message) }).finally(function () { setBusyK('runNow', false) })
-      }
-
       var openDetail = function (id) {
         api('historyEntry', { id: id }).then(function (data) { setDetail(data.entry) }).catch(function (err) { flash(true, err.message) })
       }
 
       var mokaOk = !!(gs && gs.mokaConfigured)
-      var schedOn = !!(gs && gs.settings && gs.settings.schedule && gs.settings.schedule.enabled)
+      // 页头 chip 反映当前项目自己的每日收集开关(项目隔离)
+      // 加载完成后优先用本地 sched 状态(勾选即保存,chip 立即跟随);未加载时回退 getState 结果
+      var gsSchedOn = !!(gs && ((gs.schedule && gs.schedule.enabled) || (!gs.schedule && gs.settings && gs.settings.schedule && gs.settings.schedule.enabled)))
+      var schedOn = schedLoaded.current ? !!sched.enabled : gsSchedOn
 
       var kids = []
       // header:项目名 + 调度状态
@@ -485,8 +512,8 @@ window.__ModuleLoader__.load({
       // ── report card
       var reportKids = []
       var quickDefs = [
-        { key: 'q1d', label: t('quick1d'), start: todayStr(), end: todayStr() },
-        { key: 'q2d', label: t('quick2d'), start: daysAgoStr(1), end: todayStr() },
+        { key: 'q1d', label: t('quick1d'), start: daysAgoStr(1), end: daysAgoStr(1) }, // 昨天单日(默认:次日早上汇报前一天)
+        { key: 'q2d', label: t('quick2d'), start: todayStr(), end: todayStr() }, // 今天单日
         { key: 'qw', label: t('quickWeek'), start: weekStartStr(), end: todayStr() },
         { key: 'qm', label: t('quickMonth'), start: monthStartStr(), end: todayStr() },
       ]
@@ -503,6 +530,29 @@ window.__ModuleLoader__.load({
             h('input', { type: 'date', value: dateStart, max: dateEnd, onChange: function (e) { setQuickKey(null); setDateStart(e.target.value || dateStart) }, style: S.input }),
             h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12 } }, '~'),
             h('input', { type: 'date', value: dateEnd, min: dateStart, onChange: function (e) { setQuickKey(null); setDateEnd(e.target.value || dateEnd) }, style: S.input }))),
+        h(Field, { label: t('cutover'), inline: true, title: t('cutoverHint') },
+          h('input', {
+            type: 'number', min: 0, max: 23, step: 1, value: cutoverHours(cutover),
+            onChange: function (e) {
+              var n = Number(e.target.value)
+              if (!Number.isInteger(n) || n < 0 || n > 23) return
+              setCutover(String(n).padStart(2, '0') + ':00')
+              api('setSettings', { cutover: n }).catch(function (err) { flash(true, err.message) })
+            },
+            style: Object.assign({}, S.input, { width: 64 }),
+          })),
+        h('span', { style: { flex: 1 } })))
+      // meta(日期区间 · 提交/会话数 · 仓库分布)与收集方式同行,靠右
+      var metaEl = null
+      if (gen) {
+        var repos = gen.repos || (gen.stats && gen.stats.repos) || []
+        var dateLabel = gen.dateEnd && gen.dateEnd !== gen.date ? gen.date + ' ~ ' + gen.dateEnd : (gen.date || '')
+        metaEl = h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } },
+          dateLabel + ' · ' + (gen.total || 0) + t('commits')
+          + (gen.sessionCount ? ' · ' + gen.sessionCount + t('sessions') : '')
+          + ' · ' + repos.map(function (r) { return r.name + '(' + (r.total != null ? r.total : r.commits) + ')' }).join(', '))
+      }
+      reportKids.push(h('div', { style: S.row },
         h('label', { style: S.row },
           h('input', { type: 'checkbox', checked: collect.sessions, onChange: function (e) { setCollect(Object.assign({}, collect, { sessions: e.target.checked })) } }),
           h('span', { style: { fontSize: 12 } }, t('collectSessions'))),
@@ -512,28 +562,24 @@ window.__ModuleLoader__.load({
         h('label', { style: S.row },
           h('input', { type: 'checkbox', checked: mineOnly, onChange: function (e) { setMineOnly(e.target.checked) } }),
           h('span', { style: { fontSize: 12 } }, t('mineOnly'))),
-        h('span', { style: { flex: 1 } })))
-      if (gen) {
-        var repos = gen.repos || (gen.stats && gen.stats.repos) || []
-        var dateLabel = gen.dateEnd && gen.dateEnd !== gen.date ? gen.date + ' ~ ' + gen.dateEnd : (gen.date || '')
-        reportKids.push(h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } },
-          dateLabel + ' · ' + (gen.total || 0) + t('commits')
-          + (gen.sessionCount ? ' · ' + gen.sessionCount + t('sessions') : '')
-          + ' · ' + repos.map(function (r) { return r.name + '(' + (r.total != null ? r.total : r.commits) + ')' }).join(', ')))
-      }
+        h('span', { style: { flex: 1 } }),
+        metaEl))
       reportKids.push(h('textarea', {
         value: draft, onChange: function (e) { setDraft(e.target.value) },
         placeholder: t('reportPlaceholder'), style: S.textarea, spellCheck: false,
       }))
+      // 底部行:左=每日收集(按项目隔离),右=复制/提交加班申请/账号设置
       reportKids.push(h('div', { style: S.row },
         h('label', { style: S.row },
           h('input', { type: 'checkbox', checked: sched.enabled, onChange: function (e) { setSched(function (s0) { return Object.assign({}, s0, { enabled: e.target.checked }) }) } }),
           h('span', { style: { fontSize: 12 } }, t('schedEnable'))),
         h('input', { type: 'time', value: sched.time, onChange: function (e) { setSched(function (s0) { return Object.assign({}, s0, { time: e.target.value }) }) }, style: S.input }),
+        h('label', { style: S.row, title: t('prevDayHint') },
+          h('input', { type: 'checkbox', checked: !!sched.prevDay, onChange: function (e) { setSched(function (s0) { return Object.assign({}, s0, { prevDay: e.target.checked }) }) } }),
+          h('span', { style: { fontSize: 12 } }, t('prevDayReport'))),
         h('label', { style: S.row },
           h('input', { type: 'checkbox', checked: sched.autoOvertime, onChange: function (e) { setSched(function (s0) { return Object.assign({}, s0, { autoOvertime: e.target.checked }) }) } }),
           h('span', { style: { fontSize: 12 } }, t('schedAutoOvertime'))),
-        h('button', { type: 'button', style: S.btn(false), disabled: !!busy.runNow, onClick: doRunNow }, busy.runNow ? t('running') : t('runNow')),
         h('span', { style: { flex: 1 } }),
         h('button', { type: 'button', style: S.btn(false), onClick: doCopy }, t('copy')),
         h('button', { type: 'button', style: S.btn(true), disabled: !draft || !!busy.ot, onClick: doSubmitOvertime }, busy.ot ? t('submitting') : t('submitOvertime')),
@@ -609,7 +655,6 @@ window.__ModuleLoader__.load({
                 style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 6, border: 'none', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', fontSize: 16, cursor: 'pointer' },
                 onClick: function () { setDlgOpen(false) },
               }, '×')),
-            h('div', { style: S.note(false) }, t('otSettingsHint')),
             h(Field, { label: t('channel'), inline: true },
               h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
                 channelDefs.map(function (ch) {

@@ -47,6 +47,15 @@ export function hmString(t) {
   return p ? `${pad2(p.h)}:${pad2(p.min)}` : null
 }
 
+// 下班打卡是否跨零点(落在加班日的次日):优先取完整日期串比对;纯 HH:MM 用 hour<12 启发
+export function isOvernightOut(clockOut, date) {
+  const s = String(clockOut || '')
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(s)
+  if (m) return m[1] > date
+  const p = parseHM(s)
+  return !!(p && p.h < 12)
+}
+
 // 试算时间格式:跨天加 "次日 " 前缀
 export function fmtCalcTime(hm, baseHm) {
   const s = hmString(hm)
@@ -249,35 +258,38 @@ export class MokaClient {
 
   // 按模板填充字段值
   #applyFields(formDataList, values) {
-    const cloned = JSON.parse(JSON.stringify(formDataList))
-    const missing = []
-    const groups = Array.isArray(cloned) ? cloned : []
+    const groups = Array.isArray(formDataList) ? formDataList : []
+    const out = []
+    const found = new Set()
     let fieldCount = 0
     for (const group of groups) {
       for (const field of group.fieldList || []) {
         fieldCount++
-        if (Object.prototype.hasOwnProperty.call(values, field.uniqKey)) {
-          field.value = values[field.uniqKey]
+        found.add(field.uniqKey)
+        const item = {
+          type: field.fieldType,
+          uniqKey: field.uniqKey,
+          value: JSON.parse(JSON.stringify(field.value ?? [])),
+          linkageAction: field.linkageAction || 0,
+          hidden: !!field.hidden,
+          bizDataInfo: field.bizDataInfo ?? null,
         }
+        if (Object.prototype.hasOwnProperty.call(values, field.uniqKey)) item.value = values[field.uniqKey]
+        if (field.originUniqKey) item.originUniqKey = field.originUniqKey
+        out.push(item)
       }
     }
-    for (const key of Object.keys(values)) {
-      let found = false
-      for (const group of groups) {
-        if ((group.fieldList || []).some((f) => f.uniqKey === key)) { found = true; break }
-      }
-      if (!found) missing.push(key)
-    }
+    const missing = Object.keys(values).filter((k) => !found.has(k))
     // 附件字段缺位时补一个最小字段(部分租户 schema 不含附件组)
     if (missing.includes(F.ATTACHMENT) && values[F.ATTACHMENT]) {
-      groups.push({ fieldList: [{ uniqKey: F.ATTACHMENT, fieldType: 'attachment', value: values[F.ATTACHMENT] }] })
+      out.push({ type: 'attachment', uniqKey: F.ATTACHMENT, value: values[F.ATTACHMENT], linkageAction: 0, hidden: false, bizDataInfo: null })
       missing.splice(missing.indexOf(F.ATTACHMENT), 1)
     }
     if (missing.length > 0) {
       throw new MokaError(`审批表单缺少必需字段: ${missing.join(', ')}`, 'form')
     }
     if (fieldCount === 0) throw new MokaError('审批表单为空,flowDefId 可能失效', 'form')
-    return groups
+    return out
   }
 
   async predict({ flowDefId, formDataList }) {
@@ -307,6 +319,8 @@ export class MokaClient {
     const clockOutHM = hmString(att.clockOut)
     if (!clockOutHM) throw new MokaError(`当日(${date})无下班打卡记录,不满足提交条件`, 'attendance')
     const clockInHM = hmString(att.clockIn) || '09:30'
+    // 跨零点:下班打卡在次日凌晨(如 02:39),实际远晚于 18:30,规则必过
+    const overnight = isOvernightOut(att.clockOut, date)
 
     // 先按工作日规则试算一次确定 dayType
     const startHM = hmString(opts.weekdayStart || '18:30')
@@ -316,7 +330,7 @@ export class MokaClient {
     if (isWeekend) {
       // 非工作日:从实际上班时间起算
       start = clockInHM
-    } else {
+    } else if (!overnight) {
       const outMin = parseHM(clockOutHM)
       const t = parseHM(startHM)
       if (outMin.h * 60 + outMin.min < t.h * 60 + t.min) {
@@ -333,7 +347,8 @@ export class MokaClient {
 
     const dayTypeZh = isWeekend ? { value: '2', name: '公休日' } : { value: '1', name: '工作日' }
     const startVal = start
-    const endVal = clockOutHM
+    // 跨零点的结束时间与试算一致,带 "次日 " 前缀
+    const endVal = overnight ? `次日 ${clockOutHM}` : clockOutHM
 
     const { flowDefId, formDataList } = await this.fetchStartInfo()
     let attachment = null
@@ -367,6 +382,7 @@ export class MokaClient {
     }
     const approval = await this.predict({ flowDefId, formDataList: finalFormDataList })
     return {
+      ok: true,
       date,
       start: startVal,
       end: endVal,

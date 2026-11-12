@@ -34,6 +34,9 @@ const ATT = {
   '2026-11-13': { clockIn: '2026-11-13 09:00', clockOut: '2026-11-13 19:00' },
   '2026-11-14': { clockIn: '2026-11-14 10:00', clockOut: '2026-11-14 16:00' }, // 周六
   '2026-11-15': { clockIn: '2026-11-15 09:00', clockOut: '2026-11-15 17:00' }, // 工作日早退
+  '2026-11-16': { clockIn: '2026-11-16 10:00', clockOut: '2026-11-17 02:39' }, // 跨零点(完整日期串次日)
+  '2026-11-17': { clockIn: '2026-11-17 10:00', clockOut: '02:39' }, // 跨零点(纯 HH:MM 启发)
+  '2026-11-18': { clockIn: '2026-11-18 09:00', clockOut: '2026-11-18 02:39' }, // 同日凌晨(非跨零点,早退)
 }
 function calcFor({ start, end, date }) {
   if (start === '18:30') {
@@ -41,8 +44,10 @@ function calcFor({ start, end, date }) {
     if (end === '22:05') return { dayType: 'WORKDAY', settleDuration: '3小时35分钟' }
     if (end === '19:00') return { dayType: 'WORKDAY', settleDuration: '30分钟' }
     if (end === '次日 17:00') return { dayType: 'WORKDAY', settleDuration: '22小时30分钟' }
+    if (end === '次日 02:39') return { dayType: 'WORKDAY', settleDuration: '8小时9分钟' }
   }
   if (start === '10:00' && end === '16:00') return { dayType: 'WEEKEND', settleDuration: '6小时0分钟' }
+  if (start === '10:00' && end === '次日 02:39') return { dayType: 'WORKDAY', settleDuration: '16小时39分钟' }
   return { dayType: 'WORKDAY', settleDuration: '1小时0分钟' }
 }
 
@@ -128,7 +133,10 @@ const base = `http://127.0.0.1:${server.address().port}`
 
 function flatValues(formDataList) {
   const map = {}
-  for (const g of formDataList) for (const f of g.fieldList || []) map[f.uniqKey] = f.value
+  for (const item of formDataList) {
+    if (item.uniqKey) map[item.uniqKey] = item.value
+    else for (const f of item.fieldList || []) map[f.uniqKey] = f.value
+  }
   return map
 }
 function expectMokaError(promise, step, msgPart) {
@@ -186,9 +194,28 @@ await check('考勤请求带 cookie 与 employeeId', async () => {
   assert.equal(seen.detailBody.employeeId, 12345)
   assert.equal(seen.detailBody.startDate, '2026-11-10')
 })
+await check('跨零点下班(完整日期串)必过规则且 END 带次日前缀', async () => {
+  const result = await client.submitOvertime({ date: '2026-11-16', reason: '跨零点加班。' })
+  assert.equal(result.end, '次日 02:39')
+  assert.equal(result.dayType, '工作日')
+  assert.ok(result.hours >= 2)
+  const v = flatValues(seen.createBody.formData.formDataList)
+  assert.equal(JSON.parse(v[F.END][0].value).overtimeEndTime, '次日 02:39')
+  assert.equal(v[F.END][0].decryptValue, '次日 02:39')
+})
+await check('跨零点下班(纯 HH:MM)走次日启发', async () => {
+  const result = await client.submitOvertime({ date: '2026-11-17', reason: '跨零点加班2。' })
+  assert.equal(result.end, '次日 02:39')
+  assert.ok(result.hours >= 2)
+})
+await check('同日凌晨打卡(非跨零点)仍被 18:30 规则拒绝', async () => {
+  await assert.rejects(() => client.submitOvertime({ date: '2026-11-18', reason: 'x' }),
+    (e) => e.step === 'rule' && /18:30/.test(e.message))
+})
 await check('工作日正常提交(含附件)全链路', async () => {
   const attachment = renderAttachment({ date: '2026-11-10', repoNames: ['alpha'], total: 4, items: [{ category: '业务模块', text: '订单导出', times: ['09:30'] }], overtime: null })
   const result = await client.submitOvertime({ date: '2026-11-10', reason: '业务模块：订单导出 总结。', attachment })
+  assert.equal(result.ok, true)
   assert.equal(result.start, '18:30')
   assert.equal(result.end, '22:05')
   assert.equal(result.durationText, '3小时35分钟')

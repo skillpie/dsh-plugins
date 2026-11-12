@@ -1,7 +1,7 @@
 {
   "name": "@skillpie/dsh-project-report",
-  "version": "0.1.0",
-  "description": "Coder report for DeepSeek Harness: pick a project, summarize git commits into a daily report, optionally submit Moka overtime, with a built-in scheduler.",
+  "version": "0.1.5",
+  "description": "Project report for DeepSeek Harness: manual & scheduled reports from git commits and session topics with a configurable daily cutover offset, plus optional automatic Moka overtime submission. Per-project built-in scheduling, no DSH timers needed.",
   "type": "module",
   "license": "MIT",
   "keywords": [

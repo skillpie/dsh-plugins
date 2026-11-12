@@ -3,17 +3,18 @@
 // events({address:{kind:'session',sessionId},maxMessages,turnWindow}, signal) → {records}。
 // 记录信封 SessionWireEvent {type,seq,time(ms),data};用户消息 type='user/message',
 // data.source.kind==='user'(过滤工具/子代理来源),data.content 为文本块数组。
-import { addDays } from './git.js'
+import { addDays, normalizeCutover } from './git.js'
 
 const SESSION_CAP = 20        // 最多处理的会话数(按 updatedAt 新→旧)
 const TURNS_PER_SESSION = 6   // 每会话最多提取的用户指令条数
 const TURN_TEXT_MAX = 160     // 单条指令文本截断
 const DESC_MAX = 42           // 会话条目描述截断(与 cleanSubject 一致)
 
-function windowMs(dateStart, dateEnd) {
+function windowMs(dateStart, dateEnd, cutover = '06:00') {
   const end = dateEnd > dateStart ? dateEnd : dateStart
-  const since = new Date(`${dateStart}T06:00:00`).getTime()
-  const until = new Date(`${addDays(end, 1)}T06:00:00`).getTime()
+  const cut = normalizeCutover(cutover)
+  const since = new Date(`${dateStart}T${cut}:00`).getTime()
+  const until = new Date(`${addDays(end, 1)}T${cut}:00`).getTime()
   return { since, until }
 }
 
@@ -33,10 +34,10 @@ export function cleanSessionText(s, max = DESC_MAX) {
 
 // controller = ctx.get('sessionController');服务缺失/读失败时容错返回空(代码记录不受影响)
 // 返回 { sessions:[{sessionId,title,updatedAt,cwd,turns:[{text,time}]}], items:[{desc,time}], total, skipped, fallbackParent? }
-export async function collectSessions({ controller, root, dateStart, dateEnd, log }) {
+export async function collectSessions({ controller, root, dateStart, dateEnd, cutover, log }) {
   const out = { sessions: [], items: [], total: 0, skipped: 0 }
   if (!controller) return out
-  const { since, until } = windowMs(dateStart, dateEnd)
+  const { since, until } = windowMs(dateStart, dateEnd, cutover)
   let items = []
   try {
     ({ items } = await controller.list({}, AbortSignal.timeout(20_000)))

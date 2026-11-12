@@ -1,0 +1,10 @@
+# dsh-termbar bundle patch.
+#
+# Single dual-role row: apply() wires the host half (PTY terminal engine on
+# the subprocess service + same-origin control API + WebSocket I/O upgrade)
+# and the module loader boots the client half (header toggle button + bottom
+# terminal panel).
+- insert:
+    - id: dsh-termbar
+      name: "@skillpie/dsh-termbar"
+      config: {}

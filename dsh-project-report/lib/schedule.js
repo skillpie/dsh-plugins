@@ -20,8 +20,11 @@ export function shouldFire(now, schedule, lastRunDate) {
   if (!schedule || !schedule.enabled) return false
   const t = parseTimeStr(schedule.time)
   if (!t) return false
-  const today = localDateStr(now)
-  if (lastRunDate === today) return false
+  // 「提交前一天」:目标日期是昨天(第二天到点补跑前一天的日报与加班单),游标也按前一天记
+  const target = schedule.prevDay
+    ? localDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
+    : localDateStr(now)
+  if (lastRunDate === target) return false
   const minutes = now.getHours() * 60 + now.getMinutes()
   return minutes >= t.h * 60 + t.min
 }

@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "title": "Terminal bar",
+    "description": "Adds a terminal toggle beside the Web GUI header utilities that opens and closes a bottom terminal panel."
+  },
+  "openPanel": "Open terminal",
+  "closePanel": "Collapse terminal",
+  "panelTitle": "Terminal",
+  "newTab": "New terminal tab",
+  "closeTab": "Close terminal",
+  "reconnecting": "Connection lost, reconnecting…",
+  "loading": "Loading terminal components…"
+}
