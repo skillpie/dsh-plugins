@@ -639,9 +639,10 @@ function GitStatusChips(props) {
     return execute()
       .then(function (value) {
         if (!active()) return null
-        // Success is a success: it gets the success tone, not the error red
-        // the old single-purpose span painted everything with.
-        succeed(value.message || t('action.ok'), value.stderr || null)
+        // A success is a success: it gets the success tone, not the error red
+        // the old single-purpose span painted everything with. Background
+        // writes (silent) still refresh, they just don't toast.
+        if (opts.silent !== true) succeed(value.message || t('action.ok'), value.stderr || null)
         if (value.recovery && repo && (value.recovery.backup || value.recovery.stash)) {
           writeWorkbenchStorage('recovery:' + repo.root, [Object.assign({ at: Date.now() }, value.recovery)].concat(readWorkbenchStorage('recovery:' + repo.root, [])).slice(0, 20))
           setWindowState({ refreshToken: getWindowState().refreshToken + 1 })
@@ -684,7 +685,7 @@ function GitStatusChips(props) {
           return null
         }
         if (method === 'commit' || method === 'commitPaths') refresh({ force: true })
-        if (!opts.propagate) fail(failure.message, method)
+        if (opts.silent !== true && !opts.propagate) fail(failure.message, method)
         if (opts.onError) opts.onError(failure)
         if (failure.details?.recovery && repo) {
           writeWorkbenchStorage('recovery:' + repo.root, [Object.assign({ at: Date.now() }, failure.details.recovery)].concat(readWorkbenchStorage('recovery:' + repo.root, [])).slice(0, 20))
@@ -1225,7 +1226,13 @@ function GitStatusChips(props) {
       'data-push-pending': ahead > 0,
       'aria-haspopup': 'dialog',
       'aria-expanded': popover === 'branch',
-      onClick: function (event) { openPopover('branch', event) },
+      onClick: function (event) {
+        // 打开分支弹窗时顺手后台 fetch 一次：ahead/behind 与远端分支保持新鲜。
+        // 静默模式——成功不弹提示（刷新已足够），失败（离线/无远端）也不打扰，
+        // 且绝不挡住弹窗打开；writeRef 忙时 write 自行拒接，天然防重叠。
+        if (repo) write('fetch', { prune: true }, { silent: true })
+        openPopover('branch', event)
+      },
     }, [
       busy && (busyMethod === 'checkout' || busyMethod === 'createBranch') ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true, style: { width: '12px', height: '12px', boxSizing: 'border-box', flex: 'none' } }) : h(IconBranch, { key: 'i', size: 12 }),
       h('span', { key: 'n', className: 'dshgit-chipname', style: changeCount > 0 ? { fontWeight: 600 } : undefined }, branchLabel + (changeCount > 0 ? '*' : '')),

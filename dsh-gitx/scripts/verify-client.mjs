@@ -996,6 +996,10 @@ console.log('\n--- everyday header actions ---')
   check('a clean tree hands the merged entry back to the tracking state',
     mergedChip(header)?.props['data-next'] === 'diverged')
   header = await openBranchPicker(header)
+  // Opening the picker now auto-fetches in the background (silent, prune) so
+  // ahead/behind and the remote branch list are fresh; the explicit fetch row
+  // stays and is asserted below.
+  check('opening the branch picker auto-fetches the remote', mounted.rpc.calls.some((call) => call.method === 'write.fetch'))
   check('the alternate sync commands sit on the branch picker create row',
     ['fetch', 'pull-merge', 'pull-rebase', 'push-lease'].every((id) =>
       findAll(header, 'button').some((node) => node.props['data-sync'] === id)))
@@ -3132,7 +3136,9 @@ console.log('\n--- tag clicks directly create a branch without detached checkout
     header = await flush(GitApp, rootProps)
   }
   await chooseTag()
-  check('clicking a tag performs no write', !mounted.rpc.calls.some((call) => call.method.startsWith('write.')))
+  // The picker's background auto-fetch on open is a write by design; the
+  // no-write guarantees below exclude it and cover user-initiated effects.
+  check('clicking a tag performs no write', !mounted.rpc.calls.some((call) => call.method.startsWith('write.') && call.method !== 'write.fetch'))
   check('clicking a tag opens no version browser', !walk(header).some((node) => node.props?.['data-history-commit']) &&
     !mounted.rpc.calls.some((call) => call.method === 'commitGraph'))
   check('tag selection keeps the current branch indicator', hasText(findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch'), 'main'))
@@ -3142,7 +3148,7 @@ console.log('\n--- tag clicks directly create a branch without detached checkout
   check('tag start point is fixed and checkout cannot be unchecked', !findAll(dialog, 'input').some((node) => node.props.type === 'checkbox' && node.props.checked === true))
   findAll(dialog, 'button').find((node) => textOf(node) === t('action.cancel')).props.onClick()
   header = await flush(GitApp, rootProps)
-  check('cancelling branch creation leaves the worktree untouched', !mounted.rpc.calls.some((call) => call.method.startsWith('write.')))
+  check('cancelling branch creation leaves the worktree untouched', !mounted.rpc.calls.some((call) => call.method.startsWith('write.') && call.method !== 'write.fetch'))
   await chooseTag()
   dialog = walk(header).find((node) => node.props?.role === 'dialog' && node.type === 'form')
   findAll(dialog, 'input').find((node) => node.props.name === 'name').props.onChange({ target: { value: 'release/fix' } })
