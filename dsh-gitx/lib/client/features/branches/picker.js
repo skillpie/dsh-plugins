@@ -143,7 +143,8 @@ function BranchPicker(props) {
               title: action.label, 'aria-label': action.label,
               disabled: props.busy === true || action.disabled === true,
               onClick: action.run,
-            }, action.icon())
+            }, [action.icon(), h('span', { className: 'dshgit-tip', role: 'tooltip' },
+              h('span', { className: 'dshgit-tip-label' }, action.label))])
           }))
         : null,
     ]),

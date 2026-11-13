@@ -2102,7 +2102,8 @@ console.log('\n--- a failing read is surfaced, not swallowed ---')
   dismiss.props.onClick()
   tree = await flush(GitApp, { connection: mounted.rpc, t })
   check('dismissing clears the banner',
-    !hasText(tree, 'status 爆炸了'), textOf(tree).slice(0, 300))
+    !walk(tree).some((node) => node.props?.className && String(node.props.className).includes('dshgit-toast')),
+    textOf(tree).slice(0, 300))
 }
 
 console.log('\n--- older Host without optional repository metadata ---')
@@ -4116,9 +4117,11 @@ console.log('\n--- session startup and changes-first workbench loading ---')
   check('session entry yields Git discovery until the browser is idle', !rpc.calls.some(call => ['repos', 'status', 'refs', 'changelists'].includes(call.method)))
   runIdle(); view = await flush(Header, props)
   const heavy = ['status', 'refs', 'branchTracking', 'changelists', 'worktrees', 'contributors']
+  const idleChip = findAll(view, 'button').find((node) => node.props['data-chip'] === 'branch')
+  const idleChipname = idleChip ? findAll(idleChip, 'span').find((node) => node.props?.className === 'dshgit-chipname') : null
   check('idle header startup requests only a status summary and marks the branch label dirty', rpc.calls.some(call => call.method === 'statusSummary') &&
     !rpc.calls.some(call => heavy.includes(call.method)) &&
-    textOf(findAll(view, 'button').find((node) => node.props['data-chip'] === 'branch')) === 'main*')
+    textOf(idleChipname) === 'main*')
   await new Promise(resolve => setTimeout(resolve, 450))
   view = await flush(Header, props)
   check('header background polling also stays lightweight before interaction', !rpc.calls.some(call => heavy.includes(call.method)))

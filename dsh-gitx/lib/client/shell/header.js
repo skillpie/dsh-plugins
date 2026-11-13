@@ -20,6 +20,15 @@ import { isStaged } from '../core/files.js'
 import { IconBranch, IconBranchSync, IconFetch, IconRefresh, IconUndo } from '../ui/icons.js'
 import { BranchPicker } from '../features/branches/picker.js'
 import { popoverPosition } from '../ui/popover-position.js'
+
+// 悬停键提示：逐条对齐原生 Tooltip.module.css + ShortcutKeys.module.css（tooltip 变体）。
+function tipNode(label, keys) {
+  return h('span', { className: 'dshgit-tip', role: 'tooltip' },
+    h('span', { className: 'dshgit-tip-label' }, label),
+    Array.isArray(keys) && keys.length > 0
+      ? h('span', { className: 'dshgit-tip-keys' }, keys.map(function (key, index) { return h('kbd', { className: 'dshgit-tip-key', key: index }, key) }))
+      : null)
+}
 import { requestCommitMessage } from '../features/changes/ai.js'
 import { acquireCommitMessage, isCommitMessageBusy, useCommitMessageBusy } from '../core/ai-commit.js'
 import { ChangelistCommitPanel, CommitPanel } from '../features/changes/commit.js'
@@ -1113,7 +1122,10 @@ function GitStatusChips(props) {
   // ⌘⇧S 桥登记：渲染体普通赋值（非 useEffect），hook 数与上游严格一致。
   // 页面里可能同时存在新旧两份模块副本（合并 bundle 缓存 + 独立 rev），任何 hook 数差都会让
   // 同 fiber 混挂时抛 React #310——这是桌面端 chips 全灭的根因，此处永不再加 hook。
-  syncCommandBridge.run = (syncBusy || retryBusy || nextAction.disabled || operation !== null) ? null : runNext
+  // ⌘⇧S 与按钮点击行为保持一致：有改动时同样打开改动评审。
+  syncCommandBridge.run = changesFirst
+    ? function () { openPopover('commit') }
+    : ((syncBusy || retryBusy || nextAction.disabled || operation !== null) ? null : runNext)
 
   // 合并优先级（用户指定）：有改动 → 改动评审优先于一切同步动作；无改动 → 同步状态机。
   // ⌘⇧S 桥不受此影响（恒为同步语义，改动未提交时也能一键推送）。
@@ -1147,16 +1159,16 @@ function GitStatusChips(props) {
       className: 'dshgit-chip dshgit-chipaction',
       'data-chip': 'branch',
       'data-push-pending': ahead > 0,
-      title: repo.root + '\n' + branchLabel + (ahead > 0 ? '\n' + t('state.readyPush', { count: ahead }) : ''),
       'aria-haspopup': 'dialog',
       'aria-expanded': popover === 'branch',
       onClick: function (event) { openPopover('branch', event) },
     }, [
       busy && (busyMethod === 'checkout' || busyMethod === 'createBranch') ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true, style: { width: '12px', height: '12px', boxSizing: 'border-box', flex: 'none' } }) : h(IconBranch, { key: 'i', size: 12 }),
       h('span', { key: 'n', className: 'dshgit-chipname', style: changeCount > 0 ? { fontWeight: 600 } : undefined }, branchLabel + (changeCount > 0 ? '*' : '')),
+      tipNode(repo.root + '\n' + branchLabel + (changeCount > 0 ? '*' : '') + (ahead > 0 ? '\n' + t('state.readyPush', { count: ahead }) : ''), null),
     ]),
 
-    // 合并入口（ZCodeOnline 式单图标按钮）：有改动 → 图标转绿（不显数字）并打开改动评审；
+    // 合并入口（ZCodeOnline 式单图标按钮）：有改动 → 分支名加粗加 * 并打开改动评审；
     // 无改动 → 按跟踪状态 fetch/pull/publish/push/diverged/retry 自适应。
     // 备选命令仍在右侧 chevron 菜单。
     h('button', {
@@ -1166,9 +1178,7 @@ function GitStatusChips(props) {
       'data-next': changesFirst ? 'changes' : nextAction.id,
       'data-changes': String(changeCount),
       'data-push-pending': !changesFirst && nextAction.id === 'push' && ahead > 0,
-      title: changesFirst
-        ? branchLabel + '\n' + t('chips.changes', { count: changeCount }) + (ahead > 0 ? '\n' + t('state.readyPush', { count: ahead }) : '')
-        : branchLabel + '\n' + nextAction.hint + (upstream ? '\n' + t('sync.target', { target: upstream }) : '') + (autoFetchStatus?.error ? '\n' + t('sync.autoFetchFailed', { message: autoFetchStatus.error }) : '') + '\n' + syncShortcutKeys().join(''),
+      'aria-keyshortcuts': changesFirst ? undefined : 'Meta+Shift+S',
       style: !changesFirst && nextAction.id === 'fetch' && autoFetchStatus?.error ? { color: 'var(--dshgit-warning-text)' } : undefined,
       'aria-busy': changesFirst
         ? busy && !syncBusy && busyMethod !== 'checkout' && busyMethod !== 'createBranch' && busyMethod !== 'merge' && popover !== 'commit'
@@ -1191,6 +1201,9 @@ function GitStatusChips(props) {
           })
         : nextIcon,
       !changesFirst && nextAction.counts ? h('span', { key: 'c', className: 'dshgit-chipcounts', title: nextAction.counts }, nextAction.counts) : null,
+      changesFirst
+        ? tipNode(branchLabel + '*' + '\n' + t('chips.changes', { count: changeCount }) + '\n' + t('chips.openReview'), null)
+        : tipNode(branchLabel + '\n' + nextAction.hint + (upstream ? '\n' + t('sync.target', { target: upstream }) : '') + (autoFetchStatus?.error ? '\n' + t('sync.autoFetchFailed', { message: autoFetchStatus.error }) : ''), syncShortcutKeys()),
     ]),
     popover === 'branch'
       ? h(ChipPopover, {
