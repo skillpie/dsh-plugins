@@ -19,7 +19,7 @@ var CORNER_CHIPS_MARK = 'data-dshgit-corner-chips'
  * chips through this bridge: it portals the cluster into the header corner
  * until the utilities row takes over on the first message.
  */
-function findBlankHeaderCorner() {
+function findBlankHeaderCorner(own) {
   var corners = document.querySelectorAll('[data-conversation-header-corner]')
   for (var i = 0; i < corners.length; i++) {
     var corner = corners[i]
@@ -28,7 +28,11 @@ function findBlankHeaderCorner() {
     // Real sessions render the utilities seat — duplicates would fight over
     // one navigation store, so the bridge only claims headerless rows.
     if (header.querySelector('[class*="headerUtilities"]')) continue
-    if (header.querySelector('[' + CORNER_CHIPS_MARK + ']')) continue
+    // A foreign bridge's claim disqualifies the header; our own must not —
+    // skipping it made placement undo itself (insert → unclaimed → remove →
+    // claimed again), an insert/remove microtask loop that froze the renderer.
+    var marked = header.querySelector('[' + CORNER_CHIPS_MARK + ']')
+    if (marked && marked !== own) continue
     return corner
   }
   return null
@@ -54,12 +58,20 @@ export function WorkspaceBlankBridge(props) {
   React.useLayoutEffect(function () {
     var container = null
     var detach = function () {
-      container?.remove()
+      if (!container) return
+      container.remove()
       container = null
       containerState[1](null)
     }
     var place = function () {
-      var corner = directory ? findBlankHeaderCorner() : null
+      // Already seated in a still-blank corner: keep it. Re-deciding on every
+      // body mutation lets two eligible corners (or a transient mismatch)
+      // oscillate forever under the observer.
+      if (container && container.isConnected && container.parentElement?.closest('[data-conversation-header-corner]')) {
+        var seated = container.closest('[data-window-drag]')
+        if (!seated || !seated.querySelector('[class*="headerUtilities"]')) return
+      }
+      var corner = directory ? findBlankHeaderCorner(container) : null
       if (corner && container?.parentElement === corner) return
       detach()
       if (corner) {

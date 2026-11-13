@@ -1122,14 +1122,14 @@ function GitStatusChips(props) {
   // ⌘⇧S 桥登记：渲染体普通赋值（非 useEffect），hook 数与上游严格一致。
   // 页面里可能同时存在新旧两份模块副本（合并 bundle 缓存 + 独立 rev），任何 hook 数差都会让
   // 同 fiber 混挂时抛 React #310——这是桌面端 chips 全灭的根因，此处永不再加 hook。
+  // 合并优先级（用户指定）：有改动 → 改动评审优先于一切同步动作；无改动 → 同步状态机。
+  // 必须先于桥赋值初始化——var 只提升声明，放桥后面会让桥永远读到 undefined。
+  var changesFirst = changeCount > 0
+
   // ⌘⇧S 与按钮点击行为保持一致：有改动时同样打开改动评审。
   syncCommandBridge.run = changesFirst
     ? function () { openPopover('commit') }
     : ((syncBusy || retryBusy || nextAction.disabled || operation !== null) ? null : runNext)
-
-  // 合并优先级（用户指定）：有改动 → 改动评审优先于一切同步动作；无改动 → 同步状态机。
-  // ⌘⇧S 桥不受此影响（恒为同步语义，改动未提交时也能一键推送）。
-  var changesFirst = changeCount > 0
   // 备选同步命令改为分支选择器「新建分支」行右侧的图标按钮（下拉入口已去掉）。
   var syncActions = [
     { id: 'fetch', label: t('sync.fetch'), icon: function () { return h(IconFetch, { size: 14 }) },

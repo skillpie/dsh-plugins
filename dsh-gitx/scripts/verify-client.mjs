@@ -5829,6 +5829,35 @@ console.log('\n--- commit flags, remote removal and history filters are reachabl
   runCleanups()
 }
 
+console.log('\n--- the sync shortcut mirrors the merged button ---')
+{
+  // Dirty tree: clicking the merged chip opens the review popover, so ⌘⇧S must
+  // do exactly that — not fall through to the sync state machine's fetch. This
+  // guards the bridge assignment against hoisting regressions (`changesFirst`
+  // must be initialized before the bridge reads it).
+  const tree = await renderApp(healthyHandlers())
+  const row = mounted.context.shortcuts.find((entry) => entry.id === 'dsh-gitx.sync')
+  check('the sync shortcut registers with the platform catalog', row !== undefined)
+  const outcome = row.resolve().run()
+  const flushed = await flush(GitApp, { connection: mounted.rpc, t })
+  const reviewRow = walk(flushed).find((node) => String(node.props?.className ?? '').includes('dshgit-pickfile'))
+  check('with uncommitted changes the shortcut opens the review popover',
+    outcome !== false && reviewRow !== undefined &&
+      mounted.rpc.calls.every((call) => call.method !== 'write.fetch'),
+    JSON.stringify(mounted.rpc.calls.map((call) => call.method)))
+  // In-sync clean tree: the same shortcut must reach the sync state machine.
+  await renderApp(healthyHandlers({
+    branchTracking: () => ({ upstream: 'origin/main', ahead: 0, behind: 0 }),
+    status: () => ({ ...STATUS, total: 0, files: [] }),
+  }))
+  const cleanRow = mounted.context.shortcuts.find((entry) => entry.id === 'dsh-gitx.sync')
+  cleanRow.resolve().run()
+  await flush(GitApp, { connection: mounted.rpc, t })
+  check('with a clean tree the shortcut still runs the sync state machine',
+    mounted.rpc.calls.some((call) => call.method === 'write.fetch'),
+    JSON.stringify(mounted.rpc.calls.map((call) => call.method)))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 if (failures > 0) {
   console.error(`${failures} FAILED`)

@@ -906,10 +906,24 @@ export function createClientContext(options = {}) {
     return ran
   }
 
+  /** Shortcut rows captured from `ctx.shortcuts.register`, for assertions. */
+  const shortcutRows = []
+  const shortcuts = {
+    catalog: { getSnapshot: () => shortcutRows },
+    register(row) {
+      shortcutRows.push(row)
+      return () => {
+        const index = shortcutRows.indexOf(row)
+        if (index >= 0) shortcutRows.splice(index, 1)
+      }
+    },
+  }
+
   const ctx = {
     locale,
     slots,
     connection,
+    shortcuts,
     /**
      * Record one effect.
      * @param callback - the effect body.
@@ -935,7 +949,7 @@ export function createClientContext(options = {}) {
     },
   }
 
-  return { ctx, registrations, effects, dictionaries, connection, runDeferredInjections }
+  return { ctx, registrations, effects, dictionaries, connection, shortcuts: shortcutRows, runDeferredInjections }
 }
 
 /**

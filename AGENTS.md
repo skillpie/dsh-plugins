@@ -68,6 +68,7 @@
 - webServer prefix 匹配是「p 或 p/」语义(webserver index.ts:660):短前缀命中不了更长的单段路径(`/9` 不匹配 `/99999999/`),**任何通用捕获式数字路由都不可能**;匹配顺序 exact → 最长前缀 → fallback,重复 (kind,path) 注册抛错。想接管任意 `/<码>` 只能走 SW 导航探测或边缘层(nginx)。
 - SPA fallback(frontend-static)对未知子路径返回**裸 404**,仅 `/` 与 distIndex 的渲染走 `tapIndex`——插件想注入 `/<任意路径>` 的 404 场景,tapIndex 是死路;SW 内 fetch HEAD 探测 + `respondWith` 改写响应是插件侧通用解法(SW 内 fetch 不会重入自身 handler)。
 - nginx 反代后端响应默认**不触发** `error_page`,必须 `proxy_intercept_errors on`;nginx 的 location/rewrite 正则含 `{n}` 必须整体引号包裹(裸 `{` 被当块起始,`nginx -t` 报 directive not terminated);`error_page 404 = @named` 进 named location 后原 regex 捕获 `$1` 仍可用,可直接拼改写参数。
+- client 侧 MutationObserver 搬运 DOM(portal 进宿主树)时,查找器**不得把自己刚插入的标记当「已占用」跳过**:observer 回调是微任务,insert→失配→remove→再 insert 会自续成永不交还事件循环的死循环,渲染进程 99% CPU 整窗冻死;稳态回调必须是纯早退(自己的容器已就位且目标仍合法就 return),detach 只在容器存在时才动 DOM/state,修这类卡死先看渲染进程 ps CPU 而不是宿主日志。
 
 ## npm 发布
 
