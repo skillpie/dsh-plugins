@@ -1299,29 +1299,47 @@ console.log('\n--- workbench Commit explains missing text and clears a mixed cha
   }))
   findAll(full, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
   full = await flush(GitApp, { connection: mounted.rpc, t })
-  check('empty message shows a visible explanation and does not write',
-    walk(full).some((node) => String(node.props?.className).includes('dshgit-toast') && hasText(node, t('commit.requiredMessage'))) &&
-    !mounted.rpc.calls.some((call) => call.method.startsWith('write.')))
+  // Empty message + AI enabled (the fixture config always is): the primary
+  // (提交并推送) asks the Host for a message and proceeds with it. The old
+  // hard-required toast only exists when the profile has no model service
+  // (`aiEnabled: false`), which this fixed config cannot render.
+  check('an empty message is auto-generated and the commit still lands',
+    mounted.rpc.calls.some((call) => call.method === 'ai.commitMessage') &&
+      mounted.rpc.calls.some((call) => call.method === 'write.commit'),
+    mounted.rpc.calls.map((call) => call.method).join(','))
+  check('the change rows clear after the auto commit',
+    findWhere(full, (props) => props['data-change-group'] !== undefined).length === 0)
+
+  // Fresh run: an explicit message goes through the primary (提交并推送), so the
+  // push follows the commit. The fixture has ONE staged file (`docs/待提交.md`,
+  // index `A`), so the composer takes the `stagedCount > 0` branch and commits
+  // only what is staged — it does NOT also stage the unstaged files first. A
+  // commit must never sweep in changes the user did not stage.
+  committed = false
+  full = await renderApp(healthyHandlers({
+    status: () => ({ ...STATUS, total: committed ? 0 : STATUS.files.length,
+      files: committed ? [] : STATUS.files }),
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: committed ? 1 : 0, behind: 0 }),
+    'write.stage': () => ({ ok: true, message: 'staged' }),
+    'write.commit': () => { committed = true; return { ok: true, message: 'committed' } },
+  }))
   findAll(full, 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
     .props.onChange({ currentTarget: { value: 'feat: all files' } })
   full = await flush(GitApp, { connection: mounted.rpc, t })
   findAll(full, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
   full = await flush(GitApp, { connection: mounted.rpc, t })
-  // The fixture has ONE staged file (`docs/待提交.md`, index `A`), so the composer
-  // takes the `stagedCount > 0` branch and commits only what is staged — it does
-  // NOT also stage the unstaged files first. That is deliberate: a plain Commit
-  // must never sweep in changes the user did not stage. The earlier label
-  // ("提交已暂存的改动") is the visible half of the same rule.
-  check('a commit with staged content commits exactly that, without re-staging',
+  check('an explicit commit lands staged-only, then pushes, without re-staging',
     JSON.stringify(mounted.rpc.calls.filter((call) => call.method.startsWith('write.'))
-      .map((call) => call.method)) === JSON.stringify(['write.commit']))
+      .map((call) => call.method)) === JSON.stringify(['write.commit', 'write.push']))
   check('the change rows clear after the commit',
     findWhere(full, (props) => props['data-change-group'] !== undefined).length === 0)
   // The toast text is the element the stylesheet clamps, so a long write
   // result (a big commit's git output) cannot stretch the banner.
   const commitToastText = walk(full).find((node) => String(node.props?.className) === 'dshgit-toast-text')
+  // 提交并推送链路的末次写结果是 push,所以横幅此刻携带的是 push 的输出——断言守住
+  // 的是「长输出经 dshgit-toast-text 钳制渲染」这一条,而不是具体哪一步的文案。
   check('the commit toast renders through the clamped text element',
-    commitToastText !== undefined && hasText(commitToastText, 'committed'), textOf(full).slice(-240))
+    commitToastText !== undefined && textOf(commitToastText).trim().length > 0, textOf(full).slice(-240))
   // The sidebar composer never turns into Sync: the full window has dedicated
   // Fetch/Pull/Push buttons in its title bar (`canSync` requires `!props.sidebar`).
   check('the sidebar composer does not become a Sync button',
@@ -2712,14 +2730,14 @@ console.log('\n--- full workbench commit button has a separate options arrow ---
     findWhere(tree, (props) => props.className === 'dshgit-commit-split').length === 1)
   arrow.props.onClick({ stopPropagation() {} })
   tree = await flush(GitApp, { connection: mounted.rpc, t })
-  check('the workbench menu offers commit and remote follow-ups without amend',
-    // The three ACTIONS come first, in this order; the sticky flags follow a
-    // separator. `amend` stays out on purpose: it rewrites the previous commit,
-    // so it belongs to the history surface where its effect is visible.
+  check('the workbench menu offers remote follow-ups without amend',
+    // The plain Commit moved out of the menu into the flat button on the left;
+    // what remains is the sync follow-up plus the sticky flags. `amend` stays
+    // out on purpose: it rewrites the previous commit, so it belongs to the
+    // history surface where its effect is visible.
     findAll(tree, 'button').filter((node) => node.props.role === 'menuitem')
       .map(textOf).join(',') ===
-      [t('action.commit'), t('action.commitAndPush'), t('action.commitAndSync'),
-        t('commit.signoff'), t('commit.noVerify')].join(',') &&
+      [t('action.commitAndSync'), t('commit.signoff'), t('commit.noVerify')].join(',') &&
     !findAll(tree, 'button').filter((node) => node.props.role === 'menuitem')
       .some((node) => /amend/i.test(textOf(node))))
 }
@@ -5734,6 +5752,12 @@ console.log('\n--- commit flags, remote removal and history filters are reachabl
   tree = await renderApp(handlers)
   const openCommitMenu = async (current) => {
     findAll(current, 'button').find((node) => String(node.props.className).includes('dshgit-commit-arrow')).props.onClick({ stopPropagation() {} })
+    let next = await flush(GitApp, { connection: mounted.rpc, t })
+    // A real session closes the menu through the document-level outside-click
+    // listener; the fake harness never dispatches that event, so a menu left
+    // open by a previous step turns the reopen click into a toggle-closed.
+    if (findAll(next, 'button').some((node) => node.props.role === 'menuitem')) return next
+    findAll(next, 'button').find((node) => String(node.props.className).includes('dshgit-commit-arrow')).props.onClick({ stopPropagation() {} })
     return flush(GitApp, { connection: mounted.rpc, t })
   }
   tree = await openCommitMenu(tree)
@@ -5749,7 +5773,9 @@ console.log('\n--- commit flags, remote removal and history filters are reachabl
   findAll(tree, 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
     .props.onChange({ currentTarget: { value: 'feat: flag the commit' } })
   tree = await flush(GitApp, { connection: mounted.rpc, t })
-  findAll(tree, 'button').find((node) => textOf(node) === t('action.commit')).props.onClick()
+  // The plain Commit is the flat button beside the primary now (`data-commit-only`),
+  // not a menu item any more.
+  findAll(tree, 'button').find((node) => node.props['data-commit-only'] === 'true').props.onClick()
   tree = await flush(GitApp, { connection: mounted.rpc, t })
   const flagged = mounted.rpc.calls.filter((call) => call.method === 'write.commit').pop()
   check('the commit carries signoff once it is armed', flagged?.payload?.signoff === true, JSON.stringify(flagged?.payload))

@@ -220,6 +220,8 @@ function CommitPanel(props) {
     if (props.status?.files?.some(function (file) { return file.kind === 'unmerged' })) { setValidation(t('conflict.resolveRemaining')); return }
     if (props.busy === true || props.aiBusy || !canCommit) return
     if (props.message.trim() === '') {
+      // 留空 + AI 开启 → 宿主 commitAuto 先生成提交信息再继续;AI 关闭时仍要求手填。
+      if (aiEnabled) { action(); return }
       setValidation(t('commit.requiredMessage'))
       messageRef.current?.focus?.()
       return
@@ -310,20 +312,20 @@ function CommitPanel(props) {
       h('div', { key: 'row', className: 'dshgit-commit-meta' }, [
         h(CommitScopePreview, Object.assign({}, props, { key: 'scope-preview', disabled: props.busy || hasConflicts || !scopeFiles.length || scopeFiles.some(function (file) { return file.kind === 'unmerged' }) })),
         h('span', { key: 'scope', className: 'dshgit-muted' }, t('window.staged', { count: stagedScope.length })),
+        // 「提交」平铺在主按钮左侧:智慧作用域标签(提交/暂存并提交全部)落在它身上。
+        props.syncAction === null ? h('button', {
+          key: 'commit-only', type: 'button', className: 'dshgit-btn', 'data-commit-only': 'true',
+          disabled: props.busy || hasConflicts || !canCommit,
+          title: t(stagedScope.length > 0 ? 'commit.stagedHint' : 'commit.smartHint'),
+          onClick: function () { submit(props.onCommit) },
+        }, commitLabel) : null,
         h(CommitActions, {
           key: 'commit', t: t, shortcut: props.syncAction === null, pending: props.busy === true,
-          label: props.busy ? t(progressKey) : props.syncAction === null ? commitLabel : props.syncAction.label,
-          disabled: props.busy || hasConflicts || (props.syncAction === null && !canCommit),
-          hint: props.syncAction === null ? t(stagedScope.length > 0 ? 'commit.stagedHint' : 'commit.smartHint') : undefined,
+          label: props.busy ? t(progressKey) : props.syncAction === null ? t('action.commitAndPush') : props.syncAction.label,
+          disabled: props.busy || hasConflicts || (props.syncAction === null && (!canCommit || props.status?.branch?.detached === true)),
           onPrimary: props.syncAction === null
-            ? function () { submit(props.onCommit) } : props.syncAction.run,
+            ? function () { submit(props.onCommitPush) } : props.syncAction.run,
           options: props.syncAction !== null ? [] : [
-            { id: 'commit', label: t('action.commit'),
-              disabled: props.busy || hasConflicts || !canCommit, run: function () { submit(props.onCommit) } },
-            { separator: true },
-            { id: 'push', label: t('action.commitAndPush'),
-              disabled: props.busy || hasConflicts || !canCommit || props.status?.branch?.detached === true,
-              run: function () { submit(props.onCommitPush) } },
             { id: 'sync', label: t('action.commitAndSync'),
               disabled: props.busy || hasConflicts || !canCommit || !props.status?.branch?.upstream,
               run: function () { submit(props.onCommitSync) } },
@@ -438,18 +440,19 @@ function CommitComposer(props) {
       } })
     }
   }
-  var commitStaged = function (mode) {
-    props.onWrite('commit', withCommitPrefs({ message: props.message }), {
+  var commitStaged = function (mode, overrideMessage) {
+    props.onWrite('commit', withCommitPrefs({ message: typeof overrideMessage === 'string' ? overrideMessage : props.message }), {
       after: function () { afterCommit(mode) },
     })
   }
-  var commitAll = function (mode) {
+  var commitAll = function (mode, overrideMessage) {
     if (changedFiles.length === 0) return
-    props.onWrite('stage', {}, { after: function () { commitStaged(mode) } })
+    props.onWrite('stage', {}, { after: function () { commitStaged(mode, overrideMessage) } })
   }
-  var commit = function (mode) {
+  var commit = function (mode, overrideMessage) {
     if (props.status === null) return
     if (changedFiles.length === 0) return
+    var text = typeof overrideMessage === 'string' ? overrideMessage : props.message
     if (lists) {
       if (submittingRef.current || !selectedPaths.length) return
       submittingRef.current = true; submitting[1](true)
@@ -459,29 +462,32 @@ function CommitComposer(props) {
       props.changelists.flush().then(function (data) {
         var paths = props.changelists.pathsFor(data)
         if (!paths.length) { setValidation(t('commit.nothing')); return null }
-        return props.onWrite('commitPaths', withCommitPrefs({ message: props.message, paths: paths, changelistVersion: data.version }), { after: function () { afterCommit(mode) } })
+        return props.onWrite('commitPaths', withCommitPrefs({ message: text, paths: paths, changelistVersion: data.version }), { after: function () { afterCommit(mode) } })
       }).catch(function (error) { setValidation(error.message) })
         .finally(function () { submittingRef.current = false; submitting[1](false) })
       return
     }
-    if (stagedCount > 0) commitStaged(mode)
-    else commitAll(mode)
+    if (stagedCount > 0) commitStaged(mode, text)
+    else commitAll(mode, text)
   }
   var submit = function (mode) {
     if (blocked || commitCount === 0) return
-    if (props.message.trim() === '') {
+    if (props.message.trim() !== '') { setValidation(null); commit(mode); return }
+    // 留空 + AI 开启 → 本地生成提交信息后按所选方式继续;AI 关闭时仍要求手填。
+    if (!aiEnabled) {
       setValidation(t('commit.requiredMessage'))
       messageRef.current?.focus?.()
       return
     }
+    if (aiRef.current.busy) return
     setValidation(null)
-    commit(mode)
+    generate(function (text) { commit(mode, text) })
   }
   // The trigger for the pill: the same Smart Commit the keyboard shortcut
   // runs, so the two paths can never diverge in what they stage.
   var submitPrimary = function () { submit('commit') }
 
-  var generate = function () {
+  var generate = function (onDone) {
     if (!aiEnabled || aiRef.current.busy || blocked || (lists && !commitCount)) return
     var release = acquireCommitMessage(props.repo.root)
     if (!release) return
@@ -497,6 +503,16 @@ function CommitComposer(props) {
       if (!paths.length) throw new Error(t('commit.nothing'))
       return { paths: paths, changelistVersion: data.version }
     }) : Promise.resolve({})
+    // 同 header.js:settle 先释放 isCommitMessageBusy 锁——performWrite 在锁持有期
+    // 拒绝一切写入,「留空自动生成」的后续提交必须在解锁后回调。settle 幂等。
+    var settle = function () {
+      if (aiRef.current.id !== id) return
+      aiRef.current.busy = false; aiRef.current.controller = null
+      var pending = aiRef.current.release
+      aiRef.current.release = null
+      if (pending) pending()
+      setAiBusy(false)
+    }
     scope.then(function (parameters) {
       if (id !== aiRef.current.id) return null
       return requestCommitMessage(props.run, Object.assign({ root: props.repo.root }, parameters), { signal: controller.signal })
@@ -514,18 +530,18 @@ function CommitComposer(props) {
         if (typeof value.message !== 'string' || !value.message.trim()) {
           props.setAiNotice(t('ai.emptyResult')); return
         }
-        if (draftRef.current === draft) { props.setMessage(value.message); props.setAiNotice(null) }
+        if (draftRef.current === draft) {
+          props.setMessage(value.message); props.setAiNotice(null)
+          settle()
+          // 「留空将自动生成」链路:成稿回调给 submit 继续提交。
+          if (typeof onDone === 'function') onDone(value.message)
+        }
         else props.setAiNotice(t('ai.draftChanged'))
       })
       .catch(function (failure) {
         if (id === aiRef.current.id && !controller.signal.aborted) props.setAiNotice(failure.message)
       })
-      .finally(function () {
-        if (id !== aiRef.current.id) return
-        aiRef.current.busy = false; aiRef.current.controller = null
-        release(); aiRef.current.release = null
-        setAiBusy(false)
-      })
+      .finally(settle)
   }
 
   return h('div', { className: 'dshgit-card dshgit-commit-composer' }, [
@@ -572,6 +588,14 @@ function CommitComposer(props) {
     h('div', { key: 'row', className: 'dshgit-commit-meta' }, [
       h(CommitScopePreview, Object.assign({}, props, { key: 'scope-preview', disabled: blocked || commitCount === 0 })),
       h('span', { key: 'info', className: 'dshgit-muted', title: lists ? t('cl.fullFile') : undefined }, t(lists ? 'cl.selected' : 'window.staged', { count: lists ? commitCount : stagedCount })),
+      // 「提交」平铺在主按钮左侧,智慧作用域标签(提交/暂存已暂存/暂存并提交全部)落在它身上;
+      // publish/canSync 态主按钮让位给推送/同步,提交入口一并隐藏(与旧下拉语义一致)。
+      publish || canSync ? null : h('button', {
+        key: 'commit-only', type: 'button', className: 'dshgit-btn', 'data-commit-only': 'true',
+        disabled: blocked || commitCount === 0,
+        title: t(lists ? 'cl.fullFile' : stagedCount > 0 ? 'commit.stagedHint' : 'commit.smartHint'),
+        onClick: submitPrimary,
+      }, commitLabel),
       h(CommitActions, {
         key: 'commit', t: t, shortcut: !publish && !canSync,
         // The spinner and the progress label are two halves of one fact — that
@@ -580,17 +604,10 @@ function CommitComposer(props) {
         // write (ticking a file), which is not a commit.
         pending: actionPending,
         label: actionPending ? t(submitting[0] && !props.busyMethod ? 'commit.inProgress' : progressKey)
-          : publish ? t('next.publish') : canSync ? t('action.sync') : commitLabel,
-        disabled: blocked || (!publish && !canSync && commitCount === 0),
-        hint: !publish && !canSync ? t(lists ? 'cl.fullFile' : stagedCount > 0 ? 'commit.stagedHint' : 'commit.smartHint') : undefined,
-        onPrimary: publish || canSync ? sync : submitPrimary,
+          : publish ? t('next.publish') : canSync ? t('action.sync') : t('action.commitAndPush'),
+        disabled: blocked || (publish || canSync ? false : commitCount === 0 || props.status?.branch?.detached === true),
+        onPrimary: publish || canSync ? sync : function () { submit('push') },
         options: publish || canSync ? [] : [
-          { id: 'commit', label: t('action.commit'),
-            disabled: blocked || commitCount === 0, run: submitPrimary },
-          { separator: true },
-          { id: 'push', label: t('action.commitAndPush'),
-            disabled: blocked || commitCount === 0 || props.status?.branch?.detached === true,
-            run: function () { submit('push') } },
           { id: 'sync', label: t('action.commitAndSync'),
             disabled: blocked || commitCount === 0 || !upstream,
             run: function () { submit('sync') } },

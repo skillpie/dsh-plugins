@@ -810,7 +810,7 @@ function GitStatusChips(props) {
   }
 
   /** Ask the model for a commit message for the current staged changes. */
-  var generateMessage = function () {
+  var generateMessage = function (onDone) {
     if (aiRunningRef.current || writeRef.current) return
     var release = acquireCommitMessage(repo.root)
     if (!release) return
@@ -821,22 +821,32 @@ function GitStatusChips(props) {
     var requestId = ++aiRequestRef.current
     var draft = messageLatestRef.current
     setAiNotice(null)
+    // 结束本次生成:先释放 isCommitMessageBusy 锁再继续。宿主 write 管线在锁持有期
+    // 拒绝一切写入 (app.js performWrite 首行守卫),「留空自动生成」的后续提交必须在
+    // 解锁后才会被放行。settle 幂等,finally 二次调用是无害的空操作。
+    var settle = function () {
+      if (requestId !== aiRequestRef.current) return
+      aiRunningRef.current = false; aiController.current = null
+      var pending = aiLockRelease.current
+      aiLockRelease.current = null
+      if (pending) pending()
+      setAiBusy(false)
+    }
     requestCommitMessage(call, { root: repo.root }, { signal: controller.signal })
       .then(function (value) {
         if (requestId !== aiRequestRef.current) return
         if (value.available === false) { setAiNotice(value.message); return }
         if (value.empty === true) { setAiNotice(value.reason || t('commit.nothing')); return }
         if (typeof value.message !== 'string' || !value.message.trim()) { setAiNotice(t('ai.emptyResult')); return }
-        if (messageLatestRef.current === draft) { setMessage(value.message); setAiNotice(null) }
-        else setAiNotice(t('ai.draftChanged'))
+        if (messageLatestRef.current === draft) {
+          setMessage(value.message); setAiNotice(null)
+          settle()
+          // 「留空将自动生成」链路:生成成功后回调携带成稿,宿主据此继续提交。
+          if (typeof onDone === 'function') onDone(value.message)
+        } else setAiNotice(t('ai.draftChanged'))
       })
       .catch(function (failure) { if (requestId === aiRequestRef.current && !controller.signal.aborted) setAiNotice(failure.message) })
-      .finally(function () {
-        if (requestId !== aiRequestRef.current) return
-        aiRunningRef.current = false; aiController.current = null
-        release(); aiLockRelease.current = null
-        setAiBusy(false)
-      })
+      .finally(settle)
   }
 
   /**
@@ -866,21 +876,23 @@ function GitStatusChips(props) {
   }
 
   /** Respect the user's staged selection; stage all only when none is staged. */
-  var commit = function (mode) {
+  var commit = function (mode, overrideMessage) {
     // These are pre-flight refusals the plugin itself decided, not git
     // failures: no raw output to disclose, no remote fix to offer.
     var refuse = function (summary) {
       setNotice({ id: Date.now(), tone: 'error', summary: summary, hint: null, detail: null, action: null })
       setNoticeOpen(false)
     }
-    if (message.trim() === '') { refuse(t('commit.requiredMessage')); return }
+    // 「留空将自动生成」路径带着刚生成的成稿进来;常规路径读输入框现值。
+    var text = typeof overrideMessage === 'string' ? overrideMessage : message
+    if (text.trim() === '') { refuse(t('commit.requiredMessage')); return }
     if (status === null) return
     var changed = status.files || []
     if (changed.some(function (file) { return file.kind === 'unmerged' })) { refuse(t('conflict.resolveRemaining')); return }
     if (changed.length === 0) { refuse(t('commit.nothing')); return }
     if (changed.some(isStaged)) {
-      write('commit', withCommitPrefs({ message: message }), { after: function () { afterCommit(mode) } })
-    } else stageAllAndCommit(mode)
+      write('commit', withCommitPrefs({ message: text }), { after: function () { afterCommit(mode) } })
+    } else stageAllAndCommit(mode, text)
   }
 
   /**
@@ -891,15 +903,26 @@ function GitStatusChips(props) {
    * must only run if the stage actually succeeded. Committing a partially
    * staged tree after a failed stage-all would record the wrong subset.
    */
-  var stageAllAndCommit = function (mode) {
-    if (message.trim() === '') return
+  var stageAllAndCommit = function (mode, overrideMessage) {
+    var text = typeof overrideMessage === 'string' ? overrideMessage : message
+    if (text.trim() === '') return
     write('stage', {}, {
       after: function () {
-        write('commit', withCommitPrefs({ message: message }), {
+        write('commit', withCommitPrefs({ message: text }), {
           after: function () { afterCommit(mode) },
         })
       },
     })
+  }
+
+  /**
+   * 提交入口:提交信息留空时先让 AI 生成,成稿后按所选方式继续提交。
+   * 占位文案「留空将自动生成」由这里兑现;AI 生成失败时走 setAiNotice,不提交。
+   */
+  var commitAuto = function (mode) {
+    if (message.trim() !== '') { commit(mode); return }
+    if (aiRunningRef.current || writeRef.current) return
+    generateMessage(function (text) { commit(mode, text) })
   }
 
   // --- chip values -----------------------------------------------------
@@ -1221,9 +1244,9 @@ function GitStatusChips(props) {
           busyMethod: busyMethod,
           aiNotice: aiNotice,
           onGenerate: generateMessage,
-          onCommit: function () { commit('commit') },
-          onCommitPush: function () { commit('push') },
-          onCommitSync: function () { commit('sync') },
+          onCommit: function () { commitAuto('commit') },
+          onCommitPush: function () { commitAuto('push') },
+          onCommitSync: function () { commitAuto('sync') },
           syncAction: files.length === 0 && (nextAction.id === 'push' || nextAction.id === 'publish')
             ? { label: nextAction.id === 'push' ? t('action.sync') : nextAction.label, run: runNext }
             : null,
@@ -1404,8 +1427,8 @@ function GitStatusChips(props) {
             message: headerChangelists.mode === 'lists' ? headerChangelists.message : message,
             setMessage: headerChangelists.mode === 'lists' ? headerChangelists.setMessage : function (value) { messageLatestRef.current = value; setMessage(value) },
             busy: busy, aiBusy: aiBusy, onCancelGenerate: cancelAi, busyMethod: busyMethod, aiNotice: aiNotice, onGenerate: generateMessage,
-            onCommit: function () { commit('commit') }, onCommitPush: function () { commit('push') },
-            onCommitSync: function () { commit('sync') }, syncAction: null, onWrite: write,
+            onCommit: function () { commitAuto('commit') }, onCommitPush: function () { commitAuto('push') },
+            onCommitSync: function () { commitAuto('sync') }, syncAction: null, onWrite: write,
             onOpenFile: function (next) { setViewerPath(next) },
             onOpenFull: function () { setViewerPath(null); openWindow({ tab: 'changes' }) },
             requestConfirm: function (text, confirm, label) { if (!writeRef.current) setConfirmRequest({ message: text, onConfirm: confirm, label: label, opener: document.activeElement }) },
