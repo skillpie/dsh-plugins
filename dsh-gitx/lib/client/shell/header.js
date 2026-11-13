@@ -1074,7 +1074,8 @@ function GitStatusChips(props) {
     if (ahead > 0) {
       return { id: 'push', label: t('action.push'), counts: '↑' + ahead, hint: t('next.hint.push', { count: ahead }), tone: 'ahead', disabled: false }
     }
-    return { id: 'fetch', label: t('action.fetch'), counts: '', hint: t('sync.fetch'), tone: 'clean', disabled: false }
+    // 干净树的一键同步：fetch 后按需快进 pull（runNext 的 fetch 分支实现链）。
+    return { id: 'fetch', label: t('action.fetch'), counts: '', hint: t('sync.quickSync'), tone: 'clean', disabled: false }
   })()
   if ((syncBusy || retryBusy) && syncActionRef.current) nextAction = syncActionRef.current
   else syncActionRef.current = nextAction
@@ -1105,7 +1106,16 @@ function GitStatusChips(props) {
     }
     if (nextAction.id === 'push') { write('push', {}); return }
     if (nextAction.id === 'diverged') { setPullChoice(true) }
-    if (nextAction.id === 'fetch') { write('fetch', { prune: true }) }
+    if (nextAction.id === 'fetch') {
+      // 快速同步：干净工作树抓取后自动快进合并——clean ff pull 无冲突可言，
+      // 一次点击直接到位；真 diverged 时走 onReject 弹出合并/变基选择。
+      write('fetch', { prune: true }).then(function (value) {
+        if (value === null || value === undefined || repo === null) return
+        call('statusSummary', { root: repo.root }).then(function (summary) {
+          if ((summary?.branch?.behind || 0) > 0) write('pull', { ffOnly: true }, { onReject: 'diverged' })
+        }).catch(function () {})
+      }).catch(function () {})
+    }
   }
 
   var syncBusy = busy && (busyMethod === 'push' || busyMethod === 'pull' || busyMethod === 'fetch')
