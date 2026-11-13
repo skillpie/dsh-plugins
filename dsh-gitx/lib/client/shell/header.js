@@ -41,15 +41,71 @@ import { WorkbenchDialog } from '../features/branches/dialogs.js'
 /* ------------------------------------------------------------------ *
  * ⌘⇧S 快捷键桥
  *
- * 标题栏同步按钮把「当下的动作」登记到这个模块级桥上；client 入口的
+ * 标题栏同步按钮把「当下的动作」登记到这个模块级注册表上；client 入口的
  * ctx.shortcuts.register 在 resolve 里读取并触发（默认 ⌘⇧S，平台设置里可重绑）。
- * 登记随 Header 卸载自动清空，切走工作区后快捷键不会误触旧仓库。
+ *
+ * 不能用单一模块级桥：桌面 GUI 同时挂多个会话窗口的 chips（后台窗口只是
+ * display:none，并不卸载），任何一份重渲染都会覆盖单桥——⌘⇧S 就会打到
+ * 看不见的那份上（弹窗在隐藏子树里打开，表现就是「按了没反应」，例如在
+ * 会话界面点击后后台实例恰好最后渲染）。因此每次渲染登记一个带戳记的
+ * 持有者，并把同款戳记写到主芯片按钮的 data 属性上；按下时分派器扫描
+ * DOM，只把动作交给「可见」的那一份（聚焦窗口优先，其次第一个可见者）。
  * ------------------------------------------------------------------ */
-var syncCommandBridge = { run: null }
+var syncCommandHolders = new Map()
+var syncCommandStampSeq = 0
+// 无 DOM 环境（校验沙盒等）的分派回退：最后一次渲染登记的动作。
+var syncCommandLast = null
+
+/** 注册表修剪：戳记已不在 DOM 里的持有者是旧渲染或已卸载实例，直接丢弃。 */
+function pruneSyncHolders() {
+  var live
+  try { live = document.querySelectorAll('[data-dshgit-chips]') } catch { return }
+  if (!live || live.length === 0) return
+  // 真浏览器按属性选择器查到的节点必带非空戳记；沙盒/异构文档（返回无关
+  // 节点或残缺对象）在这里暴露——此时跳过修剪，绝不在渲染体里抛错。
+  var stamps = []
+  for (var i = 0; i < live.length; i++) {
+    var value = typeof live[i].getAttribute === 'function' ? live[i].getAttribute('data-dshgit-chips') : null
+    if (typeof value !== 'string' || value.length === 0) return
+    stamps.push(value)
+  }
+  syncCommandHolders.forEach(function (holder, stamp) {
+    if (stamps.indexOf(stamp) < 0) syncCommandHolders.delete(stamp)
+  })
+}
+
+/** 挑选可见的持有者：聚焦窗口里的优先，否则取 DOM 顺序第一个可见者。 */
+function findVisibleSyncHolder() {
+  var nodes = document.querySelectorAll('[data-dshgit-chips]')
+  var first = null
+  var fallback = null
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i]
+    if (typeof node.getAttribute !== 'function') continue
+    var holder = syncCommandHolders.get(node.getAttribute('data-dshgit-chips'))
+    if (!holder || holder.run === null) continue
+    if (first === null) first = holder
+    var visible = node.offsetParent !== null || node.getClientRects().length > 0
+    if (!visible) continue
+    if (fallback === null) fallback = holder
+    var drag = node.closest('[data-window-drag]')
+    if (drag && drag.contains(document.activeElement)) return holder
+  }
+  // 全都不可见（如所有窗口都被最小化）或环境没有布局信息时，退回第一个
+  // 登记者——比「按了没反应」好，且不会比旧行为更差。
+  return fallback || first
+}
 
 /** 快捷键入口：返回 false 表示当下无可执行动作（无仓库/忙碌/冲突未解决）。 */
 export function runRegisteredSync() {
-  var run = syncCommandBridge.run
+  var run = null
+  if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+    try {
+      var holder = findVisibleSyncHolder()
+      if (holder) run = holder.run
+    } catch { /* 异构沙盒文档：走最后一次登记的回退 */ }
+  }
+  if (run === null) run = syncCommandLast
   if (!run) return false
   try { return run() !== false } catch { return false }
 }
@@ -1124,17 +1180,20 @@ function GitStatusChips(props) {
     'aria-hidden': true,
   })
 
-  // ⌘⇧S 桥登记：渲染体普通赋值（非 useEffect），hook 数与上游严格一致。
-  // 页面里可能同时存在新旧两份模块副本（合并 bundle 缓存 + 独立 rev），任何 hook 数差都会让
-  // 同 fiber 混挂时抛 React #310——这是桌面端 chips 全灭的根因，此处永不再加 hook。
   // 合并优先级（用户指定）：有改动 → 改动评审优先于一切同步动作；无改动 → 同步状态机。
-  // 必须先于桥赋值初始化——var 只提升声明，放桥后面会让桥永远读到 undefined。
+  // 必须先于使用处初始化——var 只提升声明，放后面会读到 undefined。
   var changesFirst = changeCount > 0
 
   // ⌘⇧S 与按钮点击行为保持一致：有改动时同样打开改动评审。
-  syncCommandBridge.run = changesFirst
+  var syncAction = changesFirst
     ? function () { openPopover('commit') }
     : ((syncBusy || retryBusy || nextAction.disabled || operation !== null) ? null : runNext)
+  // 渲染体普通登记（非 useEffect），hook 数与上游严格一致。戳记同时写到
+  // 下方主芯片按钮的 data 属性上，分派器据此找到「可见」的这份。
+  var syncStamp = String(++syncCommandStampSeq)
+  syncCommandHolders.set(syncStamp, { run: syncAction })
+  syncCommandLast = syncAction
+  if (syncCommandHolders.size > 8) pruneSyncHolders()
   // 备选同步命令改为分支选择器「新建分支」行右侧的图标按钮（下拉入口已去掉）。
   var syncActions = [
     { id: 'fetch', label: t('sync.fetch'), icon: function () { return h(IconFetch, { size: 14 }) },
@@ -1180,6 +1239,7 @@ function GitStatusChips(props) {
       key: 'next', type: 'button',
       className: 'dshgit-chip dshgit-chipaction dshgit-chipnext' + (changesFirst ? '' : ' dshgit-next-' + nextAction.tone),
       'data-chip': 'next',
+      'data-dshgit-chips': syncStamp,
       'data-next': changesFirst ? 'changes' : nextAction.id,
       'data-changes': String(changeCount),
       'data-push-pending': !changesFirst && nextAction.id === 'push' && ahead > 0,

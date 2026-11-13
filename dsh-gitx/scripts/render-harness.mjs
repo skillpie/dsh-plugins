@@ -782,6 +782,10 @@ export function loadClientModule(source, options = {}) {
       return moduleTable[name]
     }),
     appendedStyles,
+    // 插件代码通过 `new Function('window', 'document', …)` 的参数绑定拿到沙盒
+    // 文档——参数遮蔽了 globalThis.document，测试若想替换 DOM 查询必须就地
+    // 修补这个对象而不是换掉全局。
+    sandboxDocument,
   }
 }
 

@@ -802,7 +802,7 @@ async function renderApp(handlers, props = {}) {
   // mount and every later flush pass through the same component path — a path
   // change would silently reset each component's hook state.
   currentHarness = built.Harness
-  mounted = { rpc, context, t: built.t }
+  mounted = { rpc, context, t: built.t, sandboxDocument: loaded.sandboxDocument }
   const rootProps = { connection: rpc, t: built.t, ...props }
   // `mount` establishes the tree and clears hook state; `flush` alone only
   // re-renders, so skipping the mount leaves effects unregistered and the
@@ -886,7 +886,7 @@ async function renderChips(handlers) {
   loaded.apply(context.ctx)
   const built = makeHarness(context, rpc)
   currentHarness = built.Harness
-  mounted = { rpc, context, t: built.t }
+  mounted = { rpc, context, t: built.t, sandboxDocument: loaded.sandboxDocument }
   const rootProps = { connection: rpc, t: built.t }
   mount(GitApp, rootProps)
   return flush(GitApp, rootProps, { maxPasses: 10 })
@@ -5870,6 +5870,70 @@ console.log('\n--- the sync shortcut mirrors the merged button ---')
     chain.indexOf('write.pull') >= 0 && chain.every((method) => method !== 'write.fetch') &&
       pull?.payload?.ffOnly === true,
     JSON.stringify(chain) + ' ' + JSON.stringify(pull?.payload))
+}
+
+console.log('\n--- the shortcut dispatches to the visible chips, not the last renderer ---')
+{
+  // 桌面 GUI 同时挂多个会话窗口的 chips（后台窗口 display:none 不卸载）。
+  // 单桥语义下任何实例的重渲染都会抢走 ⌘⇧S——弹窗在隐藏子树里打开，
+  // 用户看到的就是「按了没反应」。分派器必须按 DOM 可见性挑持有者。
+  const treeA = await renderApp(healthyHandlers())
+  const rpcA = mounted.rpc
+  const chipsA = walk(treeA).find((node) => node.props?.['data-dshgit-chips'])
+  console.log('PROBE chipsA:', JSON.stringify({ next: chipsA?.props['data-next'], stamp: chipsA?.props['data-dshgit-chips'] }))
+  check('the chips publish their holder stamp to the DOM', chipsA !== undefined && typeof chipsA.props['data-dshgit-chips'] === 'string')
+  const stampA = chipsA?.props['data-dshgit-chips']
+
+  const treeB = await renderApp(healthyHandlers({
+    branchTracking: () => ({ upstream: 'origin/main', ahead: 0, behind: 0 }),
+    status: () => ({ ...STATUS, total: 0, files: [] }),
+  }))
+  const rpcB = mounted.rpc
+  const chipsB = walk(treeB).find((node) => node.props?.['data-dshgit-chips'])
+  const stampB = chipsB?.props['data-dshgit-chips']
+  check('a second instance registers its own stamp', stampB !== undefined && stampB !== stampA)
+
+  const row = () => mounted.context.shortcuts.find((entry) => entry.id === 'dsh-gitx.sync')
+  // 沙盒文档是 new Function 的参数绑定：必须就地修补它的 querySelectorAll。
+  const fakeDocument = (nodes) => {
+    const previous = mounted.sandboxDocument.querySelectorAll
+    mounted.sandboxDocument.querySelectorAll = () => nodes
+    return () => { mounted.sandboxDocument.querySelectorAll = previous }
+  }
+  const chipsNode = (stamp, visible, focused) => ({
+    getAttribute: (key) => key === 'data-dshgit-chips' ? stamp : null,
+    offsetParent: visible ? {} : null,
+    getClientRects: () => ({ length: visible ? 1 : 0 }),
+    closest: (selector) => selector === '[data-window-drag]' && focused ? { contains: () => true } : null,
+  })
+
+  // 后台实例（B）最后渲染、但只有前台实例（A）可见：分派必须选中 A——
+  // A 有未提交改动，动作是打开评审弹窗（不开 write.pull）。
+  const beforeDispatch = rpcB.calls.length
+  let restore = fakeDocument([chipsNode(stampB, false), chipsNode(stampA, true)])
+  let outcome = row().resolve().run()
+  restore()
+  check('a hidden late renderer no longer steals the shortcut',
+    outcome !== false && rpcB.calls.slice(beforeDispatch).every((call) => call.method !== 'write.pull'),
+    JSON.stringify(rpcB.calls.slice(beforeDispatch).map((call) => call.method)))
+
+  // 反过来 B 可见且聚焦：写动作必须落到 B（干净的树 → pull --ff-only）。
+  restore = fakeDocument([chipsNode(stampA, true), chipsNode(stampB, true, true)])
+  outcome = row().resolve().run()
+  restore()
+  await flush(GitApp, { connection: rpcB, t })
+  check('the focused visible instance receives the write',
+    rpcB.calls.some((call) => call.method === 'write.pull' && call.payload.ffOnly === true),
+    JSON.stringify(rpcB.calls.map((call) => call.method)))
+
+  // 都不可见的退化环境：仍分派给第一个登记者，不静默吞键。
+  restore = fakeDocument([chipsNode(stampA, false), chipsNode(stampB, false)])
+  rpcB.calls.length = 0
+  outcome = row().resolve().run()
+  restore()
+  check('an all-hidden environment falls back instead of swallowing the key',
+    outcome !== false,
+    'outcome ' + String(outcome))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)
