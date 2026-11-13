@@ -17,7 +17,7 @@ import { readWorkbenchStorage, withCommitPrefs, writeWorkbenchStorage } from '..
 import { branchPushTarget, workbenchUpstream } from '../features/branches/model.js'
 import { workbenchBranchItems } from '../features/branches/actions.js'
 import { isStaged } from '../core/files.js'
-import { IconBranch, IconChanges, IconChevron } from '../ui/icons.js'
+import { IconBranch, IconBranchAction, IconBranchSync, IconChanges, IconChevron, IconRefresh } from '../ui/icons.js'
 import { BranchPicker } from '../features/branches/picker.js'
 import { popoverPosition } from '../ui/popover-position.js'
 import { requestCommitMessage } from '../features/changes/ai.js'
@@ -28,6 +28,39 @@ import { MergeReviewDialog } from '../features/branches/merge.js'
 import { FileViewer } from '../preview/viewer.js'
 import { ChipNotice, OperationProgress, Toast } from '../ui/notifications.js'
 import { WorkbenchDialog } from '../features/branches/dialogs.js'
+
+/* ------------------------------------------------------------------ *
+ * ⌘⇧S 快捷键桥
+ *
+ * 标题栏同步按钮把「当下的动作」登记到这个模块级桥上；client 入口的
+ * ctx.shortcuts.register 在 resolve 里读取并触发（默认 ⌘⇧S，平台设置里可重绑）。
+ * 登记随 Header 卸载自动清空，切走工作区后快捷键不会误触旧仓库。
+ * ------------------------------------------------------------------ */
+var syncCommandBridge = { run: null }
+
+/** 快捷键入口：返回 false 表示当下无可执行动作（无仓库/忙碌/冲突未解决）。 */
+export function runRegisteredSync() {
+  var run = syncCommandBridge.run
+  if (!run) return false
+  try { return run() !== false } catch { return false }
+}
+
+// 键帽目录：client 入口存入 ctx.shortcuts.catalog，tooltip 据此显示当前绑定。
+var shortcutCatalog = null
+export function setShortcutCatalog(catalog) { shortcutCatalog = catalog }
+
+function syncShortcutKeys() {
+  try {
+    var rows = shortcutCatalog && shortcutCatalog.getSnapshot()
+    if (Array.isArray(rows)) {
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i]
+        if (row && row.id === 'dsh-gitx.sync' && Array.isArray(row.keys) && row.keys.length) return row.keys
+      }
+    }
+  } catch { /* 目录未就绪 */ }
+  return ['⌘', '⇧', 'S']
+}
 
 /* ------------------------------------------------------------------ *
  * The header chips, the workbench window, and the launcher
@@ -1046,6 +1079,25 @@ function GitStatusChips(props) {
   var syncBusy = busy && (busyMethod === 'push' || busyMethod === 'pull' || busyMethod === 'fetch')
   var retryBusy = refreshing && nextAction.id === 'retry'
 
+  // 同步按钮：单图标按跟踪状态自适应（ZCodeOnline 式），文字含义全部进 tooltip；
+  // 忙碌时转圈，diverged/resolve 用 merge 字形表示「需要用户做决定」。
+  var nextIcon = syncBusy || retryBusy
+    ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true })
+    : nextAction.id === 'pull' ? h(IconBranchSync, { key: 'i', kind: 'pull', size: 14 })
+    : nextAction.id === 'push' || nextAction.id === 'publish' ? h(IconBranchSync, { key: 'i', kind: 'push', size: 14 })
+    : nextAction.id === 'diverged' || nextAction.id === 'resolve' ? h(IconBranchAction, { key: 'i', kind: 'merge', size: 14 })
+    : nextAction.id === 'retry' ? h(IconRefresh, { key: 'i', size: 14 })
+    : h(IconBranchSync, { key: 'i', kind: 'fetch', size: 14 })
+
+  // ⌘⇧S 桥登记：每次渲染刷新闭包（busy/nextAction 变化即生效），卸载即清空。
+  React.useEffect(function () {
+    syncCommandBridge.run = function () {
+      if (busy || retryBusy || nextAction.disabled || operation !== null) return false
+      runNext()
+    }
+    return function () { syncCommandBridge.run = null }
+  })
+
   return h(Fragment, null, [
     aiNotice ? h(Toast, { key: 'ai-notice', placement: props.compact ? 'bottom' : undefined, seq: aiNotice, text: aiNotice, tone: 'warning', onDone: function () { setAiNotice(null) } }) : null,
     // Branch chip → branch picker.
@@ -1094,14 +1146,14 @@ function GitStatusChips(props) {
       'data-chip': 'next',
       'data-next': nextAction.id,
       'data-push-pending': nextAction.id === 'push' && ahead > 0,
-      title: nextAction.hint + (upstream ? '\n' + t('sync.target', { target: upstream }) : '') + (autoFetchStatus?.error ? '\n' + t('sync.autoFetchFailed', { message: autoFetchStatus.error }) : ''),
+      title: nextAction.hint + (upstream ? '\n' + t('sync.target', { target: upstream }) : '') + (autoFetchStatus?.error ? '\n' + t('sync.autoFetchFailed', { message: autoFetchStatus.error }) : '') + '\n' + syncShortcutKeys().join(''),
       style: nextAction.id === 'fetch' && autoFetchStatus?.error ? { color: 'var(--dshgit-warning-text)' } : undefined,
       'aria-busy': syncBusy || retryBusy,
       'aria-label': (syncBusy ? t(busyMethod === 'push' ? 'sync.pushing' : busyMethod === 'pull' ? 'sync.pulling' : 'sync.fetching') : nextAction.label) + (nextAction.counts ? ' ' + nextAction.counts : ''),
       disabled: busy || retryBusy || nextAction.disabled || operation !== null,
       onClick: runNext,
     }, [
-      h('span', { key: 'n', className: 'dshgit-chipname' }, nextAction.label),
+      nextIcon,
       nextAction.counts ? h('span', { key: 'c', className: 'dshgit-chipcounts', title: nextAction.counts }, nextAction.counts) : null,
     ]),
     h('button', {

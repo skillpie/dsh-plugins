@@ -9,6 +9,7 @@ import { WorkspaceGitAction } from './client/core/workspace.js'
 import { observeWorkspaceNavigation } from './client/core/workspace-navigation.js'
 import { installSidebarWorkspaceGit } from './client/core/sidebar-workspaces.js'
 import { openGitWindow } from './client/core/state.js'
+import { runRegisteredSync, setShortcutCatalog } from './client/shell/header.js'
 
 /* ------------------------------------------------------------------ *
  * Registration
@@ -22,6 +23,28 @@ function apply(ctx) {
   ctx.effect(function () {
     return ctx.locale.register(NS, { zh: zh, en: en })
   }, 'git: dictionaries')
+
+  // ⌘⇧S：与标题栏同步按钮同一动作（按跟踪状态合并 fetch / pull / push）。
+  // 默认键注册进平台快捷键目录（设置里可重绑），目录快照同时驱动按钮 tooltip 键帽。
+  try {
+    setShortcutCatalog(ctx.shortcuts.catalog)
+    var shortcutT = ctx.locale.bind(NS)
+    ctx.effect(function () {
+      return ctx.shortcuts.register({
+        id: 'dsh-gitx.sync',
+        label: function () { return shortcutT('shortcut.sync') },
+        aliases: ['git', 'sync', 'fetch', 'pull', 'push', '同步', '拉取', '推送'],
+        defaults: {
+          // Web 侧白名单仅放行 ⌘⇧* 双修饰组合（与 termbar ⌘⇧K 同款约束）。
+          'desktop:macos': { code: 'KeyS', modifiers: ['primary', 'shift'] },
+          'web:macos': { code: 'KeyS', modifiers: ['primary', 'shift'] },
+        },
+        regions: ['page', 'editable', 'terminal'],
+        modals: [],
+        resolve: function () { return { status: 'handled', run: runRegisteredSync } },
+      })
+    }, 'git: sync shortcut')
+  } catch (error) { console.warn('[dsh-gitx] 快捷键注册失败（不影响面板）:', error && error.message || error) }
 
   // Soft injection: a profile without `connection` simply does not render
   // this window, instead of failing client activation.
@@ -123,6 +146,6 @@ function apply(ctx) {
 }
 
 export const name = 'dsh-gitx'
-export const inject = ['slots', 'locale']
+export const inject = ['slots', 'locale', 'shortcuts']
 
 export { apply }
