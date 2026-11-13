@@ -485,7 +485,7 @@ check('the commit options are offered from the split button menu',
     tiers.map((tier) => `${tier.width}:${/\.dshgit-chipcluster\{display:none\}/.test(tier.body)}`).join(','))
   // A Host that is not a size container keeps the old full-density behaviour.
   check('container queries are feature-detected, with a viewport fallback',
-    css.includes('@supports(container-type:inline-size){') && /@media\(max-width:620px\)\{\.dshgit-chip\[data-chip="next"\]/.test(css))
+    css.includes('@supports(container-type:inline-size){') && /@media\(max-width:620px\)\{\.dshgit-chipcluster>\.dshgit-chip\[data-chip="next"\]/.test(css))
 }
 
 /* ------------------------------------------------------------------ *
