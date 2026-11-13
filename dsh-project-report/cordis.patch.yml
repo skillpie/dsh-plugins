@@ -4,6 +4,6 @@
 # (projects, report generation, Moka overtime, scheduler), the client half
 # registers the sidebar panel icon and the "Coder report" main view.
 - insert:
-    - id: project-report
-      name: "@skillpie/dsh-project-report"
+    - id: dsh-project-report
+      name: "dsh-project-report"
       config: {}

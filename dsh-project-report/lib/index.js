@@ -1,4 +1,4 @@
-// @skillpie/dsh-project-report — host half.
+// dsh-project-report — host half.
 //
 // POST /dsh-project-report/api 单路由 JSON API:
 //   项目发现 / 日报生成(按项目 cwd,项目唯一) / Moka 加班提交 / 定时调度 / 历史记录。
@@ -107,7 +107,7 @@ function parseReportItems(markdown) {
 /* ── apply ──────────────────────────────────────────────────────────── */
 
 export default {
-  name: '@skillpie/dsh-project-report',
+  name: 'dsh-project-report',
   Config,
   inject: [],
   apply(ctx, rawConfig = null) {
@@ -260,7 +260,7 @@ export default {
         const action = body?.action
         switch (action) {
           case 'ping':
-            return { name: '@skillpie/dsh-project-report', version: '0.1.5', route: ROUTE, time: new Date().toISOString() }
+            return { name: 'dsh-project-report', version: '0.1.6', route: ROUTE, time: new Date().toISOString() }
           case 'getState': {
             const acct = await readMoka(getCredentials())
             const cwd = body?.cwd ? normalizeCwd(body.cwd) : null
@@ -388,7 +388,7 @@ export default {
         handler: async (req, res) => {
           try {
             if (!sameOrigin(req)) { json(res, 403, { ok: false, error: 'cross-origin request rejected' }); return }
-            if (req.method !== 'POST') { json(res, 200, { ok: true, data: { action: 'ping', name: '@skillpie/dsh-project-report' } }); return }
+            if (req.method !== 'POST') { json(res, 200, { ok: true, data: { action: 'ping', name: 'dsh-project-report' } }); return }
             const body = await readBody(req)
             const data = await dispatch(body)
             json(res, 200, { ok: true, data })

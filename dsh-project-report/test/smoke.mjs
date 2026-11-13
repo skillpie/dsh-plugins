@@ -1,4 +1,4 @@
-// 冒烟测试:@skillpie/dsh-project-report
+// 冒烟测试:dsh-project-report
 // 覆盖:shouldFire 纯函数 / PluginState / git 采集(临时真实仓库) / 日报模板 / PNG 附件 /
 //       单路由 API(桩 webServer+credentials+timer,真实 http 服务器)。
 // 运行:node test/smoke.mjs  (DSH_PROJECT_REPORT_STATE 隔离状态文件,不碰真实配置)

@@ -1,5 +1,5 @@
 /**
- * @skillpie/dsh-project-report — Web client half (module-loader bundle).
+ * dsh-project-report — Web client half (module-loader bundle).
  *
  * Registers a "Daily report" tab on conversation.view (session scope):
  *   the tab binds to the current session's project directory (cwd),
@@ -12,11 +12,11 @@
  * theme tokens only.
  */
 window.__ModuleLoader__.load({
-  id: '@skillpie/dsh-project-report',
+  id: 'dsh-project-report',
   factory(require) {
     var React = require('react')
     var h = React.createElement
-    var NS = '@skillpie/dsh-project-report'
+    var NS = 'dsh-project-report'
 
     var zh = {
       title: '项目汇报',
@@ -681,12 +681,12 @@ window.__ModuleLoader__.load({
     var pageT = function (key) { return key }
 
     return {
-      name: '@skillpie/dsh-project-report',
+      name: 'dsh-project-report',
       inject: ['slots', 'layout', 'locale'],
       apply: function (ctx) {
         ctx.effect(function () {
           return ctx.locale.register(NS, { zh: zh, en: en })
-        }, '@skillpie/dsh-project-report: dictionaries')
+        }, 'dsh-project-report: dictionaries')
 
         pageT = (ctx.locale && typeof ctx.locale.bind === 'function')
           ? ctx.locale.bind(NS)

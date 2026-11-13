@@ -1,4 +1,4 @@
-# @skillpie/dsh-project-report
+# dsh-project-report
 
 DSH 项目汇报插件:在每个项目会话的「汇报」Tab 里,基于该项目的 git 提交记录与会话记录一键生成工作日报,并可选把汇报内容自动提交为 Moka 加班单。定时能力由插件自带调度器实现,不依赖 DSH 的自动化任务。
 
