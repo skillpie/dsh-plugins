@@ -341,14 +341,11 @@ function IconSettings(props) {
 
 /** Refresh: a circular arrow, for the title bar's reload control. */
 function IconRefresh(props) {
-  // 双向圆弧同步：两段 160° 圆弧 + 内收箭头尖，整体轮廓是正圆。
-  // 旧版角括号（polyline 直角拐到角上）在圆弧外侧突出，图标看起来又方又扁。
-  // 箭头尖从弧端向圆心内收 0.8，笔尖贴着圆周不再外凸。
   return svg({ size: props.size === undefined ? 15 : props.size, className: props.className }, [
-    h('path', { key: 'a', d: 'M6.29 3.3A5 5 0 0 1 11.21 11.83', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' }),
-    h('polyline', { key: 'b', points: '11.65 9.7 10.7 11.22 12.37 10.55', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' }),
-    h('path', { key: 'c', d: 'M9.71 12.7A5 5 0 0 1 4.79 4.17', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' }),
-    h('polyline', { key: 'd', points: '4.35 6.3 5.3 4.78 3.63 5.45', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('path', { key: 'a', d: 'M2 8a6 6 0 0 1 6-6 6.5 6.5 0 0 1 4.49 1.83L14 5.33', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('polyline', { key: 'b', points: '14 2 14 5.33 10.67 5.33', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('path', { key: 'c', d: 'M14 8a6 6 0 0 1-6 6 6.5 6.5 0 0 1-4.49-1.83L2 10.67', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('polyline', { key: 'd', points: '2 14 2 10.67 5.33 10.67', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
   ])
 }
 
