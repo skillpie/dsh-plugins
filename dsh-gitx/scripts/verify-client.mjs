@@ -5854,24 +5854,20 @@ console.log('\n--- the sync shortcut mirrors the merged button ---')
   cleanRow.resolve().run()
   await flush(GitApp, { connection: mounted.rpc, t })
   check('with a clean tree the shortcut still runs the sync state machine',
-    mounted.rpc.calls.some((call) => call.method === 'write.fetch'),
+    mounted.rpc.calls.some((call) => call.method === 'write.pull' && call.payload.ffOnly === true),
     JSON.stringify(mounted.rpc.calls.map((call) => call.method)))
-  // Quick sync: the same action must chain fetch into a fast-forward pull when
-  // the fetch reveals behind commits — one click, fully up to date, no conflict
-  // possible on a clean tree.
-  let fetched = false
+  // Quick sync: pull carries its own fetch, so a clean tree goes straight to a
+  // fast-forward pull — no fetch pre-step, no conflict possible.
   await renderApp(healthyHandlers({
-    branchTracking: () => (fetched ? { upstream: 'origin/main', ahead: 0, behind: 2 } : { upstream: 'origin/main', ahead: 0, behind: 0 }),
+    branchTracking: () => ({ upstream: 'origin/main', ahead: 0, behind: 0 }),
     status: () => ({ ...STATUS, total: 0, files: [] }),
-    'write.fetch': async () => { fetched = true; return { message: 'Fetched' } },
   }))
   mounted.context.shortcuts.find((entry) => entry.id === 'dsh-gitx.sync').resolve().run()
   await flush(GitApp, { connection: mounted.rpc, t })
-  await flush(GitApp, { connection: mounted.rpc, t })
   const chain = mounted.rpc.calls.map((call) => call.method)
   const pull = mounted.rpc.calls.find((call) => call.method === 'write.pull')
-  check('a clean tree chains fetch into a fast-forward pull when behind',
-    chain.indexOf('write.fetch') >= 0 && chain.indexOf('write.pull') > chain.indexOf('write.fetch') &&
+  check('a clean tree pulls directly without a fetch pre-step',
+    chain.indexOf('write.pull') >= 0 && chain.every((method) => method !== 'write.fetch') &&
       pull?.payload?.ffOnly === true,
     JSON.stringify(chain) + ' ' + JSON.stringify(pull?.payload))
 }
