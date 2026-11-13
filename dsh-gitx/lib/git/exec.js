@@ -75,16 +75,34 @@ export class GitError extends Error {
 
 /**
  * Strip benign git chatter from stderr, leaving only real diagnostics.
+ *
+ * The "paths are ignored by .gitignore" advice block is a special case: git
+ * prints it on `add` when an explicit pathspec names an ignored directory that
+ * also contains tracked files — the add itself SUCCEEDS (exit 0, tracked
+ * files staged), so the block must not surface as an error message. The block
+ * is one header line, the offending paths, then `hint:` lines; anything after
+ * the hints (e.g. `error:`) is a real diagnostic and survives.
  * @param stderr - raw stderr text.
  * @returns the non-benign remainder, trimmed.
  */
 export function meaningfulStderr(stderr) {
   const text = String(stderr ?? '')
   if (text.trim() === '') return ''
+  let inIgnoredAdvice = false
   return text
     .split(/\r?\n/)
     .filter((line) => line.trim() !== '')
-    .filter((line) => !BENIGN_STDERR.some((pattern) => pattern.test(line)))
+    .filter((line) => {
+      if (/^The following paths are ignored by one of your \.gitignore files:/i.test(line)) {
+        inIgnoredAdvice = true
+        return false
+      }
+      if (inIgnoredAdvice) {
+        if (/^hint: /i.test(line)) inIgnoredAdvice = false
+        return false
+      }
+      return !BENIGN_STDERR.some((pattern) => pattern.test(line))
+    })
     .join('\n')
     .trim()
 }
