@@ -1,5 +1,5 @@
 /**
- * @skillpie/dsh-market — Web client half (module-loader bundle).
+ * dsh-skillpie — Web client half (module-loader bundle).
  *
  * Registers:
  *   - sidebar.panellist icon "skillpie-market" (opens the main view),
@@ -7,7 +7,7 @@
  *     like an in-app browser page (ZCode's skill-market main view), with a
  *     thin toolbar for reload / open-in-browser.
  *
- * The host half's JSON API (/dsh-market/api) stays available for
+ * The host half's JSON API (/dsh-skillpie/api) stays available for
  * programmatic search/install, e.g. future agent tools.
  *
  * Follows the host UI conventions: theme tokens only, locale service for all
@@ -16,11 +16,11 @@
  * boot graph can activate it.
  */
 window.__ModuleLoader__.load({
-  id: '@skillpie/dsh-market',
+  id: 'dsh-skillpie',
   factory(require) {
     var React = require('react')
     var h = React.createElement
-    var NS = '@skillpie/dsh-market'
+    var NS = 'dsh-skillpie'
     var MARKET_URL = 'https://skillpie.cn/skills'
 
     var zh = {
@@ -149,12 +149,12 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      name: '@skillpie/dsh-market',
+      name: 'dsh-skillpie',
       inject: ['slots', 'layout', 'locale'],
       apply: function (ctx) {
         ctx.effect(function () {
           return ctx.locale.register(NS, { zh: zh, en: en })
-        }, '@skillpie/dsh-market: dictionaries')
+        }, 'dsh-skillpie: dictionaries')
 
         pageT = (ctx.locale && typeof ctx.locale.bind === 'function')
           ? ctx.locale.bind(NS)
@@ -164,7 +164,7 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('sidebar.panellist', function () {
           return ctx.slots.register({
             name: 'sidebar.panellist',
-            id: 'dsh-market',
+            id: 'dsh-skillpie',
             order: 25,
             locale: NS,
             label: function () { return pageT('title') },
@@ -175,7 +175,7 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('main', function () {
           return ctx.slots.register({
             name: 'main',
-            key: 'dsh-market',
+            key: 'dsh-skillpie',
             locale: NS,
           }, EmbeddedMarket)
         })
