@@ -4,9 +4,8 @@ var STYLES = [
   // Menu and Tooltip anchors may wrap native buttons. Give every direct
   // action the same cell so wrappers cannot change the visual spacing.
   '[role="treeitem"][data-row-key^="workspace:"]>:has(>.dshgit-sidebar-workspace-git){gap:12px}[role="treeitem"][data-row-key^="workspace:"]>:has(>.dshgit-sidebar-workspace-git)>*{box-sizing:border-box;flex:0 0 20px;width:20px;height:20px;margin:0;display:inline-flex;align-items:center;justify-content:center}',
-  '.dshgit-hero-actions .dshgit-chip[data-chip="branch"]{height:auto;min-height:24px;font-size:var(--dshgit-hero-font-size,var(--dshgit-font-body));font-family:var(--dshgit-hero-font-family,inherit);font-weight:var(--dshgit-hero-font-weight,500);line-height:var(--dshgit-hero-line-height,1.5);letter-spacing:var(--dshgit-hero-letter-spacing,normal)}.dshgit-hero-actions .dshgit-chip[data-chip="branch"] .dshgit-chipname{font-weight:inherit;line-height:inherit;padding-block:2px}',
   '[data-dshgit-hero-row]{flex-wrap:wrap;justify-content:flex-start;row-gap:6px}.dshgit-hero-actions{display:flex;flex:0 0 auto;align-items:center;justify-content:flex-start;min-width:0;margin-inline:8px 0}.dshgit-hero-actions .dshgit-workspace-actions[data-compact]{max-width:min(280px,60vw)}@media(max-width:480px){.dshgit-hero-actions{margin-inline-start:4px}}',
-  '.dshgit-workspace-actions{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%}.dshgit-workspace-actions[data-compact]{max-width:min(240px,40vw)}.dshgit-workspace-actions[data-compact] .dshgit-chipname{max-width:16ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dshgit-workspace-actions[data-compact] [data-chip="changes"],.dshgit-workspace-actions[data-compact] [data-chip="next"],.dshgit-workspace-actions[data-compact] [data-chip="sync-menu"]{display:none}',
+  '.dshgit-workspace-actions{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%}.dshgit-workspace-actions[data-compact]{max-width:min(240px,40vw)}.dshgit-workspace-actions[data-compact] [data-chip="sync-menu"]{display:none}',
   '.dshgit-conflict-split{height:6px;flex:none;cursor:row-resize;background:var(--dsw-alias-border-l1);touch-action:none}.dshgit-conflict-split:hover,.dshgit-conflict-split:focus-visible{background:var(--dsw-alias-state-business-primary)}.dshgit-conflict-question{white-space:pre-wrap}.dshgit-confirmbar .dshgit-hint{white-space:pre-wrap;max-height:50vh;overflow:auto;overflow-wrap:anywhere}.dshgit-conflict-question>div:not(.dshgit-dialogactions){max-height:50vh;overflow:auto;overflow-wrap:anywhere}',
   '.dshgit-conflict-body{container-type:inline-size}.dshgit-conflict-tabs{display:none;gap:4px;padding:4px 12px;border-bottom:1px solid var(--dsw-alias-border-l1)}.dshgit-conflict-line{display:block;min-width:max-content;min-height:20px}.dshgit-conflict-lineno{display:inline-block;width:40px;padding-right:12px;text-align:right;color:var(--dsw-alias-label-secondary);user-select:none}.dshgit-conflict-line[data-kind="del"]{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 14%,transparent)}.dshgit-conflict-line[data-kind="add"]{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 14%,transparent)}@container(max-width:600px){.dshgit-conflict-tabs{display:flex}.dshgit-conflict-body>.dshgit-conflict-versions{grid-template-columns:minmax(0,1fr)}.dshgit-conflict-versions>section:not([data-active="true"]){display:none}}',
 
@@ -990,7 +989,7 @@ var STYLES = [
   // cluster, so when the session header ran out of room there was nothing
   // left to give and the chips painted on top of the Host's own controls.
   // The chevron keeps a fixed 22px because it is an icon, not a label.
-  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chipcluster>.dshgit-chip[data-chip="sync-menu"]{flex:0 0 22px}.dshgit-chip[data-chip="changes"]>span{font-variant-numeric:tabular-nums}.dshgit-chip[data-chip="sync-menu"] .dshgit-spinner{width:12px;height:12px;box-sizing:border-box}',
+  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chipcluster>.dshgit-chip[data-chip="sync-menu"]{flex:0 0 22px}.dshgit-chip[data-chip="next"] .dshgit-chipcounts{font-variant-numeric:tabular-nums}.dshgit-chip[data-chip="sync-menu"] .dshgit-spinner{width:12px;height:12px;box-sizing:border-box}',
   '.dshgit-next-ahead,.dshgit-next-behind{color:var(--dsw-alias-brand-primary)}',
   '.dshgit-next-ahead:hover:not(:disabled),.dshgit-next-behind:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent)}',
   // A blocked state (conflicts, diverged) must not look like an ordinary
@@ -1010,45 +1009,17 @@ var STYLES = [
   // and painted over the Host's own subagent/jobs chips.
   //
   // The Host already declares its title row as an inline-size container, so
-  // `@container` measures the band the chips actually live in. Each tier
-  // gives space back in the cheapest order: the counts chip and the sync
-  // chevron first (the branch popover carries staging, commit and the same
-  // remote actions), then the remote verb, then the branch label — and only
-  // when even an icon cannot fit does the cluster bow out entirely, because
-  // the launcher beside it opens the same popovers.
+  // `@container` measures the band the chips actually live in.
   //
-  // The branch NAME survives down to 640px, which is the fact the row exists
-  // to show; a row that answers "which branch" as long as it fits anywhere is
-  // worth more than a row that shows four chips and collides.
-  //
-  // Whichever action a tier hides stays reachable: the branch popover's rows
-  // are the same `branchItems` the chips call, and it is one click away.
+  // 合并后的密度模型：标题栏只剩「合并入口 + chevron (+ 冲突恢复)」，全是图标级
+  // 小控件，900/800/640 分级让位规则不再需要；400px 以下整簇让位给会话标题。
+  // 分支切换收在 chevron 菜单里，任何宽度都可达（窄幅还有侧栏 Git 启动器兜底）。
   // `@supports` keeps a Host that is not a container (or a browser without
   // container queries) at today's full-density behaviour instead of hiding
   // chips it never needed to hide.
   //
-  // The 900px tier sits above the narrowest full row we measured: a drag
-  // handle, a workspace chip, a subagent count and a jobs count need ~830px
-  // of band before four chips fit, so the counts are gone before the
-  // collision can start rather than after.
   '@supports(container-type:inline-size){' +
     ':has(>[data-slot="conversation.session.header.utilities"]>.dshgit-workspace-actions){flex:0 1 auto;min-width:0}' +
-    '@container(max-width:900px){' +
-      '.dshgit-workspace-actions:not([data-compact]) .dshgit-chip[data-chip="changes"],' +
-      '.dshgit-workspace-actions:not([data-compact]) .dshgit-chip[data-chip="sync-menu"]{display:none}' +
-      '.dshgit-workspace-actions:not([data-compact]) .dshgit-chip[data-chip="branch"]{max-width:120px}}' +
-    '@container(max-width:800px){' +
-      '.dshgit-workspace-actions:not([data-compact]) .dshgit-chip[data-chip="next"]{display:none}' +
-      '.dshgit-workspace-actions:not([data-compact]) .dshgit-chip[data-chip="branch"]{max-width:96px}}' +
-    // The label goes before the button does: an icon still says "this is Git
-    // and there is a branch", and its tooltip and popover carry the name.
-    //
-    // The launcher beside it stays visible at this width, so the bare branch
-    // chip reads as a SECOND, identical Git glyph with no label — two icons
-    // that do different things and look the same. Below this the branch is
-    // reached from the launcher's popover instead, which is the same entry.
-    '@container(max-width:640px){' +
-      '.dshgit-workspace-actions:not([data-compact]) .dshgit-chip[data-chip="branch"]{display:none}}' +
     // Below this the band cannot hold a control and a readable title: the
     // Host's own title cluster is already clipped around 420px.
     '@container(max-width:400px){' +
@@ -1056,7 +1027,7 @@ var STYLES = [
   '}',
   // Viewport fallback for Hosts without a size container: a narrow WINDOW is
   // still a reliable signal that the header is tight.
-  '@media(max-width:620px){.dshgit-chip[data-chip="branch"]{max-width:100px;min-width:0}.dshgit-chip[data-chip="merge"]{padding:0 4px}.dshgit-chipcluster{gap:2px}}',
+  '@media(max-width:620px){.dshgit-chip[data-chip="next"]{padding:0 4px}.dshgit-chipcluster{gap:2px}}',
   // The force-with-lease row is the one destructive entry in the sync menu;
   // it must not sit visually level with the safe ones.
   '.dshgit-pickdanger{color:var(--dsw-alias-state-error-primary)}',

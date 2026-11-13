@@ -17,7 +17,7 @@ import { readWorkbenchStorage, withCommitPrefs, writeWorkbenchStorage } from '..
 import { branchPushTarget, workbenchUpstream } from '../features/branches/model.js'
 import { workbenchBranchItems } from '../features/branches/actions.js'
 import { isStaged } from '../core/files.js'
-import { IconBranch, IconBranchAction, IconBranchSync, IconChanges, IconChevron, IconRefresh } from '../ui/icons.js'
+import { IconBranchAction, IconBranchSync, IconChanges, IconChevron, IconRefresh } from '../ui/icons.js'
 import { BranchPicker } from '../features/branches/picker.js'
 import { popoverPosition } from '../ui/popover-position.js'
 import { requestCommitMessage } from '../features/changes/ai.js'
@@ -1117,38 +1117,12 @@ function GitStatusChips(props) {
   // 同 fiber 混挂时抛 React #310——这是桌面端 chips 全灭的根因，此处永不再加 hook。
   syncCommandBridge.run = (syncBusy || retryBusy || nextAction.disabled || operation !== null) ? null : runNext
 
+  // 合并优先级（用户指定）：有改动 → 改动评审优先于一切同步动作；无改动 → 同步状态机。
+  // ⌘⇧S 桥不受此影响（恒为同步语义，改动未提交时也能一键推送）。
+  var changesFirst = changeCount > 0
+
   return h(Fragment, null, [
     aiNotice ? h(Toast, { key: 'ai-notice', placement: props.compact ? 'bottom' : undefined, seq: aiNotice, text: aiNotice, tone: 'warning', onDone: function () { setAiNotice(null) } }) : null,
-    // Branch chip → branch picker.
-    h('button', {
-      key: 'branch',
-      type: 'button',
-      className: 'dshgit-chip dshgit-chipaction',
-      'data-chip': 'branch',
-      'data-push-pending': ahead > 0,
-      title: repo.root + '\n' + branchLabel + (ahead > 0 ? '\n' + t('state.readyPush', { count: ahead }) : ''),
-      'aria-haspopup': 'dialog',
-      'aria-expanded': popover === 'branch',
-      onClick: function (event) { openPopover('branch', event) },
-    }, [
-      busy && (busyMethod === 'checkout' || busyMethod === 'createBranch') ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true, style: { width: '12px', height: '12px', boxSizing: 'border-box', flex: 'none' } }) : h(IconBranch, { key: 'i', size: 12 }),
-      h('span', { key: 'n', className: 'dshgit-chipname' }, branchLabel),
-    ]),
-
-    // One stable entry for reviewing, staging and committing changes.
-    h('button', {
-      key: 'changes',
-      type: 'button',
-      className: 'dshgit-chip dshgit-chipaction' + (changeCount > 0 ? ' dshgit-chipdirty' : ' dshgit-chipmuted'),
-      'data-chip': 'changes',
-      title: changeCount === 0 ? t('chips.clean') : t('chips.changes', { count: changeCount }),
-      'aria-haspopup': 'dialog',
-      'aria-expanded': popover === 'commit',
-      onClick: function (event) { openPopover('commit', event) },
-    }, [
-      busy && !syncBusy && busyMethod !== 'checkout' && busyMethod !== 'createBranch' && busyMethod !== 'merge' && popover !== 'commit' ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true, style: { width: '12px', height: '12px', flex: 'none' } }) : h(IconChanges, { key: 'i', size: 12 }),
-      h('span', { key: 'n' }, String(changeCount)),
-    ]),
 
     // Keep recovery visible while a Git operation is unfinished.
     operation !== null ? h('button', {
@@ -1157,23 +1131,41 @@ function GitStatusChips(props) {
       onClick: function () { requestDetails(false); setOpOpen(true); refresh({ force: true }) },
     }, t('next.resolve')) : null,
 
-    // The primary remote action describes the cached tracking state. Alternate
-    // commands stay available through the adjacent chevron in every state.
+    // 合并入口（ZCodeOnline 式单图标按钮）：有改动 → 改动评审（图标+计数徽标）；
+    // 无改动 → 按跟踪状态 fetch/pull/publish/push/diverged/retry 自适应。
+    // 分支切换与全部备选命令收进右侧 chevron 菜单。
     h('button', {
       key: 'next', type: 'button',
-      className: 'dshgit-chip dshgit-chipaction dshgit-chipnext dshgit-next-' + nextAction.tone,
+      className: 'dshgit-chip dshgit-chipaction dshgit-chipnext' + (changesFirst ? ' dshgit-chipdirty' : ' dshgit-next-' + nextAction.tone),
       'data-chip': 'next',
-      'data-next': nextAction.id,
-      'data-push-pending': nextAction.id === 'push' && ahead > 0,
-      title: nextAction.hint + (upstream ? '\n' + t('sync.target', { target: upstream }) : '') + (autoFetchStatus?.error ? '\n' + t('sync.autoFetchFailed', { message: autoFetchStatus.error }) : '') + '\n' + syncShortcutKeys().join(''),
-      style: nextAction.id === 'fetch' && autoFetchStatus?.error ? { color: 'var(--dshgit-warning-text)' } : undefined,
-      'aria-busy': syncBusy || retryBusy,
-      'aria-label': (syncBusy ? t(busyMethod === 'push' ? 'sync.pushing' : busyMethod === 'pull' ? 'sync.pulling' : 'sync.fetching') : nextAction.label) + (nextAction.counts ? ' ' + nextAction.counts : ''),
-      disabled: busy || retryBusy || nextAction.disabled || operation !== null,
-      onClick: runNext,
+      'data-next': changesFirst ? 'changes' : nextAction.id,
+      'data-changes': String(changeCount),
+      'data-push-pending': !changesFirst && nextAction.id === 'push' && ahead > 0,
+      title: changesFirst
+        ? branchLabel + '\n' + t('chips.changes', { count: changeCount }) + (ahead > 0 ? '\n' + t('state.readyPush', { count: ahead }) : '')
+        : branchLabel + '\n' + nextAction.hint + (upstream ? '\n' + t('sync.target', { target: upstream }) : '') + (autoFetchStatus?.error ? '\n' + t('sync.autoFetchFailed', { message: autoFetchStatus.error }) : '') + '\n' + syncShortcutKeys().join(''),
+      style: !changesFirst && nextAction.id === 'fetch' && autoFetchStatus?.error ? { color: 'var(--dshgit-warning-text)' } : undefined,
+      'aria-busy': changesFirst
+        ? busy && !syncBusy && busyMethod !== 'checkout' && busyMethod !== 'createBranch' && busyMethod !== 'merge' && popover !== 'commit'
+        : syncBusy || retryBusy,
+      'aria-haspopup': changesFirst ? 'dialog' : undefined,
+      'aria-expanded': changesFirst ? popover === 'commit' : undefined,
+      'aria-label': changesFirst
+        ? t('chips.changes', { count: changeCount })
+        : (syncBusy ? t(busyMethod === 'push' ? 'sync.pushing' : busyMethod === 'pull' ? 'sync.pulling' : 'sync.fetching') : nextAction.label) + (nextAction.counts ? ' ' + nextAction.counts : ''),
+      disabled: changesFirst ? undefined : (busy || retryBusy || nextAction.disabled || operation !== null),
+      onClick: changesFirst
+        ? function (event) { openPopover('commit', event) }
+        : runNext,
     }, [
-      nextIcon,
-      nextAction.counts ? h('span', { key: 'c', className: 'dshgit-chipcounts', title: nextAction.counts }, nextAction.counts) : null,
+      changesFirst
+        ? (busy && !syncBusy && busyMethod !== 'checkout' && busyMethod !== 'createBranch' && busyMethod !== 'merge' && popover !== 'commit'
+            ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true, style: { width: '12px', height: '12px', flex: 'none' } })
+            : h(IconChanges, { key: 'i', size: 12 }))
+        : nextIcon,
+      changesFirst
+        ? h('span', { key: 'c', className: 'dshgit-chipcounts' }, String(changeCount))
+        : (nextAction.counts ? h('span', { key: 'c', className: 'dshgit-chipcounts', title: nextAction.counts }, nextAction.counts) : null),
     ]),
     h('button', {
       key: 'sync-menu', type: 'button',
@@ -1275,6 +1267,13 @@ function GitStatusChips(props) {
           onClose: closePopover,
         }, h('div', { className: 'dshgit-picker' }, [
           h('div', { key: 'list', className: 'dshgit-picklist' }, [
+            // 分支切换随 branch chip 一并收进本菜单：chip 合并后这是标题栏唯一的入口。
+            h('button', {
+              key: 'branch', type: 'button', className: 'dshgit-pickrow',
+              'data-sync': 'branch',
+              onClick: function (event) { openPopover('branch', event) },
+            }, t('action.switchBranch') + (branchLabel ? ' · ' + branchLabel : '')),
+            h('div', { key: 'sep0', className: 'dshgit-menusep' }),
             h('button', {
               key: 'fetch', type: 'button', className: 'dshgit-pickrow',
               'data-sync': 'fetch',
