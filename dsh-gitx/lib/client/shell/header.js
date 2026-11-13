@@ -1089,14 +1089,10 @@ function GitStatusChips(props) {
     : nextAction.id === 'retry' ? h(IconRefresh, { key: 'i', size: 14 })
     : h(IconBranchSync, { key: 'i', kind: 'fetch', size: 14 })
 
-  // ⌘⇧S 桥登记：每次渲染刷新闭包（busy/nextAction 变化即生效），卸载即清空。
-  React.useEffect(function () {
-    syncCommandBridge.run = function () {
-      if (busy || retryBusy || nextAction.disabled || operation !== null) return false
-      runNext()
-    }
-    return function () { syncCommandBridge.run = null }
-  })
+  // ⌘⇧S 桥登记：渲染体普通赋值（非 useEffect），hook 数与上游严格一致。
+  // 页面里可能同时存在新旧两份模块副本（合并 bundle 缓存 + 独立 rev），任何 hook 数差都会让
+  // 同 fiber 混挂时抛 React #310——这是桌面端 chips 全灭的根因，此处永不再加 hook。
+  syncCommandBridge.run = (syncBusy || retryBusy || nextAction.disabled || operation !== null) ? null : runNext
 
   return h(Fragment, null, [
     aiNotice ? h(Toast, { key: 'ai-notice', placement: props.compact ? 'bottom' : undefined, seq: aiNotice, text: aiNotice, tone: 'warning', onDone: function () { setAiNotice(null) } }) : null,
