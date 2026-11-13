@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-relay",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Remote control for DeepSeek Harness: reach any host by its 8-digit code through a relay origin such as dsh.skillpie.cn.",
   "type": "module",
   "license": "MIT",

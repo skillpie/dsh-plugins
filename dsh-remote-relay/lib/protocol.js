@@ -24,7 +24,10 @@ import { randomInt, randomUUID, createHash } from 'node:crypto'
 export const PROTOCOL_VERSION = 1
 
 /** Exact upgrade path where hosts dial the relay. */
-export const HOST_UPGRADE_PATH = '/dsh-remote-relay/host'
+// Wire-compat: this constant is the host→relay upgrade path on the wire.
+// 已部署的中继服务器（旧版 @skillpie/dsh-remote）只接受 /dsh-remote/host，
+// 改包名不改这条管道协议——两端都用同一个常量，保持旧值即可兼容新旧部署。
+export const HOST_UPGRADE_PATH = '/dsh-remote/host'
 
 /** Owner panel JSON API, same-origin and behind the web GUI's session auth. */
 export const OWNER_API_PATH = '/dsh-remote-relay/api'
