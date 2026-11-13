@@ -1193,7 +1193,7 @@ function GitStatusChips(props) {
       'aria-expanded': popover === 'sync',
       disabled: busy || operation !== null,
       onClick: function (event) { openPopover('sync', event) },
-    }, busy || retryBusy ? h(Spinner, { className: 'dshgit-spinner', 'aria-hidden': true }) : h(IconChevron, { size: 9 })),
+    }, h(IconChevron, { size: 9 })),
 
     popover === 'branch'
       ? h(ChipPopover, {
