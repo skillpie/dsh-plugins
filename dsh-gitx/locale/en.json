@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Git WorkBench",
+    "description": "Git workbench beside the sidebar and session header: stage and commit, branch and rebase, resolve conflicts, blame history, one-keystroke sync with Cmd+Shift+S."
+  }
+}

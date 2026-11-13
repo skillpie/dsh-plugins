@@ -9,15 +9,18 @@
       "default": "./lib/index.js"
     },
     "./client": "./dist/client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/zh.json": "./locale/zh.json",
+    "./locale/en.json": "./locale/en.json"
   },
   "files": [
-    "lib",
-    "dist/client.js",
-    "cordis.patch.yml",
+    "!docs/internal",
     "README.md",
+    "cordis.patch.yml",
+    "dist/client.js",
     "docs",
-    "!docs/internal"
+    "lib",
+    "locale"
   ],
   "keywords": [
     "dsh",
