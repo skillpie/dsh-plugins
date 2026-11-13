@@ -588,14 +588,8 @@ function CommitComposer(props) {
     h('div', { key: 'row', className: 'dshgit-commit-meta' }, [
       h(CommitScopePreview, Object.assign({}, props, { key: 'scope-preview', disabled: blocked || commitCount === 0 })),
       h('span', { key: 'info', className: 'dshgit-muted', title: lists ? t('cl.fullFile') : undefined }, t(lists ? 'cl.selected' : 'window.staged', { count: lists ? commitCount : stagedCount })),
-      // 「提交」平铺在主按钮左侧,智慧作用域标签(提交/暂存已暂存/暂存并提交全部)落在它身上;
-      // publish/canSync 态主按钮让位给推送/同步,提交入口一并隐藏(与旧下拉语义一致)。
-      publish || canSync ? null : h('button', {
-        key: 'commit-only', type: 'button', className: 'dshgit-btn', 'data-commit-only': 'true',
-        disabled: blocked || commitCount === 0,
-        title: t(lists ? 'cl.fullFile' : stagedCount > 0 ? 'commit.stagedHint' : 'commit.smartHint'),
-        onClick: submitPrimary,
-      }, commitLabel),
+      // 弹窗空间有限:提交按钮收回主按钮下拉(首项=智慧作用域标签),
+      // 与 publish/canSync 态的隐藏语义保持一致(此时 options 整体为空)。
       h(CommitActions, {
         key: 'commit', t: t, shortcut: !publish && !canSync,
         // The spinner and the progress label are two halves of one fact — that
@@ -608,6 +602,9 @@ function CommitComposer(props) {
         disabled: blocked || (publish || canSync ? false : commitCount === 0 || props.status?.branch?.detached === true),
         onPrimary: publish || canSync ? sync : function () { submit('push') },
         options: publish || canSync ? [] : [
+          { id: 'commitOnly', label: commitLabel,
+            disabled: blocked || commitCount === 0,
+            run: function () { submit('commit') } },
           { id: 'sync', label: t('action.commitAndSync'),
             disabled: blocked || commitCount === 0 || !upstream,
             run: function () { submit('sync') } },

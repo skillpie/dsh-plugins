@@ -2727,15 +2727,21 @@ console.log('\n--- full workbench commit button has a separate options arrow ---
   arrow.props.onClick({ stopPropagation() {} })
   tree = await flush(GitApp, { connection: mounted.rpc, t })
   check('the workbench menu offers remote follow-ups without amend',
-    // The plain Commit moved out of the menu into the flat button on the left;
-    // what remains is the sync follow-up plus the sticky flags. `amend` stays
-    // out on purpose: it rewrites the previous commit, so it belongs to the
-    // history surface where its effect is visible.
-    findAll(tree, 'button').filter((node) => node.props.role === 'menuitem')
-      .map(textOf).join(',') ===
-      [t('action.commitAndSync'), t('commit.signoff'), t('commit.noVerify')].join(',') &&
+    // The plain Commit (smart-scope label) leads the popover menu; the sync
+    // follow-up and the sticky flags follow. `amend` stays out on purpose: it
+    // rewrites the previous commit, so it belongs to the history surface
+    // where its effect is visible.
+    (function () {
+      const menuTexts = findAll(tree, 'button').filter((node) => node.props.role === 'menuitem').map(textOf)
+      // The plain-Commit item carries the smart-scope label (提交 / 暂存并提交全部).
+      return menuTexts.length === 4 &&
+        [t('action.commit'), t('action.commitStaged'), t('commit.all')].includes(menuTexts[0]) &&
+        menuTexts.slice(1).join(',') ===
+          [t('action.commitAndSync'), t('commit.signoff'), t('commit.noVerify')].join(',')
+    })() &&
     !findAll(tree, 'button').filter((node) => node.props.role === 'menuitem')
-      .some((node) => /amend/i.test(textOf(node))))
+      .some((node) => /amend/i.test(textOf(node))),
+    JSON.stringify(findAll(tree, 'button').filter((node) => node.props.role === 'menuitem').map(textOf)))
 }
 
 console.log('\n--- undo commit asks, then runs with confirmation ---')
@@ -5778,9 +5784,12 @@ console.log('\n--- commit flags, remote removal and history filters are reachabl
   findAll(tree, 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
     .props.onChange({ currentTarget: { value: 'feat: flag the commit' } })
   tree = await flush(GitApp, { connection: mounted.rpc, t })
-  // The plain Commit is the flat button beside the primary now (`data-commit-only`),
-  // not a menu item any more.
-  findAll(tree, 'button').find((node) => node.props['data-commit-only'] === 'true').props.onClick()
+  // The popover composer keeps the plain Commit inside the dropdown (first
+  // item, smart-scope label); the flat `data-commit-only` button survives only
+  // in the full-window composer.
+  tree = await openCommitMenu(tree)
+  const plainCommit = menuItem(tree, t('action.commit')) || menuItem(tree, t('commit.all'))
+  plainCommit.props.onClick()
   tree = await flush(GitApp, { connection: mounted.rpc, t })
   const flagged = mounted.rpc.calls.filter((call) => call.method === 'write.commit').pop()
   check('the commit carries signoff once it is armed', flagged?.payload?.signoff === true, JSON.stringify(flagged?.payload))
