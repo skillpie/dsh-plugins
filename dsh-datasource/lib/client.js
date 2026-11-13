@@ -141,8 +141,8 @@ window.__ModuleLoader__.load({
       exportCsv: "导出 CSV"
     };
     var en = {
-      title: "Database",
-      sidebarLabel: "Database",
+      title: "DataSource",
+      sidebarLabel: "DataSource",
       subtitle: "Connect, browse and query databases — or ask the assistant to work with the data in chat",
       connections: "Connections",
       newConnection: "New connection",

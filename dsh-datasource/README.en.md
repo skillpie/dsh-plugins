@@ -13,14 +13,14 @@ Connect to databases in [DeepSeek Harness](https://github.com/deepseek-ai/deepse
 
 ### Browse and manage databases
 
-- **Database panel in the sidebar**: browse connections, schemas and paginated data, and run SQL.
+- **DataSource panel in the sidebar**: browse connections, schemas and paginated data, and run SQL.
 - **SQLite / PostgreSQL / MySQL**, with SQLite requiring no extra driver.
 
 ### Work in the conversation
 
 - **Multi-select picker in the composer**: choose the databases this conversation may use.
 - **Talk to the data**: four agent tools for querying, creating tables and writing data.
-- **`/db` command**: type `/`, pick **Database** from the command list, and open the database panel.
+- **`/db` command**: type `/`, pick **DataSource** from the command list, and open the database panel.
 - **Query history**: the global database panel groups history by conversation, and clicking a group opens that conversation.
 
 ## Install
@@ -44,7 +44,7 @@ git clone https://github.com/skillpie/dsh-plugins.git
 
 ## Getting started
 
-1. Open **Database** in the sidebar and create a connection, or use the built-in demo database.
+1. Open **DataSource** in the sidebar and create a connection, or use the built-in demo database.
 2. Select the databases for the conversation, then ask the assistant to work with them:
 
 > Show me the 10 most recent orders in the demo database, sorted by amount.
