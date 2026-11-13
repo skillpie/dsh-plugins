@@ -342,9 +342,10 @@ function IconSettings(props) {
 /** Refresh: a circular arrow, for the title bar's reload control. */
 function IconRefresh(props) {
   return svg({ size: props.size === undefined ? 15 : props.size, className: props.className }, [
-    h('polyline', { key: 'a', points: '15.33 2.67 15.33 6.67 11.33 6.67', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
-    h('polyline', { key: 'b', points: '0.67 13.33 0.67 9.33 4.67 9.33', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
-    h('path', { key: 'c', d: 'M2.34 6a6 6 0 0 1 9.9-2.24l3.09 2.91M0.67 9.33l3.1 2.91A6 6 0 0 0 13.66 10', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('path', { key: 'a', d: 'M2 8a6 6 0 0 1 6-6 6.5 6.5 0 0 1 4.49 1.83L14 5.33', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('polyline', { key: 'b', points: '14 2 14 5.33 10.67 5.33', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('path', { key: 'c', d: 'M14 8a6 6 0 0 1-6 6 6.5 6.5 0 0 1-4.49-1.83L2 10.67', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('polyline', { key: 'd', points: '2 14 2 10.67 5.33 10.67', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
   ])
 }
 
