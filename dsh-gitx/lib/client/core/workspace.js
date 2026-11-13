@@ -11,6 +11,24 @@ export function workspaceDirectory(workspaces, sessions, sessionId) {
   return workspace?.path || sessions?.byId?.[sessionId]?.cwd || ''
 }
 
+/**
+ * Invisible navigation consumer for surfaces without the session header (the
+ * new-chat composer). Resolved workspace switches only settle once the target
+ * session's surface acknowledges them — without this, the next header that
+ * mounts would wait on a navigation that already finished.
+ */
+export function WorkspaceNavigationAck(props) {
+  var directory = workspaceDirectory(
+    props.useWorkspaces ? props.useWorkspaces(function (value) { return value }) : null,
+    props.useSessions ? props.useSessions(function (value) { return value }) : null,
+    props.sessionId,
+  )
+  React.useEffect(function () {
+    if (directory) acknowledgeWorkspaceNavigation(props.sessionId)
+  }, [props.sessionId, directory])
+  return null
+}
+
 /** The resident session header shares this context adapter. */
 export function WorkspaceGitAction(props) {
   var workspaces = props.useWorkspaces ? props.useWorkspaces(function (value) { return value }) : null

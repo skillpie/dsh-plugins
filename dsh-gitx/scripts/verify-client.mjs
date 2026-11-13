@@ -689,8 +689,8 @@ check('the button and the window use distinct ids',
 check('the button label is localized through a thunk',
   typeof footerAction[0]?.declaration.label === 'function',
   typeof footerAction[0]?.declaration.label)
-check('the three registrations target distinct slots',
-  new Set(client.registrations.map((entry) => entry.declaration.name)).size === 3,
+check('the four registrations target distinct slots',
+  new Set(client.registrations.map((entry) => entry.declaration.name)).size === 4,
   client.registrations.map((entry) => entry.declaration.name).join(', '))
 
 /* ------------------------------------------------------------------ *
@@ -1517,7 +1517,7 @@ console.log('\n--- the preview degrades to plain text without the platform highl
   const bareStub = createRpcStub(healthyHandlers())
   const bareContext = createClientContext({ connection: bareStub })
   bare.apply(bareContext.ctx)
-  check('it still registers its slots', bareContext.registrations.length === 3,
+  check('it still registers its slots', bareContext.registrations.length === 4,
     String(bareContext.registrations.length))
 }
 

@@ -5,7 +5,7 @@ import { GitWindow } from './client/shell/window.js'
 import { SettingsTab } from './client/features/settings/view.js'
 import { callRpc } from './client/core/rpc.js'
 import { registerCloneWorkspace } from './client/features/clone/integration.js'
-import { WorkspaceGitAction } from './client/core/workspace.js'
+import { WorkspaceGitAction, WorkspaceNavigationAck } from './client/core/workspace.js'
 import { observeWorkspaceNavigation } from './client/core/workspace-navigation.js'
 import { installSidebarWorkspaceGit } from './client/core/sidebar-workspaces.js'
 import { openGitWindow } from './client/core/state.js'
@@ -97,6 +97,18 @@ function apply(ctx) {
       )
     })
 
+
+    // Invisible ack consumer: resolved workspace switches settle only when the
+    // target session's surface acknowledges them. The new-chat composer surface
+    // has no session header, so it carries this silent watcher instead.
+    scope.slots.inject('conversation.input.left', function () {
+      return scope.slots.register(
+        { name: 'conversation.input.left', id: 'git-blank-ack', order: 40, locale: NS },
+        function (seatProps) {
+          return h(WorkspaceNavigationAck, seatProps)
+        },
+      )
+    })
 
     scope.slots.inject('shell.overlay', function () {
       return scope.slots.register(
