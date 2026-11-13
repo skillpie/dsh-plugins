@@ -942,7 +942,7 @@ var STYLES = [
   // a plugin bolted on.
   '.dshgit-chip{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 7px;border-radius:6px;border:0;background:transparent;color:var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));font-size:var(--dshgit-font-small);font-family:inherit;line-height:1;white-space:nowrap;max-width:180px}',
   '.dshgit-chipaction{cursor:pointer}',
-  '.dshgit-chipaction:hover,.dshgit-chipaction[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-hover, rgba(128,128,128,.14));color:var(--dsw-alias-label-primary)}',
+  '.dshgit-chipaction:hover,.dshgit-chipaction[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-hover, rgba(128,128,128,.16));color:var(--dsw-alias-label-primary)}',
   '.dshgit-chipname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;line-height:1.5}',
   // A dirty working tree is the one chip state worth colouring: it is the
   // fact that changes what the user should do next.
@@ -989,7 +989,10 @@ var STYLES = [
   // cluster, so when the session header ran out of room there was nothing
   // left to give and the chips painted on top of the Host's own controls.
   // The chevron keeps a fixed 22px because it is an icon, not a label.
-  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chip[data-chip="next"] .dshgit-chipcounts{font-variant-numeric:tabular-nums}.dshgit-chip .dshgit-spin{animation:dshgit-spin .9s linear infinite;transform-origin:center}',
+  // 同步钮是纯图标：与右侧打开 Git 窗口的 dshgit-iconbtn 同尺寸（28×28、
+  // 5px 圆角），悬停背景才是正方形，两颗按钮看起来是一排同规格控件。
+  // min-width 而非 width：带 ↑↓ 计数时允许自然加宽，不裁字。
+  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chip[data-chip="next"]{height:28px;min-width:28px;padding:0 2px;border-radius:5px;justify-content:center}.dshgit-chip[data-chip="next"] .dshgit-chipcounts{font-variant-numeric:tabular-nums}.dshgit-chip .dshgit-spin{animation:dshgit-spin .9s linear infinite;transform-origin:center}',
   // 悬停键提示（对齐 termbar / 原生 Tooltip.module.css 变体）：深底白字 + 键帽。
   '.dshgit-tip{position:absolute;top:calc(100% + 8px);right:0;display:inline-flex;align-items:center;gap:8px;width:max-content;box-sizing:border-box;padding:3px 5px 3px 7px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:var(--dshgit-font-body);line-height:20px;white-space:pre-line;overflow-wrap:anywhere;text-align:left;opacity:0;pointer-events:none;transition:opacity .15s ease .4s;z-index:100}',
   '.dshgit-chip{position:relative}.dshgit-chip:hover .dshgit-tip,.dshgit-chip:focus-visible .dshgit-tip,.dshgit-picksyncbtn:hover .dshgit-tip,.dshgit-picksyncbtn:focus-visible .dshgit-tip{opacity:1}',
