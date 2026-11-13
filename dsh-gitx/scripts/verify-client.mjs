@@ -437,10 +437,11 @@ check('the commit options are offered from the split button menu',
   check('a header chip may shrink instead of overflowing',
     /\.dshgit-chipcluster>\.dshgit-chip\[data-chip\]\{[^}]*flex:0 1 auto[^}]*min-width:0/.test(css),
     /\.dshgit-chipcluster>\.dshgit-chip\[data-chip\]\{[^}]*\}/.exec(css)?.[0] ?? 'rule missing')
-  // The icon chevron is a fixed cell: it must not collapse to a sliver.
-  check('the sync chevron keeps its fixed width',
-    /\.dshgit-chipcluster>\.dshgit-chip\[data-chip="sync-menu"\]\{[^}]*flex:0 0 22px/.test(css),
-    /\.dshgit-chipcluster>\.dshgit-chip\[data-chip="sync-menu"\]\{[^}]*\}/.exec(css)?.[0] ?? 'rule missing')
+  // The chevron menu is gone; the alternate sync commands live on the branch
+  // picker's create row as icon buttons.
+  check('the branch picker mounts the sync quick icons',
+    css.includes('.dshgit-picksyncbtn') && !css.includes('[data-chip="sync-menu"]'),
+    '')
   // The cluster itself reports its width to the Host's flex line.
   check('the chip cluster declares a shrinkable minimum',
     /\.dshgit-chipcluster\{[^}]*min-width:0[^}]*max-width:100%/.test(css),
@@ -483,10 +484,9 @@ check('the commit options are offered from the split button menu',
   check('the narrowest tier yields the chips instead of overlapping',
     tiers.some((tier) => /\.dshgit-chipcluster\{display:none\}/.test(tier.body)),
     tiers.map((tier) => `${tier.width}:${/\.dshgit-chipcluster\{display:none\}/.test(tier.body)}`).join(','))
-  // The merged chip replaced the branch and changes chips entirely; no rule
-  // may keep styling a chip that no longer renders.
-  check('compact placement hides only the sync chevron',
-    css.includes('[data-compact] [data-chip="sync-menu"]{display:none}') &&
+  // The merged chip and the external branch chip both stay visible in compact
+  // placement; nothing hides them.
+  check('compact placement keeps the branch chip and the merged chip visible',
     !css.includes('[data-compact] [data-chip="branch"]{display:none') &&
     !css.includes('[data-compact] [data-chip="next"]{display:none'),
     '')
@@ -1000,23 +1000,20 @@ console.log('\n--- everyday header actions ---')
   let header = await renderChips()
   const chipIds = findAll(header, 'button').map((node) => node.props['data-chip']).filter(Boolean)
   check('the header keeps frequent actions in a stable order',
-    JSON.stringify(chipIds) === JSON.stringify(['branch', 'next', 'sync-menu']),
+    JSON.stringify(chipIds) === JSON.stringify(['branch', 'next']),
     JSON.stringify(chipIds))
   check('uncommitted changes lead the merged entry before any remote verb',
     mergedChip(header)?.props['data-next'] === 'changes')
   header = await renderChips(healthyHandlers({ status: () => ({ ...STATUS, total: 0, files: [] }) }))
   check('a clean tree hands the merged entry back to the tracking state',
     mergedChip(header)?.props['data-next'] === 'diverged')
-  findAll(header, 'button').find((node) => node.props['data-chip'] === 'sync-menu').props.onClick({
-    currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) },
-  })
-  header = await flush(GitApp, { connection: mounted.rpc, t })
-  check('the alternate sync menu is available while branches diverge',
+  header = await openBranchPicker(header)
+  check('the alternate sync commands sit on the branch picker create row',
     ['fetch', 'pull-merge', 'pull-rebase', 'push-lease'].every((id) =>
       findAll(header, 'button').some((node) => node.props['data-sync'] === id)))
   findAll(header, 'button').find((node) => node.props['data-sync'] === 'fetch').props.onClick()
   header = await flush(GitApp, { connection: mounted.rpc, t })
-  check('Fetch is available from the sync menu',
+  check('Fetch is available from the branch picker',
     mounted.rpc.calls.some((call) => call.method === 'write.fetch' && call.payload.prune === true))
 
   header = await renderChips(healthyHandlers({
@@ -4119,8 +4116,9 @@ console.log('\n--- session startup and changes-first workbench loading ---')
   check('session entry yields Git discovery until the browser is idle', !rpc.calls.some(call => ['repos', 'status', 'refs', 'changelists'].includes(call.method)))
   runIdle(); view = await flush(Header, props)
   const heavy = ['status', 'refs', 'branchTracking', 'changelists', 'worktrees', 'contributors']
-  check('idle header startup requests only a status summary and shows its change count', rpc.calls.some(call => call.method === 'statusSummary') &&
-    !rpc.calls.some(call => heavy.includes(call.method)) && textOf(changesChip(view)) === '3')
+  check('idle header startup requests only a status summary and marks the branch label dirty', rpc.calls.some(call => call.method === 'statusSummary') &&
+    !rpc.calls.some(call => heavy.includes(call.method)) &&
+    textOf(findAll(view, 'button').find((node) => node.props['data-chip'] === 'branch')) === 'main*')
   await new Promise(resolve => setTimeout(resolve, 450))
   view = await flush(Header, props)
   check('header background polling also stays lightweight before interaction', !rpc.calls.some(call => heavy.includes(call.method)))

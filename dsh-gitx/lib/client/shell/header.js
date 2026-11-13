@@ -17,7 +17,7 @@ import { readWorkbenchStorage, withCommitPrefs, writeWorkbenchStorage } from '..
 import { branchPushTarget, workbenchUpstream } from '../features/branches/model.js'
 import { workbenchBranchItems } from '../features/branches/actions.js'
 import { isStaged } from '../core/files.js'
-import { IconBranch, IconChevron, IconRefresh } from '../ui/icons.js'
+import { IconBranch, IconBranchSync, IconFetch, IconRefresh, IconUndo } from '../ui/icons.js'
 import { BranchPicker } from '../features/branches/picker.js'
 import { popoverPosition } from '../ui/popover-position.js'
 import { requestCommitMessage } from '../features/changes/ai.js'
@@ -1118,6 +1118,17 @@ function GitStatusChips(props) {
   // 合并优先级（用户指定）：有改动 → 改动评审优先于一切同步动作；无改动 → 同步状态机。
   // ⌘⇧S 桥不受此影响（恒为同步语义，改动未提交时也能一键推送）。
   var changesFirst = changeCount > 0
+  // 备选同步命令改为分支选择器「新建分支」行右侧的图标按钮（下拉入口已去掉）。
+  var syncActions = [
+    { id: 'fetch', label: t('sync.fetch'), icon: function () { return h(IconFetch, { size: 14 }) },
+      disabled: busy || retryBusy || operation !== null, run: function () { closePopover(); write('fetch', { prune: true }) } },
+    { id: 'pull-merge', label: t('sync.pullMerge'), icon: function () { return h(IconBranchSync, { size: 14 }) },
+      disabled: busy || retryBusy || operation !== null, run: function () { closePopover(); write('pull', {}) } },
+    { id: 'pull-rebase', label: t('sync.pullRebase'), icon: function () { return h(IconUndo, { size: 14 }) },
+      disabled: busy || retryBusy || operation !== null, run: function () { closePopover(); write('pull', { rebase: true }) } },
+    { id: 'push-lease', label: t('sync.pushLease'), icon: function () { return h(IconBranchSync, { size: 14, kind: 'push' }) },
+      disabled: busy || retryBusy || operation !== null, run: function () { closePopover(); write('push', { forceWithLease: true }) } },
+  ]
 
   return h(Fragment, null, [
     aiNotice ? h(Toast, { key: 'ai-notice', placement: props.compact ? 'bottom' : undefined, seq: aiNotice, text: aiNotice, tone: 'warning', onDone: function () { setAiNotice(null) } }) : null,
@@ -1142,15 +1153,15 @@ function GitStatusChips(props) {
       onClick: function (event) { openPopover('branch', event) },
     }, [
       busy && (busyMethod === 'checkout' || busyMethod === 'createBranch') ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true, style: { width: '12px', height: '12px', boxSizing: 'border-box', flex: 'none' } }) : h(IconBranch, { key: 'i', size: 12 }),
-      h('span', { key: 'n', className: 'dshgit-chipname' }, branchLabel),
+      h('span', { key: 'n', className: 'dshgit-chipname', style: changeCount > 0 ? { fontWeight: 600 } : undefined }, branchLabel + (changeCount > 0 ? '*' : '')),
     ]),
 
-    // 合并入口（ZCodeOnline 式单图标按钮）：有改动 → 改动评审（图标+计数徽标）；
+    // 合并入口（ZCodeOnline 式单图标按钮）：有改动 → 图标转绿（不显数字）并打开改动评审；
     // 无改动 → 按跟踪状态 fetch/pull/publish/push/diverged/retry 自适应。
     // 备选命令仍在右侧 chevron 菜单。
     h('button', {
       key: 'next', type: 'button',
-      className: 'dshgit-chip dshgit-chipaction dshgit-chipnext' + (changesFirst ? ' dshgit-chipdirty' : ' dshgit-next-' + nextAction.tone),
+      className: 'dshgit-chip dshgit-chipaction dshgit-chipnext' + (changesFirst ? '' : ' dshgit-next-' + nextAction.tone),
       'data-chip': 'next',
       'data-next': changesFirst ? 'changes' : nextAction.id,
       'data-changes': String(changeCount),
@@ -1179,22 +1190,8 @@ function GitStatusChips(props) {
             'aria-hidden': true,
           })
         : nextIcon,
-      changesFirst
-        ? h('span', { key: 'c', className: 'dshgit-chipcounts' }, String(changeCount))
-        : (nextAction.counts ? h('span', { key: 'c', className: 'dshgit-chipcounts', title: nextAction.counts }, nextAction.counts) : null),
+      !changesFirst && nextAction.counts ? h('span', { key: 'c', className: 'dshgit-chipcounts', title: nextAction.counts }, nextAction.counts) : null,
     ]),
-    h('button', {
-      key: 'sync-menu', type: 'button',
-      className: 'dshgit-chip dshgit-chipaction dshgit-chipmore',
-      'data-chip': 'sync-menu',
-      title: t('next.more'),
-      'aria-label': t('next.more'),
-      'aria-haspopup': 'dialog',
-      'aria-expanded': popover === 'sync',
-      disabled: busy || operation !== null,
-      onClick: function (event) { openPopover('sync', event) },
-    }, h(IconChevron, { size: 9 })),
-
     popover === 'branch'
       ? h(ChipPopover, {
           key: 'branchpop',
@@ -1222,6 +1219,7 @@ function GitStatusChips(props) {
           onRemote: chooseRemoteBranch,
           onTag: function (tag) { openHeaderWorkbench('createBranch', tag) },
           onNew: openNewBranchDialog,
+          syncActions: syncActions,
           onMerge: function (source, ref) { closePopover(); setMergePreview(null); setMergeError(null); mergeTargetState[1](ref || source); setMergeSource(source) },
           mergeDisabled: operation !== null || branchName === null || detached,
           branchItems: headerBranchItems,
@@ -1269,44 +1267,6 @@ function GitStatusChips(props) {
           onOpenNestedRepository: function (file) { openNestedRepository(file, props.sessionId, function () { closePopover(); setViewerPath(null) }) },
           prompt: function (spec) { setPromptRequest({ title: spec.title, fields: spec.fields, compact: spec.compact, submit: spec.onSubmit, awaitSubmit: true }) },
         }))
-      : null,
-
-    // Alternate sync forms are available from the chevron in every state.
-    popover === 'sync'
-      ? h(ChipPopover, {
-          key: 'syncpop',
-          opener: openerRef.current,
-          kind: 'sync',
-          title: t('next.more'),
-          anchor: anchor,
-          width: 340,
-          onClose: closePopover,
-        }, h('div', { className: 'dshgit-picker' }, [
-          h('div', { key: 'list', className: 'dshgit-picklist' }, [
-            h('button', {
-              key: 'fetch', type: 'button', className: 'dshgit-pickrow',
-              'data-sync': 'fetch',
-              onClick: function () { closePopover(); write('fetch', { prune: true }) },
-            }, t('sync.fetch')),
-            h('div', { key: 'sep1', className: 'dshgit-menusep' }),
-            h('button', {
-              key: 'pullmerge', type: 'button', className: 'dshgit-pickrow',
-              'data-sync': 'pull-merge',
-              onClick: function () { closePopover(); write('pull', {}) },
-            }, t('sync.pullMerge')),
-            h('button', {
-              key: 'pullrebase', type: 'button', className: 'dshgit-pickrow',
-              'data-sync': 'pull-rebase',
-              onClick: function () { closePopover(); write('pull', { rebase: true }) },
-            }, t('sync.pullRebase')),
-            h('div', { key: 'sep2', className: 'dshgit-menusep' }),
-            h('button', {
-              key: 'pushlease', type: 'button', className: 'dshgit-pickrow dshgit-pickdanger',
-              'data-sync': 'push-lease',
-              onClick: function () { closePopover(); write('push', { forceWithLease: true }) },
-            }, t('sync.pushLease')),
-          ]),
-        ]))
       : null,
 
     // The in-progress operation, with its way out. This is a panel rather than

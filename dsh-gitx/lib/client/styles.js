@@ -6,7 +6,7 @@ var STYLES = [
   '.dshgit-hero-actions .dshgit-chip[data-chip="branch"]{height:auto;min-height:24px;font-size:var(--dshgit-hero-font-size,var(--dshgit-font-body));font-family:var(--dshgit-hero-font-family,inherit);font-weight:var(--dshgit-hero-font-weight,500);line-height:var(--dshgit-hero-line-height,1.5);letter-spacing:var(--dshgit-hero-letter-spacing,normal)}.dshgit-hero-actions .dshgit-chip[data-chip="branch"] .dshgit-chipname{font-weight:inherit;line-height:inherit;padding-block:2px}',
   '[role="treeitem"][data-row-key^="workspace:"]>:has(>.dshgit-sidebar-workspace-git){gap:12px}[role="treeitem"][data-row-key^="workspace:"]>:has(>.dshgit-sidebar-workspace-git)>*{box-sizing:border-box;flex:0 0 20px;width:20px;height:20px;margin:0;display:inline-flex;align-items:center;justify-content:center}',
   '[data-dshgit-hero-row]{flex-wrap:wrap;justify-content:flex-start;row-gap:6px}.dshgit-hero-actions{display:flex;flex:0 0 auto;align-items:center;justify-content:flex-start;min-width:0;margin-inline:8px 0}.dshgit-hero-actions .dshgit-workspace-actions[data-compact]{max-width:min(280px,60vw)}@media(max-width:480px){.dshgit-hero-actions{margin-inline-start:4px}}',
-  '.dshgit-workspace-actions{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%}.dshgit-workspace-actions[data-compact]{max-width:min(240px,40vw)}.dshgit-workspace-actions[data-compact] .dshgit-chipname{max-width:16ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dshgit-workspace-actions[data-compact] [data-chip="sync-menu"]{display:none}',
+  '.dshgit-workspace-actions{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%}.dshgit-workspace-actions[data-compact]{max-width:min(240px,40vw)}.dshgit-workspace-actions[data-compact] .dshgit-chipname{max-width:16ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
   '.dshgit-conflict-split{height:6px;flex:none;cursor:row-resize;background:var(--dsw-alias-border-l1);touch-action:none}.dshgit-conflict-split:hover,.dshgit-conflict-split:focus-visible{background:var(--dsw-alias-state-business-primary)}.dshgit-conflict-question{white-space:pre-wrap}.dshgit-confirmbar .dshgit-hint{white-space:pre-wrap;max-height:50vh;overflow:auto;overflow-wrap:anywhere}.dshgit-conflict-question>div:not(.dshgit-dialogactions){max-height:50vh;overflow:auto;overflow-wrap:anywhere}',
   '.dshgit-conflict-body{container-type:inline-size}.dshgit-conflict-tabs{display:none;gap:4px;padding:4px 12px;border-bottom:1px solid var(--dsw-alias-border-l1)}.dshgit-conflict-line{display:block;min-width:max-content;min-height:20px}.dshgit-conflict-lineno{display:inline-block;width:40px;padding-right:12px;text-align:right;color:var(--dsw-alias-label-secondary);user-select:none}.dshgit-conflict-line[data-kind="del"]{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 14%,transparent)}.dshgit-conflict-line[data-kind="add"]{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 14%,transparent)}@container(max-width:600px){.dshgit-conflict-tabs{display:flex}.dshgit-conflict-body>.dshgit-conflict-versions{grid-template-columns:minmax(0,1fr)}.dshgit-conflict-versions>section:not([data-active="true"]){display:none}}',
 
@@ -945,8 +945,6 @@ var STYLES = [
   '.dshgit-chipname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;line-height:1.5}',
   // A dirty working tree is the one chip state worth colouring: it is the
   // fact that changes what the user should do next.
-  '.dshgit-chipdirty{color:var(--dsw-alias-label-primary);font-weight:600}',
-  '.dshgit-chipdirty svg{color:var(--dsw-alias-state-warn-primary, currentColor)}',
   '.dshgit-chipmuted{color:var(--dsw-alias-label-tertiary);font-size:var(--dshgit-font-small)}',
   '.dshgit-chipnotice{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--dshgit-font-small);color:var(--dsw-alias-state-error-primary)}',
   // ---- action-outcome banner ----
@@ -990,7 +988,7 @@ var STYLES = [
   // cluster, so when the session header ran out of room there was nothing
   // left to give and the chips painted on top of the Host's own controls.
   // The chevron keeps a fixed 22px because it is an icon, not a label.
-  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chipcluster>.dshgit-chip[data-chip="sync-menu"]{flex:0 0 22px}.dshgit-chip[data-chip="next"] .dshgit-chipcounts{font-variant-numeric:tabular-nums}.dshgit-chip[data-chip="sync-menu"] .dshgit-spinner{width:12px;height:12px;box-sizing:border-box}.dshgit-chip .dshgit-spin{animation:dshgit-spin .9s linear infinite;transform-origin:center}',
+  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chip[data-chip="next"] .dshgit-chipcounts{font-variant-numeric:tabular-nums}.dshgit-chip .dshgit-spin{animation:dshgit-spin .9s linear infinite;transform-origin:center}',
   '.dshgit-next-ahead,.dshgit-next-behind{color:var(--dsw-alias-brand-primary)}',
   '.dshgit-next-ahead:hover:not(:disabled),.dshgit-next-behind:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent)}',
   // A blocked state (conflicts, diverged) must not look like an ordinary
@@ -1000,7 +998,6 @@ var STYLES = [
   '.dshgit-next-warn:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-state-warn-primary, var(--dsw-alias-state-error-primary)) 14%, transparent)}',
   // In sync is a status. The adjacent chevron owns the alternate actions.
   '.dshgit-next-clean{color:var(--dsw-alias-label-tertiary)}',
-  '.dshgit-chipmore{padding:0 4px;min-width:20px;justify-content:center}',
   // ---- header density tiers ----
   //
   // How much room the header has is a property of the SESSION COLUMN, not of
@@ -1106,7 +1103,7 @@ var STYLES = [
   '.dshgit-pickrowtop[data-tracking]{grid-template-columns:16px minmax(0,1fr) max-content}.dshgit-picker-tracking{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:var(--dshgit-font-small)}.dshgit-picker-ahead{color:var(--dshgit-success-text)}.dshgit-picker-behind{color:var(--dshgit-warning-text)}',
   '.dshgit-pickerinput{flex:none;margin:8px;padding:7px 9px;border-radius:5px;border:1px solid var(--dsw-alias-border-l1);background:transparent;color:var(--dsw-alias-label-primary);font-size:var(--dshgit-font-body);font-family:inherit}',
   '.dshgit-pickerinput:focus{outline:none;border-color:var(--dsw-alias-brand-primary, var(--dsw-alias-border-l1))}',
-  '.dshgit-pickactions{flex:none;border-bottom:1px solid var(--dsw-alias-border-l1)}',
+  '.dshgit-pickactions{flex:none;border-bottom:1px solid var(--dsw-alias-border-l1);display:flex;align-items:center;gap:4px;padding-right:6px}.dshgit-pickactions .dshgit-pickrow{flex:1;min-width:0}.dshgit-picksync{display:inline-flex;align-items:center;gap:2px;flex:none;margin-left:auto}.dshgit-picksyncbtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}.dshgit-picksyncbtn:hover:not(:disabled),.dshgit-picksyncbtn:focus-visible{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2)}.dshgit-picksyncbtn:disabled{opacity:.4;cursor:default}',
   '.dshgit-picklist{flex:1;min-height:0;overflow-y:auto;padding:2px 0 6px}',
   // Flat sibling group headings scroll with their rows. Pinning every heading
   // at top:0 stacks them on top of each other as the list scrolls.

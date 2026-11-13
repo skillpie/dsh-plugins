@@ -342,8 +342,9 @@ function IconSettings(props) {
 /** Refresh: a circular arrow, for the title bar's reload control. */
 function IconRefresh(props) {
   return svg({ size: props.size === undefined ? 15 : props.size, className: props.className }, [
-    h('path', { key: 'a', d: 'M13.4 8a5.4 5.4 0 1 1-1.6-3.8', stroke: 'currentColor', strokeLinecap: 'round' }),
-    h('path', { key: 'b', d: 'M13.6 2.2V5h-2.8', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('polyline', { key: 'a', points: '15.33 2.67 15.33 6.67 11.33 6.67', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('polyline', { key: 'b', points: '0.67 13.33 0.67 9.33 4.67 9.33', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+    h('path', { key: 'c', d: 'M2.34 6a6 6 0 0 1 9.9-2.24l3.09 2.91M0.67 9.33l3.1 2.91A6 6 0 0 0 13.66 10', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round' }),
   ])
 }
 
@@ -419,4 +420,4 @@ function IconClose(props) {
   ])
 }
 
-export { IconAlert, IconBranch, IconBranchAction, IconBranchSync, IconChangeAction, IconChanges, IconCheck, IconChevron, IconClose, IconCompare, IconCopyPath, IconFileList, IconFileTree, IconFilter, IconFolder, IconFolderPlus, IconGit, IconGraph, IconHistory, IconMore, IconOutput, IconPlus, IconRefresh, IconRemote, IconResize, IconSearch, IconSettings, IconStar, IconStash, IconStashApply, IconStashPop, IconSweep, IconTag, IconTrash, IconUndo, svg }
+export { IconAlert, IconBranch, IconBranchAction, IconBranchSync, IconChangeAction, IconChanges, IconCheck, IconChevron, IconClose, IconCompare, IconCopyPath, IconFileList, IconFileTree, IconFilter, IconFetch, IconFolder, IconFolderPlus, IconGit, IconGraph, IconHistory, IconMore, IconOutput, IconPlus, IconRefresh, IconRemote, IconResize, IconSearch, IconSettings, IconStar, IconStash, IconStashApply, IconStashPop, IconSweep, IconTag, IconTrash, IconUndo, svg }

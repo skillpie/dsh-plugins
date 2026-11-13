@@ -124,11 +124,9 @@ function BranchPicker(props) {
     }),
     props.detached && props.mode !== 'merge' ? h('div', { key: 'detached', className: 'dshgit-sidebar-hint' }, t('wb.detachedNotice')) : null,
     // The one creation action VS Code puts above the list, so it is reachable
-    // without scrolling past every branch. Fetch deliberately does NOT appear
-    // here: it does nothing to the branch you are choosing, it sits in the
-    // title bar's own Fetch control, and offering two ways to reach the same
-    // network write from a picker invites a mis-click — and after a fetch the
-    // list would rebuild under the pointer anyway.
+    // without scrolling past every branch. The header instance also mounts the
+    // alternate sync commands (fetch / pull / rebase / push) as icon buttons on
+    // this row's far side: the title bar no longer carries a chevron menu.
     props.mode === 'merge' ? null : h('div', { key: 'actions', className: 'dshgit-pickactions' }, [
       h('button', { key: 'new', type: 'button', className: 'dshgit-pickrow',
         disabled: props.busy === true,
@@ -137,7 +135,17 @@ function BranchPicker(props) {
         h('span', { key: 'i', className: 'dshgit-pickicon', 'aria-hidden': true }, h(IconPlus, { size: 14 })),
         h('span', { key: 'n', className: 'dshgit-pickname' }, t('picker.create')),
       ])),
-
+      Array.isArray(props.syncActions) && props.syncActions.length > 0
+        ? h('span', { key: 'sync', className: 'dshgit-picksync' }, props.syncActions.map(function (action) {
+            return h('button', {
+              key: action.id, type: 'button', className: 'dshgit-picksyncbtn',
+              'data-sync': action.id,
+              title: action.label, 'aria-label': action.label,
+              disabled: props.busy === true || action.disabled === true,
+              onClick: action.run,
+            }, action.icon())
+          }))
+        : null,
     ]),
     h('div', { key: 'list', className: 'dshgit-picklist', ref: listRef,
       onKeyDown: function (event) {
