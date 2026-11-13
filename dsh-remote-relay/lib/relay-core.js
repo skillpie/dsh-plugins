@@ -450,31 +450,34 @@ i.focus();
   }
 
   /**
-   * Visitor-side URL shim. The proxied GUI and plugin panels call absolute
-   * same-origin paths (`/api/...`, `/dsh-dba/...`), which only resolve on the
-   * host's own origin. Under `/<code>/` they must ride the prefix so they land
-   * on the relay's proxy route and splice mux instead of the SPA fallback.
+   * Visitor-side URL shim. The proxied GUI and every plugin panel call
+   * absolute same-origin paths (`/api/...`, `/dsh-<name>/...`), which only
+   * resolve on the host's own origin. Under `/<code>/` every same-origin
+   * http(s)/ws(s) request is rebased onto the prefix so it lands on the
+   * relay's proxy route and splice mux instead of the SPA fallback. The
+   * rule is path-agnostic — any plugin route rides it, so new plugins
+   * never require changes to this file. Requests already riding the
+   * prefix and non-same-origin URLs pass through untouched.
    * Injected into proxied HTML right after `<head>`; runs before app scripts.
    */
   visitorShimScript(code) {
     const prefix = JSON.stringify(`/${code}`)
-    const map = JSON.stringify(['/api/', '/dsh-dba/', '/dsh-market/'])
     return `<script>(function(){
 window.__DSH_REMOTE_VISITOR__=true;
 try{localStorage.setItem('dsh-remote-relay-last-code',${JSON.stringify(code)})}catch(e){}
-var P=${prefix};var M=${map};
-function pick(p){for(var i=0;i<M.length;i++){var m=M[i];if(p===m||p.slice(0,m.length)===m)return true}return false}
-function rebase(u){try{var x=new URL(u,location.href);if((x.protocol==='http:'||x.protocol==='https:'||x.protocol==='ws:'||x.protocol==='wss:')&&x.host===location.host&&pick(x.pathname)){return P+x.pathname+x.search+x.hash}}catch(e){}return u}
+var P=${prefix};
+function owned(p){return p===P||p.slice(0,P.length+1)===P+'/'}
+function rebase(u){try{var x=new URL(u,location.href);if((x.protocol==='http:'||x.protocol==='https:'||x.protocol==='ws:'||x.protocol==='wss:')&&x.host===location.host&&!owned(x.pathname)){return P+x.pathname+x.search+x.hash}}catch(e){}return u}
+function wrap(input){
+  if(typeof input==='string')return rebase(input);
+  if(input&&typeof input.href==='string')return rebase(input.href);
+  if(input&&typeof input.url==='string'){var nu=rebase(input.url);return nu===input.url?input:new Request(nu,input)}
+  return input;
+}
 var of=window.fetch;
-window.fetch=function(input,init){
-  try{
-    if(typeof input==='string')return of(rebase(input),init);
-    if(input&&typeof input.url==='string'){var nu=rebase(input.url);if(nu!==input.url)return of(new Request(nu,input),init)}
-  }catch(e){}
-  return of(input,init);
-};
+window.fetch=function(input,init){try{return of(wrap(input),init)}catch(e){return of(input,init)}};
 var OW=window.WebSocket;
-window.WebSocket=class extends OW{constructor(u,p){u=rebase(typeof u==='string'?u:String(u));super(u,p)}};
+window.WebSocket=class extends OW{constructor(u,p){u=wrap(typeof u==='string'?u:String(u));super(u,p)}};
 })(/* dsh-remote-relay visitor shim */);</script>`
   }
 

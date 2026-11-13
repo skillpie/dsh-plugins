@@ -7,7 +7,7 @@
 ## 技术栈
 
 **运行时**: dsh 0.2.2-rc.1(桌面/官方 npm 同版) | Node ≥22.13(桌面内置 24.21) | 纯 JS ESM,无构建步骤
-**插件依赖**: ws ^8.21.3(@skillpie/dsh-remote) | yauzl ^3.2.0(@skillpie/dsh-market) | pnpm 本地开发/测试依赖
+**插件依赖**: ws ^8.21.3(dsh-remote-relay) | yauzl ^3.2.0(dsh-skillpie) | pnpm 本地开发/测试依赖
 **测试**: node 独立冒烟脚本 `node test/*.mjs`(真实 http+ws 服务器) | agent-browser 无头浏览器验证 UI
 
 ## 新建插件最快路径
@@ -55,7 +55,8 @@
 - systemd 启动:`dsh web --no-open --host 127.0.0.1 --port <p> --public-url https://<域名> --trusted-host <域名>`;nginx 原样透传 Host 与 WebSocket 升级。
 - 服务器上插件依赖需在插件目录内 `npm install --registry=https://registry.npmmirror.com`(link 安装不会代装依赖)。
 - 桌面崩溃恢复会把 profile 的 `dsh.profile.bundles` 重置为出厂两项;用 `plugin_manager set_bundle` 逐个恢复用户 bundle。
-- relay 前缀透传下,GUI/插件的同源绝对路径 API(`/api/*`、`/dsh-dba/*`)必须由 relay 向代理 HTML 注入 fetch/WebSocket shim 重写到 `/<code>/` 前缀,否则公网访客命中 SPA fallback(POST→405)或无访客态的根 mux(→400);`relay-core.visitorShimScript` 即此实现。
+- relay 前缀透传下,GUI/插件的同源绝对路径 API(`/api/*`、`/dsh-*`)必须由 relay 向代理 HTML 注入 fetch/WebSocket shim 重写到 `/<code>/` 前缀,否则公网访客命中 SPA fallback(POST→405)或无访客态的根 mux(→400);`relay-core.visitorShimScript` 即此实现,规则是**全量重写**(同源 http(s)/ws(s) 且 pathname 不以 `/<code>` 开头即加前缀,已 owned 或跨源透传),新增插件零登记、永不改 relay-core。
+- 插件面向访客可用的传输约定:WS 一律 `ctx.get('connection').openWebSocket(path)`(carrier 自动走 mux 隧道,裸 `new WebSocket` 在访客页无论重写与否都不通,因 `registerUpgrade` 仅精确 pathname);HTTP 直接裸 `fetch`(同源绝对路径),由 visitor shim 全量重写兜底。插件 client 无法迁移到 carrier fetch:`@deepseek-ai/dsh-client-connection` 不在平台种子表(packages/client/web/src/seed.ts `PLATFORM_MODULES`),插件 require 不到,除非上游把该包加进种子。
 - bridge 收到 `hreq` 帧不可立即 fetch:wss 路径上 `hchunk`/`hend` 是后续独立帧,必须等 body 就绪(`entry.ready`)再 dispatch;本地 pipe 同步送达会掩盖该时序,只在公网复现。
 - 插件可选依赖(pg/mysql2)用裸 `import()` 惰性加载:一次解析失败会被 Node ESM 负缓存记住,进程内永久失败(磁盘 `node -e import()` 正常也无效),重启宿主进程才能恢复;诊断时先在磁盘验证解析再怀疑进程。
 - 宿主进程日志(journal/stdout)看不到插件 `logLine`——它只写内存环,经属主 API 暴露;relay-only 服务器上属主 API 关闭时日志不可见,排障要靠复现探针而不是服务器日志。
