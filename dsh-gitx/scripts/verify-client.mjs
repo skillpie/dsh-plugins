@@ -474,8 +474,9 @@ check('the commit options are offered from the split button menu',
   // The single remaining tier yields the whole cluster at 400px; the merged
   // sync chip itself is never hidden by a density tier.
   const widest = tiers[0]
-  check('no density tier hides the merged sync chip',
-    tiers.every((tier) => !tier.body.includes('[data-chip="next"]{display:none')),
+  check('no density tier hides the branch chip or the merged sync chip',
+    tiers.every((tier) => !tier.body.includes('[data-chip="next"]{display:none') &&
+      !tier.body.includes('[data-chip="branch"]{display:none')),
     tiers.map((tier) => tier.width).join(','))
   // The narrowest tier yields the whole cluster rather than painting over the
   // Host's session title, and the launcher stays as the entry point.
@@ -484,8 +485,10 @@ check('the commit options are offered from the split button menu',
     tiers.map((tier) => `${tier.width}:${/\.dshgit-chipcluster\{display:none\}/.test(tier.body)}`).join(','))
   // The merged chip replaced the branch and changes chips entirely; no rule
   // may keep styling a chip that no longer renders.
-  check('the branch and changes chip rules are gone from the stylesheet',
-    !css.includes('[data-chip="branch"]') && !css.includes('[data-chip="changes"]'),
+  check('compact placement hides only the sync chevron',
+    css.includes('[data-compact] [data-chip="sync-menu"]{display:none}') &&
+    !css.includes('[data-compact] [data-chip="branch"]{display:none') &&
+    !css.includes('[data-compact] [data-chip="next"]{display:none'),
     '')
   // Compact (Hero) placement has its own, static density: the tiers must not
   // apply there, or the Hero row would lose chips it has room for.
@@ -904,12 +907,9 @@ async function renderChips(handlers) {
 // Branch switching lives in the sync menu since the chips merged into one
 // button: chevron → 切换分支 row. Every picker test goes through that path.
 async function openBranchPicker(header) {
-  findAll(header, 'button').find((node) => node.props['data-chip'] === 'sync-menu').props.onClick({
+  findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
     currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
   })
-  header = await flush(GitApp, { connection: mounted.rpc, t })
-  const row = findAll(header, 'button').find((node) => node.props['data-sync'] === 'branch')
-  row.props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
   return flush(GitApp, { connection: mounted.rpc, t })
 }
 
@@ -1000,7 +1000,7 @@ console.log('\n--- everyday header actions ---')
   let header = await renderChips()
   const chipIds = findAll(header, 'button').map((node) => node.props['data-chip']).filter(Boolean)
   check('the header keeps frequent actions in a stable order',
-    JSON.stringify(chipIds) === JSON.stringify(['next', 'sync-menu']),
+    JSON.stringify(chipIds) === JSON.stringify(['branch', 'next', 'sync-menu']),
     JSON.stringify(chipIds))
   check('uncommitted changes lead the merged entry before any remote verb',
     mergedChip(header)?.props['data-next'] === 'changes')
@@ -2071,8 +2071,7 @@ console.log('\n--- Initialize Repository in the session directory ---')
   initialize.props.onClick()
   tree = await flush(GitApp, { connection: mounted.rpc, t })
   check('initializing loads the new repository into the chips',
-    initialized && findAll(tree, 'button').some((node) => node.props['data-chip'] === 'sync-menu') &&
-    !findAll(tree, 'button').some((node) => node.props['data-chip'] === 'init'), textOf(tree).slice(0, 300))
+    initialized && hasText(tree, 'main'), textOf(tree).slice(0, 300))
 
   initialized = false
   tree = await renderApp(handlers)
@@ -2080,8 +2079,7 @@ console.log('\n--- Initialize Repository in the session directory ---')
   check('the full window offers Initialize Repository', fullInitialize !== undefined)
   fullInitialize.props.onClick()
   tree = await flush(GitApp, { connection: mounted.rpc, t })
-  check('the full window reloads after initialization', initialized &&
-    findAll(tree, 'button').some((node) => node.props['data-chip'] === 'sync-menu'))
+  check('the full window reloads after initialization', initialized && hasText(tree, 'main'))
 }
 
 console.log('\n--- a failing read is surfaced, not swallowed ---')
@@ -3145,7 +3143,7 @@ console.log('\n--- tag clicks directly create a branch without detached checkout
   check('clicking a tag performs no write', !mounted.rpc.calls.some((call) => call.method.startsWith('write.')))
   check('clicking a tag opens no version browser', !walk(header).some((node) => node.props?.['data-history-commit']) &&
     !mounted.rpc.calls.some((call) => call.method === 'commitGraph'))
-  check('tag selection keeps the current branch in the merged chip tooltip', String(mergedChip(header).props.title ?? '').includes('main'))
+  check('tag selection keeps the current branch indicator', hasText(findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch'), 'main'))
   let dialog = walk(header).find((node) => node.props?.role === 'dialog' && node.type === 'form')
   check('developing from a tag opens a named branch form', dialog?.props['aria-label'] === t('wb.createBranchFromTag') &&
     findAll(dialog, 'button').find((node) => node.props.type === 'submit').props.disabled)
@@ -3171,14 +3169,11 @@ console.log('\n--- tag clicks directly create a branch without detached checkout
   const detachedStatus = { ...STATUS, branch: { ...STATUS.branch, head: '(detached)', oid: 'c'.repeat(40), detached: true, upstream: null } }
   let header = await renderChips(healthyHandlers({ status: () => detachedStatus,
     refs: () => ({ ...REFS, tags: [{ name: 'v0.1.0', ref: 'refs/tags/v0.1.0', sha: 'd'.repeat(40), commitSha: 'c'.repeat(40) }] }) }))
-  check('detached header stays lazy about refs until the picker opens', !mounted.rpc.calls.some(call => call.method === 'refs'))
-  const chevron = findAll(header, 'button').find((node) => node.props['data-chip'] === 'sync-menu')
-  chevron.props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+  const chip = findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch')
+  check('detached header initially identifies HEAD without enumerating tags', hasText(chip, t('wb.detachedState', { name: 'c'.repeat(8) })) && !mounted.rpc.calls.some(call => call.method === 'refs'))
+  chip.props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
   header = await flush(GitApp, { connection: mounted.rpc, t: mounted.t })
-  check('the sync menu names the detached state before refs are spent', hasText(findAll(header, 'button').find((node) => node.props['data-sync'] === 'branch'), t('wb.detachedState', { name: 'c'.repeat(8) })))
-  findAll(header, 'button').find((node) => node.props['data-sync'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
-  header = await flush(GitApp, { connection: mounted.rpc, t: mounted.t })
-  check('detached header resolves annotated tag names when the picker opens', String(mergedChip(header).props.title ?? '').includes(t('wb.detachedState', { name: 'v0.1.0' })))
+  check('detached header resolves annotated tag names when the picker opens', hasText(findAll(header, 'button').find(node => node.props['data-chip'] === 'branch'), t('wb.detachedState', { name: 'v0.1.0' })))
 }
 
 
@@ -3293,12 +3288,10 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   let props = { blank: true, directory: selected }
   mount(WorkspaceHarness, props)
   let view = await flush(WorkspaceHarness, props)
-  check('blank composer offers a branch picker before any message', findAll(view, 'button').some((node) => node.props['data-chip'] === 'sync-menu'))
+  check('blank composer offers a branch picker before any message', findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
   check('blank composer has no separate Git workbench icon', !findAll(view, 'button').some((node) => node.props['aria-label'] === t('window.open')))
   check('workspace mapping beats both first workspace and stale session cwd', rpc.calls.filter((call) => call.method === 'repos').every((call) => call.payload.path === selected && call.payload.sessionId === 'new-session'), JSON.stringify(rpc.calls.filter((call) => call.method === 'repos')))
-  findAll(view, 'button').find((node) => node.props['data-chip'] === 'sync-menu').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
-  view = await flush(WorkspaceHarness, props)
-  findAll(view, 'button').find((node) => node.props['data-sync'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+  findAll(view, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
   view = await flush(WorkspaceHarness, props)
   const remoteRows = () => walk(view).filter((node) => String(node.props?.['data-picker-branch'] || '').startsWith('refs/remotes/'))
   const mainRow = walk(view).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/main')
@@ -3325,9 +3318,7 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   check('blank-session branch push uses the selected workspace and upstream', blankPush?.payload.root === selected &&
     blankPush.payload.remote === 'origin' && blankPush.payload.sourceBranch === 'main' && blankPush.payload.targetBranch === 'main')
   check('blank-session tracked push opens no push configuration dialog', !walk(view).some(node => node.props?.role === 'dialog' && node.props?.['aria-label'] === t('wb.push')))
-  findAll(view, 'button').find(node => node.props['data-chip'] === 'sync-menu').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
-  view = await flush(WorkspaceHarness, props)
-  findAll(view, 'button').find(node => node.props['data-sync'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+  findAll(view, 'button').find(node => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
   view = await flush(WorkspaceHarness, props)
   const row = walk(view).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/feature/新功能')
   findAll(row, 'button').find((node) => node.props['data-ref'] === 'feature/新功能').props.onClick()
@@ -3339,9 +3330,7 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   check('blank-session checkout writes to the selected workspace', checkout?.payload.root === selected && checkout.payload.ref === 'refs/heads/feature/新功能' && checkout.payload.confirm === true)
   const notice = walk(view).find((node) => node.props?.className === 'dshgit-notice' && node.props?.['data-placement'] === 'bottom')
   check('blank-session outcomes appear at the viewport bottom center', notice?.props.style.bottom === '24px' && notice.props.style.left === '50%' && notice.props.style.top === 'auto')
-  findAll(view, 'button').find((node) => node.props['data-chip'] === 'sync-menu').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
-  view = await flush(WorkspaceHarness, props)
-  findAll(view, 'button').find((node) => node.props['data-sync'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+  findAll(view, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
   view = await flush(WorkspaceHarness, props)
   findAll(view, 'button').find((node) => node.props['data-picker-open-git']).props.onClick()
   view = await flush(WorkspaceHarness, props)
@@ -3353,11 +3342,11 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   findAll(view, 'button').find((node) => node.props['data-chip'] === 'init').props.onClick()
   view = await flush(WorkspaceHarness, props)
   check('initialization explicitly targets the new workspace', rpc.calls.some((call) => call.method === 'initRepository' && call.payload.directory === empty))
-  check('initialized workspace gains a branch picker', findAll(view, 'button').some((node) => node.props['data-chip'] === 'sync-menu'))
+  check('initialized workspace gains a branch picker', findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
   const previousRun = context.registrations.find((entry) => entry.declaration.name === 'settings.section').Component({ t }).props.run
   const switching = context.ctx.uiWorkspace.openWorkspace('selected')
   view = await flush(WorkspaceHarness, props)
-  check('slow workspace navigation disables the old Git controls', findAll(view, 'button').some((node) => node.props['data-workspace-pending'] && node.props.disabled) && !findAll(view, 'button').some((node) => node.props['data-chip'] === 'sync-menu'))
+  check('slow workspace navigation disables the old Git controls', findAll(view, 'button').some((node) => node.props['data-workspace-pending'] && node.props.disabled) && !findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
   check('workspace navigation makes the existing workbench inert', walk(view).some((node) => node.props?.['data-mode'] === 'full' && node.props.inert === true))
   const writesBefore = rpc.calls.filter((call) => call.method === 'write.checkout').length
   const blockedWrite = await previousRun('write.checkout', { root: empty, ref: 'refs/heads/main', confirm: true }).then(() => false, () => true)
@@ -3374,7 +3363,7 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   navigations[1].reject(new Error('navigation failed'))
   check('navigation errors preserve the Host error', await failing === 'navigation failed')
   view = await flush(WorkspaceHarness, props)
-  check('failed navigation restores the original workspace controls', !findAll(view, 'button').some((node) => node.props['data-workspace-pending']) && findAll(view, 'button').some((node) => node.props['data-chip'] === 'sync-menu'))
+  check('failed navigation restores the original workspace controls', !findAll(view, 'button').some((node) => node.props['data-workspace-pending']) && findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
   props = { blank: false, directory: selected }
   view = await flush(WorkspaceHarness, props)
   check('after the first message the header continues using the workspace', rpc.calls.filter((call) => call.method === 'repos').at(-1)?.payload.path === selected)
@@ -4137,9 +4126,8 @@ console.log('\n--- session startup and changes-first workbench loading ---')
   check('header background polling also stays lightweight before interaction', !rpc.calls.some(call => heavy.includes(call.method)))
   const clickHeader = async chip => {
     if (chip === 'branch') {
-      findAll(view, 'button').find(node => node.props['data-chip'] === 'sync-menu').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+      findAll(view, 'button').find(node => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
       view = await flush(Header, props)
-      findAll(view, 'button').find(node => node.props['data-sync'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
     } else if (chip === 'changes') {
       changesChip(view).props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
     } else {
@@ -4214,7 +4202,7 @@ console.log('\n--- session startup and changes-first workbench loading ---')
   mount(Header, fallbackProps); await flush(Header, fallbackProps); runIdle()
   view = await flush(Header, fallbackProps)
   check('an older Host falls back to status without breaking the header', fallbackRpc.calls.some(call => call.method === 'status') &&
-    findAll(view, 'button').some(node => node.props['data-chip'] === 'sync-menu'))
+    findAll(view, 'button').some(node => node.props['data-chip'] === 'branch'))
   runCleanups()
 }
 
@@ -4310,9 +4298,8 @@ console.log('\n--- header launchers restore their own repository after sidebar n
   }
   const clickChip = async name => {
     if (name === 'branch') {
-      findAll(header, 'button').find(node => node.props['data-chip'] === 'sync-menu').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+      findAll(header, 'button').find(node => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
       header = await flush(Component, props)
-      findAll(header, 'button').find(node => node.props['data-sync'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
     } else if (name === 'changes') {
       changesChip(header).props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
     } else {

@@ -17,7 +17,7 @@ import { readWorkbenchStorage, withCommitPrefs, writeWorkbenchStorage } from '..
 import { branchPushTarget, workbenchUpstream } from '../features/branches/model.js'
 import { workbenchBranchItems } from '../features/branches/actions.js'
 import { isStaged } from '../core/files.js'
-import { IconBranchAction, IconBranchSync, IconChanges, IconChevron, IconRefresh } from '../ui/icons.js'
+import { IconBranch, IconChevron, IconRefresh } from '../ui/icons.js'
 import { BranchPicker } from '../features/branches/picker.js'
 import { popoverPosition } from '../ui/popover-position.js'
 import { requestCommitMessage } from '../features/changes/ai.js'
@@ -1102,15 +1102,13 @@ function GitStatusChips(props) {
   var syncBusy = busy && (busyMethod === 'push' || busyMethod === 'pull' || busyMethod === 'fetch')
   var retryBusy = refreshing && nextAction.id === 'retry'
 
-  // 同步按钮：单图标按跟踪状态自适应（ZCodeOnline 式），文字含义全部进 tooltip；
-  // 忙碌时转圈，diverged/resolve 用 merge 字形表示「需要用户做决定」。
-  var nextIcon = syncBusy || retryBusy
-    ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true })
-    : nextAction.id === 'pull' ? h(IconBranchSync, { key: 'i', kind: 'pull', size: 14 })
-    : nextAction.id === 'push' || nextAction.id === 'publish' ? h(IconBranchSync, { key: 'i', kind: 'push', size: 14 })
-    : nextAction.id === 'diverged' || nextAction.id === 'resolve' ? h(IconBranchAction, { key: 'i', kind: 'merge', size: 14 })
-    : nextAction.id === 'retry' ? h(IconRefresh, { key: 'i', size: 14 })
-    : h(IconBranchSync, { key: 'i', kind: 'fetch', size: 14 })
+  // 同步按钮：恒定一个同步字形（ZCodeOnline 式）——按钮在不同场景执行不同操作，
+  // 图标不随状态切换；忙碌时图标自旋（dshgit-spin），状态差异走徽标/底色/tooltip。
+  var nextIcon = h(IconRefresh, {
+    key: 'i', size: 16,
+    className: syncBusy || retryBusy ? 'dshgit-spin' : undefined,
+    'aria-hidden': true,
+  })
 
   // ⌘⇧S 桥登记：渲染体普通赋值（非 useEffect），hook 数与上游严格一致。
   // 页面里可能同时存在新旧两份模块副本（合并 bundle 缓存 + 独立 rev），任何 hook 数差都会让
@@ -1131,9 +1129,25 @@ function GitStatusChips(props) {
       onClick: function () { requestDetails(false); setOpOpen(true); refresh({ force: true }) },
     }, t('next.resolve')) : null,
 
+    // Branch chip → branch picker.  (入口保持在外，不收进 chevron 菜单。)
+    h('button', {
+      key: 'branch',
+      type: 'button',
+      className: 'dshgit-chip dshgit-chipaction',
+      'data-chip': 'branch',
+      'data-push-pending': ahead > 0,
+      title: repo.root + '\n' + branchLabel + (ahead > 0 ? '\n' + t('state.readyPush', { count: ahead }) : ''),
+      'aria-haspopup': 'dialog',
+      'aria-expanded': popover === 'branch',
+      onClick: function (event) { openPopover('branch', event) },
+    }, [
+      busy && (busyMethod === 'checkout' || busyMethod === 'createBranch') ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true, style: { width: '12px', height: '12px', boxSizing: 'border-box', flex: 'none' } }) : h(IconBranch, { key: 'i', size: 12 }),
+      h('span', { key: 'n', className: 'dshgit-chipname' }, branchLabel),
+    ]),
+
     // 合并入口（ZCodeOnline 式单图标按钮）：有改动 → 改动评审（图标+计数徽标）；
     // 无改动 → 按跟踪状态 fetch/pull/publish/push/diverged/retry 自适应。
-    // 分支切换与全部备选命令收进右侧 chevron 菜单。
+    // 备选命令仍在右侧 chevron 菜单。
     h('button', {
       key: 'next', type: 'button',
       className: 'dshgit-chip dshgit-chipaction dshgit-chipnext' + (changesFirst ? ' dshgit-chipdirty' : ' dshgit-next-' + nextAction.tone),
@@ -1159,9 +1173,11 @@ function GitStatusChips(props) {
         : runNext,
     }, [
       changesFirst
-        ? (busy && !syncBusy && busyMethod !== 'checkout' && busyMethod !== 'createBranch' && busyMethod !== 'merge' && popover !== 'commit'
-            ? h(Spinner, { key: 'i', className: 'dshgit-spinner', 'aria-hidden': true, style: { width: '12px', height: '12px', flex: 'none' } })
-            : h(IconChanges, { key: 'i', size: 12 }))
+        ? h(IconRefresh, {
+            key: 'i', size: 16,
+            className: busy && !syncBusy && busyMethod !== 'checkout' && busyMethod !== 'createBranch' && busyMethod !== 'merge' && popover !== 'commit' ? 'dshgit-spin' : undefined,
+            'aria-hidden': true,
+          })
         : nextIcon,
       changesFirst
         ? h('span', { key: 'c', className: 'dshgit-chipcounts' }, String(changeCount))
@@ -1267,13 +1283,6 @@ function GitStatusChips(props) {
           onClose: closePopover,
         }, h('div', { className: 'dshgit-picker' }, [
           h('div', { key: 'list', className: 'dshgit-picklist' }, [
-            // 分支切换随 branch chip 一并收进本菜单：chip 合并后这是标题栏唯一的入口。
-            h('button', {
-              key: 'branch', type: 'button', className: 'dshgit-pickrow',
-              'data-sync': 'branch',
-              onClick: function (event) { openPopover('branch', event) },
-            }, t('action.switchBranch') + (branchLabel ? ' · ' + branchLabel : '')),
-            h('div', { key: 'sep0', className: 'dshgit-menusep' }),
             h('button', {
               key: 'fetch', type: 'button', className: 'dshgit-pickrow',
               'data-sync': 'fetch',

@@ -3,9 +3,10 @@
 var STYLES = [
   // Menu and Tooltip anchors may wrap native buttons. Give every direct
   // action the same cell so wrappers cannot change the visual spacing.
+  '.dshgit-hero-actions .dshgit-chip[data-chip="branch"]{height:auto;min-height:24px;font-size:var(--dshgit-hero-font-size,var(--dshgit-font-body));font-family:var(--dshgit-hero-font-family,inherit);font-weight:var(--dshgit-hero-font-weight,500);line-height:var(--dshgit-hero-line-height,1.5);letter-spacing:var(--dshgit-hero-letter-spacing,normal)}.dshgit-hero-actions .dshgit-chip[data-chip="branch"] .dshgit-chipname{font-weight:inherit;line-height:inherit;padding-block:2px}',
   '[role="treeitem"][data-row-key^="workspace:"]>:has(>.dshgit-sidebar-workspace-git){gap:12px}[role="treeitem"][data-row-key^="workspace:"]>:has(>.dshgit-sidebar-workspace-git)>*{box-sizing:border-box;flex:0 0 20px;width:20px;height:20px;margin:0;display:inline-flex;align-items:center;justify-content:center}',
   '[data-dshgit-hero-row]{flex-wrap:wrap;justify-content:flex-start;row-gap:6px}.dshgit-hero-actions{display:flex;flex:0 0 auto;align-items:center;justify-content:flex-start;min-width:0;margin-inline:8px 0}.dshgit-hero-actions .dshgit-workspace-actions[data-compact]{max-width:min(280px,60vw)}@media(max-width:480px){.dshgit-hero-actions{margin-inline-start:4px}}',
-  '.dshgit-workspace-actions{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%}.dshgit-workspace-actions[data-compact]{max-width:min(240px,40vw)}.dshgit-workspace-actions[data-compact] [data-chip="sync-menu"]{display:none}',
+  '.dshgit-workspace-actions{display:flex;align-items:center;gap:4px;min-width:0;max-width:100%}.dshgit-workspace-actions[data-compact]{max-width:min(240px,40vw)}.dshgit-workspace-actions[data-compact] .dshgit-chipname{max-width:16ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dshgit-workspace-actions[data-compact] [data-chip="sync-menu"]{display:none}',
   '.dshgit-conflict-split{height:6px;flex:none;cursor:row-resize;background:var(--dsw-alias-border-l1);touch-action:none}.dshgit-conflict-split:hover,.dshgit-conflict-split:focus-visible{background:var(--dsw-alias-state-business-primary)}.dshgit-conflict-question{white-space:pre-wrap}.dshgit-confirmbar .dshgit-hint{white-space:pre-wrap;max-height:50vh;overflow:auto;overflow-wrap:anywhere}.dshgit-conflict-question>div:not(.dshgit-dialogactions){max-height:50vh;overflow:auto;overflow-wrap:anywhere}',
   '.dshgit-conflict-body{container-type:inline-size}.dshgit-conflict-tabs{display:none;gap:4px;padding:4px 12px;border-bottom:1px solid var(--dsw-alias-border-l1)}.dshgit-conflict-line{display:block;min-width:max-content;min-height:20px}.dshgit-conflict-lineno{display:inline-block;width:40px;padding-right:12px;text-align:right;color:var(--dsw-alias-label-secondary);user-select:none}.dshgit-conflict-line[data-kind="del"]{background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 14%,transparent)}.dshgit-conflict-line[data-kind="add"]{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 14%,transparent)}@container(max-width:600px){.dshgit-conflict-tabs{display:flex}.dshgit-conflict-body>.dshgit-conflict-versions{grid-template-columns:minmax(0,1fr)}.dshgit-conflict-versions>section:not([data-active="true"]){display:none}}',
 
@@ -903,7 +904,7 @@ var STYLES = [
   '.dshgit-meta{font-size:var(--dshgit-font-small);color:var(--dsw-alias-label-secondary);display:flex;gap:8px;flex-wrap:wrap}',
   '.dshgit-spinner{display:inline-block;box-sizing:border-box;flex:0 0 12px;width:12px;height:12px;aspect-ratio:1;border:0;transform-origin:center;animation:dshgit-spin .9s linear infinite;vertical-align:-1px}.dshgit-spinner>svg{display:block;width:100%;height:100%}',
   '@keyframes dshgit-spin{to{transform:rotate(360deg)}}',
-  '@media (prefers-reduced-motion: reduce){.dshgit-spinner{animation:none}.dshgit-activity-item,.dshgit-winbtn,.dshgit-treerow,.dshgit-row{transition:none}}',
+  '@media (prefers-reduced-motion: reduce){.dshgit-spinner,.dshgit-chip .dshgit-spin{animation:none}.dshgit-activity-item,.dshgit-winbtn,.dshgit-treerow,.dshgit-row{transition:none}}',
   '.dshgit-toast{padding:8px 12px;line-height:1.5;overflow-wrap:anywhere;pointer-events:none}',
   '.dshgit-checkrow{display:flex;align-items:center;gap:7px;font-size:var(--dshgit-font-body);color:var(--dsw-alias-label-secondary);padding:3px 0}',
   '.dshgit-field{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;min-width:0}',
@@ -989,7 +990,7 @@ var STYLES = [
   // cluster, so when the session header ran out of room there was nothing
   // left to give and the chips painted on top of the Host's own controls.
   // The chevron keeps a fixed 22px because it is an icon, not a label.
-  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chipcluster>.dshgit-chip[data-chip="sync-menu"]{flex:0 0 22px}.dshgit-chip[data-chip="next"] .dshgit-chipcounts{font-variant-numeric:tabular-nums}.dshgit-chip[data-chip="sync-menu"] .dshgit-spinner{width:12px;height:12px;box-sizing:border-box}',
+  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chipcluster>.dshgit-chip[data-chip="sync-menu"]{flex:0 0 22px}.dshgit-chip[data-chip="next"] .dshgit-chipcounts{font-variant-numeric:tabular-nums}.dshgit-chip[data-chip="sync-menu"] .dshgit-spinner{width:12px;height:12px;box-sizing:border-box}.dshgit-chip .dshgit-spin{animation:dshgit-spin .9s linear infinite;transform-origin:center}',
   '.dshgit-next-ahead,.dshgit-next-behind{color:var(--dsw-alias-brand-primary)}',
   '.dshgit-next-ahead:hover:not(:disabled),.dshgit-next-behind:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent)}',
   // A blocked state (conflicts, diverged) must not look like an ordinary
