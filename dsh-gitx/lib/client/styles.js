@@ -992,7 +992,7 @@ var STYLES = [
   // 同步钮是纯图标：与右侧打开 Git 窗口的 dshgit-iconbtn 同尺寸（28×28、
   // 5px 圆角），悬停背景才是正方形，两颗按钮看起来是一排同规格控件。
   // min-width 而非 width：带 ↑↓ 计数时允许自然加宽，不裁字。
-  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chip[data-chip="next"]{height:28px;min-width:28px;padding:0 2px;border-radius:5px;justify-content:center}.dshgit-chip[data-chip="next"] .dshgit-chipcounts{font-variant-numeric:tabular-nums}.dshgit-chip .dshgit-spin{animation:dshgit-spin .9s linear infinite;transform-origin:center}',
+  '.dshgit-chipcluster>.dshgit-chip[data-chip]{box-sizing:border-box;flex:0 1 auto;min-width:0}.dshgit-chipcluster>.dshgit-chip[data-chip="next"]{height:28px;min-width:28px;padding:0 2px;border-radius:5px;justify-content:center}.dshgit-chip[data-chip="next"] .dshgit-chipcounts{font-variant-numeric:tabular-nums}.dshgit-chip .dshgit-spin{animation:dshgit-spin .9s linear infinite;transform-origin:center}',
   // 悬停键提示（对齐 termbar / 原生 Tooltip.module.css 变体）：深底白字 + 键帽。
   '.dshgit-tip{position:absolute;top:calc(100% + 8px);right:0;display:inline-flex;align-items:center;gap:8px;width:max-content;box-sizing:border-box;padding:3px 5px 3px 7px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:var(--dshgit-font-body);line-height:20px;white-space:pre-line;overflow-wrap:anywhere;text-align:left;opacity:0;pointer-events:none;transition:opacity .15s ease .4s;z-index:100}',
   '.dshgit-chip{position:relative}.dshgit-chip:hover .dshgit-tip,.dshgit-chip:focus-visible .dshgit-tip,.dshgit-picksyncbtn:hover .dshgit-tip,.dshgit-picksyncbtn:focus-visible .dshgit-tip{opacity:1}',
@@ -1035,7 +1035,7 @@ var STYLES = [
   '}',
   // Viewport fallback for Hosts without a size container: a narrow WINDOW is
   // still a reliable signal that the header is tight.
-  '@media(max-width:620px){.dshgit-chip[data-chip="next"]{padding:0 4px}.dshgit-chipcluster{gap:2px}}',
+  '@media(max-width:620px){.dshgit-chipcluster>.dshgit-chip[data-chip="next"]{padding:0 4px}.dshgit-chipcluster{gap:2px}}',
   // The force-with-lease row is the one destructive entry in the sync menu;
   // it must not sit visually level with the safe ones.
   '.dshgit-pickdanger{color:var(--dsw-alias-state-error-primary)}',
