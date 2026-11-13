@@ -30,7 +30,7 @@ const fail = (message) => {
 const originMuxs = new Set()
 // Host-side file route, registered like index.js production wiring does
 // (prefix route on the host's own web server).
-const tmpFile = `${os.tmpdir()}/dsh-remote-smoke-${randomUUID().slice(0, 8)}.md`
+const tmpFile = `${os.tmpdir()}/dsh-remote-relay-smoke-${randomUUID().slice(0, 8)}.md`
 const fileBytes = '# 报表 hello 下载冒烟 0123456789'
 const { writeFileSync, rmSync } = await import('node:fs')
 writeFileSync(tmpFile, fileBytes)
@@ -38,8 +38,8 @@ const hostFileKey = fileRouteKey('gui-host') // relay derives the same from hell
 const originFileRoutes = new Map()
 const origin = http.createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://origin')
-  const fileHandler = originFileRoutes.get(`prefix:/dsh-remote-file`)
-  if (fileHandler && url.pathname.startsWith('/dsh-remote-file')) { void fileHandler(req, res); return }
+  const fileHandler = originFileRoutes.get(`prefix:/dsh-remote-relay-file`)
+  if (fileHandler && url.pathname.startsWith('/dsh-remote-relay-file')) { void fileHandler(req, res); return }
   const chunks = []
   req.on('data', (c) => chunks.push(c))
   req.on('end', () => {
@@ -118,7 +118,7 @@ const core = new RelayCore({ webServer: relayWebServer, consoleHtml, log, maxVis
 // Mirror index.js production wiring: origin-level restore worker (gui mode).
 const offSw = relayWebServer.register({
   kind: 'exact',
-  path: '/dsh-remote-sw.js',
+  path: '/dsh-remote-relay-sw.js',
   handler: (req, res) => { try { serveServiceWorker(req, res) } catch { try { res.destroy() } catch { /* gone */ } } },
 })
 const offFileRoute = registerFileRoute({
@@ -173,15 +173,15 @@ if (!index.ok || !indexHtml.includes('INDEX')) fail('index not proxied')
 const setCookie = index.headers.get('set-cookie') ?? ''
 if (setCookie !== '') fail(`visitor must not receive the owner cookie: ${setCookie}`)
 if (!indexHtml.includes('__DSH_REMOTE_CONCEAL__')) fail('conceal script missing')
-if (!indexHtml.includes(`localStorage.setItem('dsh-remote-last-code',`)) fail('code storage missing')
+if (!indexHtml.includes(`localStorage.setItem('dsh-remote-relay-last-code',`)) fail('code storage missing')
 if (!indexHtml.includes("history.replaceState(null,'','/')") && !indexHtml.includes("history.replaceState(null, '', '/')")) fail('URL strip missing')
-if (!indexHtml.includes('/dsh-remote-sw.js?code=')) fail('SW registration missing')
+if (!indexHtml.includes('/dsh-remote-relay-sw.js?code=')) fail('SW registration missing')
 const afterBase = indexHtml.slice(indexHtml.indexOf('<base href="./">') + 16)
 if (!afterBase.startsWith('<script>(function(){\nwindow.__DSH_REMOTE_CONCEAL__')) fail('conceal not injected right after <base>')
 log('test', 'index proxied; conceal script after <base>; owner cookie kept host-side')
 
 // 2b. service worker script served at origin level
-const sw = await fetch(`http://127.0.0.1:${port}/dsh-remote-sw.js?code=${code}`)
+const sw = await fetch(`http://127.0.0.1:${port}/dsh-remote-relay-sw.js?code=${code}`)
 if (!sw.ok) fail('SW script not served')
 const swText = await sw.text()
 if (!swText.includes("addEventListener('fetch'")) fail('SW fetch handler missing')
@@ -196,37 +196,37 @@ if (indexHtml.indexOf('__DSH_REMOTE_DOWNLOAD__') < indexHtml.indexOf('__DSH_REMO
 if (!indexHtml.includes('data-path-label')) fail('path label resolver missing')
 if (!indexHtml.includes('data-presented-file')) fail('deliverable card title resolver missing')
 if (!indexHtml.includes('cloneNode(true)')) fail('native row clone strategy missing')
-if (!indexHtml.includes('data-dsh-remote-dl-item-label')) fail('row label marker missing')
+if (!indexHtml.includes('data-dsh-remote-relay-dl-item-label')) fail('row label marker missing')
 if (!indexHtml.includes(`var K="${hostFileKey}"`)) fail('download key not stamped into shim')
-if (!indexHtml.includes('x-dsh-remote-key') || !indexHtml.includes('/dsh-remote-file?path=')) fail('download fetch wiring missing')
+if (!indexHtml.includes('x-dsh-remote-relay-key') || !indexHtml.includes('/dsh-remote-relay-file?path=')) fail('download fetch wiring missing')
 log('test', 'download menu shim injected after visitor shim with key')
 
 // 2d. host file route through the tunnel: key gate + disposition + bytes
-const dl = await fetch(`${base}/dsh-remote-file?path=${encodeURIComponent(tmpFile)}&k=${hostFileKey}`)
+const dl = await fetch(`${base}/dsh-remote-relay-file?path=${encodeURIComponent(tmpFile)}&k=${hostFileKey}`)
 if (dl.status !== 200) fail(`download should stream the file, got ${dl.status}`)
 if ((await dl.text()) !== fileBytes) fail('downloaded bytes mismatch')
 const disposition = dl.headers.get('content-disposition') ?? ''
 if (!disposition.startsWith('attachment;')) fail(`attachment disposition missing: ${disposition}`)
 if (!disposition.includes("filename*=UTF-8''")) fail('UTF-8 disposition form missing')
 if (dl.headers.get('cache-control') !== 'no-store') fail('download must be no-store')
-const dlBadKey = await fetch(`${base}/dsh-remote-file?path=${encodeURIComponent(tmpFile)}&k=wrong-key-wrong-key-wrong`)
+const dlBadKey = await fetch(`${base}/dsh-remote-relay-file?path=${encodeURIComponent(tmpFile)}&k=wrong-key-wrong-key-wrong`)
 if (dlBadKey.status !== 403) fail(`wrong key must 403, got ${dlBadKey.status}`)
-const dlNoPath = await fetch(`${base}/dsh-remote-file?path=&k=${hostFileKey}`)
+const dlNoPath = await fetch(`${base}/dsh-remote-relay-file?path=&k=${hostFileKey}`)
 if (dlNoPath.status !== 400) fail(`missing path must 400, got ${dlNoPath.status}`)
-const dlMissing = await fetch(`${base}/dsh-remote-file?path=${encodeURIComponent('/nonexistent/nope.md')}&k=${hostFileKey}`)
+const dlMissing = await fetch(`${base}/dsh-remote-relay-file?path=${encodeURIComponent('/nonexistent/nope.md')}&k=${hostFileKey}`)
 if (dlMissing.status !== 404) fail(`missing file must 404, got ${dlMissing.status}`)
 log('test', 'host file route streams through the tunnel; key/path gates ok')
 
 // 2e. unknown-code guard: standalone enter page + SW probe/restore redirects
-const enterBad = await fetch(`http://127.0.0.1:${port}/dsh-remote-enter?code=99999999`)
+const enterBad = await fetch(`http://127.0.0.1:${port}/dsh-remote-relay-enter?code=99999999`)
 const enterBadText = await enterBad.text()
 if (enterBad.status !== 200 || !enterBadText.includes('99999999')) fail(`enter page with bad code broken: ${enterBad.status}`)
 if (!enterBadText.includes('无效或宿主机未在线')) fail('bad-code hint missing')
-const enterBlank = await fetch(`http://127.0.0.1:${port}/dsh-remote-enter`)
+const enterBlank = await fetch(`http://127.0.0.1:${port}/dsh-remote-relay-enter`)
 const enterBlankText = await enterBlank.text()
 if (enterBlank.status !== 200 || !enterBlankText.includes('inputmode="numeric"')) fail('blank enter page broken')
 if (!swText.includes("method:'HEAD'")) fail('SW unknown-code HEAD probe missing')
-if (!swText.includes('/dsh-remote-enter?code=')) fail('SW enter-page redirect missing')
+if (!swText.includes('/dsh-remote-relay-enter?code=')) fail('SW enter-page redirect missing')
 const strayCode = await fetch(`http://127.0.0.1:${port}/99999999/`, { redirect: 'manual' })
 if (strayCode.status !== 404) fail(`unknown code must fall through to the SPA fallback (404 in stub), got ${strayCode.status}`)
 log('test', 'unknown-code enter page + SW probe/restore guard ok')

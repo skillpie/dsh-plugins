@@ -1,5 +1,5 @@
 /**
- * dsh-remote — in-process ws-like pipe pair.
+ * dsh-remote-relay — in-process ws-like pipe pair.
  *
  * Direct mode reuses the exact relay code path on the local web server: the
  * engine or GUI bridge speaks the same frames to one end of a pipe while a

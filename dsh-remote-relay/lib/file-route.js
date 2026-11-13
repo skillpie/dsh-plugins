@@ -1,5 +1,5 @@
 /**
- * dsh-remote — host-side visitor file download route.
+ * dsh-remote-relay — host-side visitor file download route.
  *
  * Visitors of the real GUI have no way to save a generated file locally: the
  * built-in file menu only hands paths to the Host desktop (open / reveal),
@@ -7,11 +7,11 @@
  * host's disk and streams it back with `Content-Disposition: attachment`,
  * so the visitor's browser opens its own save dialog.
  *
- * The route registers on the HOST's own web server under `/dsh-remote-file`;
+ * The route registers on the HOST's own web server under `/dsh-remote-relay-file`;
  * visitor requests reach it through the tunnel (relay prefix proxy or direct
  * pipe) with the bridge-minted owner cookie attached. Everything else is
  * gated by a shared-secret key derived from the host id (`?k=` or the
- * `x-dsh-remote-key` header) so loopback strangers cannot read arbitrary
+ * `x-dsh-remote-relay-key` header) so loopback strangers cannot read arbitrary
  * files. The same derivation runs on the relay to stamp the key into the
  * visitor shim, so no protocol change carries it.
  */
@@ -73,7 +73,7 @@ export function dispositionOf(name) {
  * derives the same value from the hello hostId to stamp the visitor shim.
  */
 export function fileRouteKey(hostId) {
-  return createHash('sha256').update(`dsh-remote-file:v1:${hostId}`).digest('hex').slice(0, 32)
+  return createHash('sha256').update(`dsh-remote-relay-file:v1:${hostId}`).digest('hex').slice(0, 32)
 }
 
 /** Constant-time-ish comparison for short hex strings. */
@@ -96,7 +96,7 @@ function keyMatches(given, expected) {
 export function registerFileRoute({ webServer, key, log = () => {} }) {
   return webServer.register({
     kind: 'prefix',
-    path: '/dsh-remote-file',
+    path: '/dsh-remote-relay-file',
     handler: (req, res) => {
       try {
         void handle(req, res)
@@ -114,11 +114,11 @@ export function registerFileRoute({ webServer, key, log = () => {} }) {
       res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' })
       res.end(`${text}\n`)
     }
-    if (!url.pathname.startsWith('/dsh-remote-file')) return send(404, 'not found')
+    if (!url.pathname.startsWith('/dsh-remote-relay-file')) return send(404, 'not found')
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(405, 'method not allowed')
     // Loopback strangers and forged pages must not read files; only requests
     // carrying the key survive (the visitor shim stamps it, tunnel or direct).
-    const given = url.searchParams.get('k') ?? req.headers['x-dsh-remote-key'] ?? ''
+    const given = url.searchParams.get('k') ?? req.headers['x-dsh-remote-relay-key'] ?? ''
     if (!keyMatches(given, key)) return send(403, 'bad download key')
     const filePath = url.searchParams.get('path') ?? ''
     if (!filePath || !filePath.startsWith('/') || filePath.includes('\0')) return send(400, 'path must be absolute')

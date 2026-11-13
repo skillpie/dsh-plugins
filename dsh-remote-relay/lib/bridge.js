@@ -1,5 +1,5 @@
 /**
- * dsh-remote — host-side GUI bridge (`gui` mode).
+ * dsh-remote-relay — host-side GUI bridge (`gui` mode).
  *
  * Serves the relay's splice frames from this process's own web server over
  * loopback, so a visitor at `https://<relay>/<code>/…` uses the real DSH Web

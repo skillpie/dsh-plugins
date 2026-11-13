@@ -1,5 +1,5 @@
 /**
- * dsh-remote — visitor console page (served by the relay face and by local
+ * dsh-remote-relay — visitor console page (served by the relay face and by local
  * direct mode). Single self-contained HTML document: no external assets, no
  * build step. The 8-digit code comes from the URL path; all traffic rides
  * `/<code>/ws`.

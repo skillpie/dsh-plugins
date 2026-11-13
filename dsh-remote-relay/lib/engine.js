@@ -1,5 +1,5 @@
 /**
- * dsh-remote — host-side visitor command engine.
+ * dsh-remote-relay — host-side visitor command engine.
  *
  * One engine per host process. It speaks the control-channel frames over one
  * OR MORE transports at a time (relay WebSocket and the local direct pipe

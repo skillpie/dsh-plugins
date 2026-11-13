@@ -1,5 +1,5 @@
 /**
- * live-check.mjs — 对真实 dsh-remote 进程做只读冒烟（gui 模式）。
+ * live-check.mjs — 对真实 dsh-remote-relay 进程做只读冒烟（gui 模式）。
  *
  * 用法: node test/live-check.mjs [origin] [code]
  *   origin 默认 http://127.0.0.1:52639（本地透传），公网例:
@@ -9,7 +9,7 @@
  *   1. GET /<code>/        → 200 且是代理的 GUI 壳（id="root" + 访客 shim），
  *                            不是"宿主机暂时离线"占位页；
  *   2. GET /<code>/（无斜杠）→ 302 到 /<code>/；
- *   3. GET /dsh-remote/api → 属主 API 存活（仅宿主角色直接可达时）。
+ *   3. GET /dsh-remote-relay/api → 属主 API 存活（仅宿主角色直接可达时）。
  *
  * 注意: 旧版探针打 /<code>/ws（console 模式端点），gui 模式下必然
  * socket hang up——那是假警报，不要再用它判断 gui 模式健康。
@@ -26,7 +26,7 @@ if (!/^\d{8}$/.test(code)) fail(`缺少 8 位远程码: node test/live-check.mjs
 function fetchText(url, maxBytes = 400_000) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https:') ? httpsGet : get
-    const req = mod(url, { headers: { 'user-agent': 'dsh-remote-live-check' } }, (res) => {
+    const req = mod(url, { headers: { 'user-agent': 'dsh-remote-relay-live-check' } }, (res) => {
       const chunks = []
       let size = 0
       res.on('data', (c) => { size += c.length; if (size <= maxBytes) chunks.push(c) })
@@ -44,7 +44,7 @@ const base = origin.replace(/\/+$/, '')
 const page = await fetchText(`${base}/${code}/`).catch((e) => fail(`GET /${code}/ 失败: ${e.message}`))
 if (page.status !== 200) fail(`GET /${code}/ → ${page.status}（离线页/404 都说明 host 未注册到中转）`)
 if (!page.body.includes('id="root"')) fail(`GET /${code}/ 不是 GUI 壳（缺 id="root"），可能被占位页/降级响应顶替`)
-if (!page.body.includes('dsh-remote visitor shim')) fail('代理 HTML 缺少访客 URL shim（公网访客的 /api/* 调用会 400/405）')
+if (!page.body.includes('dsh-remote-relay visitor shim')) fail('代理 HTML 缺少访客 URL shim（公网访客的 /api/* 调用会 400/405）')
 console.log(`✅ GET /${code}/ → 200 GUI 壳 + 访客 shim`)
 
 // 2. 裸码 302
@@ -55,11 +55,11 @@ if (bare.status !== 302 || !String(bare.headers.location ?? '').startsWith(`/${c
 console.log(`✅ GET /${code} → 302 → /${code}/`)
 
 // 3. 属主 API（本地/宿主角色才直接可达；relay-only 服务器 404 属正常）
-const api = await fetchText(`${base}/dsh-remote/api`).catch(() => null)
+const api = await fetchText(`${base}/dsh-remote-relay/api`).catch(() => null)
 if (api && api.status === 200 && api.body.includes('"ok":true')) {
-  console.log('✅ GET /dsh-remote/api → 属主 API 存活')
+  console.log('✅ GET /dsh-remote-relay/api → 属主 API 存活')
 } else {
-  console.log('ℹ️ /dsh-remote/api 未直接可达（relay-only 部署属正常）')
+  console.log('ℹ️ /dsh-remote-relay/api 未直接可达（relay-only 部署属正常）')
 }
 
 console.log(`\n🎉 LIVE CHECK 通过: ${base}/${code}/ 可正常访问`)

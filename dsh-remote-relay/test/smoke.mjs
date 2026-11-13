@@ -1,5 +1,5 @@
 /**
- * Standalone smoke test for dsh-remote core plumbing (no DSH required).
+ * Standalone smoke test for dsh-remote-relay core plumbing (no DSH required).
  *
  * Chain under test:
  *   fake visitor (real ws client)

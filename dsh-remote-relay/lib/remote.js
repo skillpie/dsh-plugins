@@ -1,5 +1,5 @@
 /**
- * dsh-remote — outbound control link (host role).
+ * dsh-remote-relay — outbound control link (host role).
  *
  * Dials `relayUrl + HOST_UPGRADE_PATH` over one WebSocket, registers the
  * 8-digit code and identity, and feeds every control frame to the shared

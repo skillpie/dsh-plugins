@@ -1,5 +1,5 @@
 /**
- * dsh-remote — Cordis entry (both roles in one activation).
+ * dsh-remote-relay — Cordis entry (both roles in one activation).
  *
  * Host role (default on): dials the configured relay origin (e.g.
  * wss://dsh.skillpie.cn) over one outbound WebSocket and registers this
@@ -10,15 +10,15 @@
  * (LAN / loopback use and end-to-end testing without a relay).
  *
  * Relay role (`relay.enabled`, for a server-side profile such as
- * dsh.skillpie.cn): mounts `/dsh-remote/host` for host registrations and
+ * dsh.skillpie.cn): mounts `/dsh-remote-relay/host` for host registrations and
  * serves `/<code>/` for registered hosts. The registry keeps token hashes
  * only; GUI traffic rides spliced frames the relay never interprets.
  *
  * Identity (code / hostId / token) persists as a credential record
- * `dsh-remote/identity` (GrantRecord payload); an explicit `code` in the
+ * `dsh-remote-relay/identity` (GrantRecord payload); an explicit `code` in the
  * row config pins it instead.
  *
- * Owner panel: same-origin JSON API at /dsh-remote/api behind the web GUI's
+ * Owner panel: same-origin JSON API at /dsh-remote-relay/api behind the web GUI's
  * own session auth (status / regenerate / toggles), consumed by the client
  * half's sidebar panel. Host roles only — a relay-only server row mounts no
  * owner API.
@@ -34,7 +34,7 @@ import { consoleHtml } from './console.js'
 import { createPipePair } from './pipe.js'
 
 const DEFAULT_RELAY_URL = 'wss://dsh.skillpie.cn'
-const CREDENTIAL_KEY = 'dsh-remote/identity'
+const CREDENTIAL_KEY = 'dsh-remote-relay/identity'
 const MAX_BODY = 32 * 1024
 
 /* ── config ──────────────────────────────────────────────────────────── */
@@ -51,7 +51,7 @@ function bool(value, fallback) {
 export const Config = {
   '~standard': {
     version: 1,
-    vendor: 'dsh-remote',
+    vendor: 'dsh-remote-relay',
     validate(input) {
       if (input === undefined || input === null) return { value: {} }
       if (typeof input !== 'object' || Array.isArray(input)) return { issues: [issue('expected an object')] }
@@ -131,7 +131,7 @@ export const Config = {
 /* ── apply ───────────────────────────────────────────────────────────── */
 
 export default {
-  name: '@skillpie/dsh-remote',
+  name: 'dsh-remote-relay',
   Config,
   inject: [],
   apply(ctx, rawConfig = null) {
@@ -173,8 +173,8 @@ export default {
       for (const dispose of disposers.splice(0)) {
         try { dispose() } catch { /* best-effort teardown */ }
       }
-      logLine('boot', 'dsh-remote 已卸载')
-    }, 'dsh-remote: lifetime')
+      logLine('boot', 'dsh-remote-relay 已卸载')
+    }, 'dsh-remote-relay: lifetime')
 
     // Services arrive through optional injection; boot() starts the parts
     // that need them as they appear.
@@ -270,9 +270,9 @@ export default {
         })
         state.link = link
         link.start()
-        logLine('boot', `dsh-remote 已加载（远程码 ${identity.code}，模式 ${mode}）`)
+        logLine('boot', `dsh-remote-relay 已加载（远程码 ${identity.code}，模式 ${mode}）`)
       } else {
-        logLine('boot', `dsh-remote 已加载（远程码 ${identity.code}，远程访问已关闭）`)
+        logLine('boot', `dsh-remote-relay 已加载（远程码 ${identity.code}，远程访问已关闭）`)
       }
 
       // 5. Owner panel API (same-origin, behind the GUI session auth). Host
@@ -292,7 +292,7 @@ export default {
       //     relay also derives from the hello to stamp the visitor shim.
       if (enabled || direct) {
         disposers.push(registerFileRoute({ webServer, key: fileRouteKey(identity.hostId), log: logLine }))
-        logLine('file-route', '访客文件下载路由已挂载（/dsh-remote-file）')
+        logLine('file-route', '访客文件下载路由已挂载（/dsh-remote-relay-file）')
       }
 
       // 6. Direct mode: the same surface on the local web server.
@@ -333,10 +333,10 @@ export default {
       if (mode === 'gui' && (direct || relayFaceEnabled)) {
         disposers.push(webServer.register({
           kind: 'exact',
-          path: '/dsh-remote-sw.js',
+          path: '/dsh-remote-relay-sw.js',
           handler: (req, res) => { try { serveServiceWorker(req, res) } catch { try { res.destroy() } catch { /* gone */ } } },
         }))
-        logLine('sw', '访客恢复 Worker 已挂载（/dsh-remote-sw.js）')
+        logLine('sw', '访客恢复 Worker 已挂载（/dsh-remote-relay-sw.js）')
       }
 
       // 8. Relay face (server deployments only).
@@ -374,7 +374,7 @@ export default {
         body = await readBody(req).catch(() => null)
         if (body === null) return send(200, { ok: false, error: 'invalid JSON body' })
       } else if (req.method !== 'GET') {
-        return send(200, { ok: true, service: 'dsh-remote', protocol: PROTOCOL_VERSION })
+        return send(200, { ok: true, service: 'dsh-remote-relay', protocol: PROTOCOL_VERSION })
       }
       try {
         send(200, await handleOwnerAction(body))

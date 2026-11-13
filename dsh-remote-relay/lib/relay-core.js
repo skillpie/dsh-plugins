@@ -1,5 +1,5 @@
 /**
- * dsh-remote — relay core: code registry, per-code routes, bridging.
+ * dsh-remote-relay — relay core: code registry, per-code routes, bridging.
  *
  * The same core serves the server-side relay face (on dsh.skillpie.cn) and
  * the local direct mode. A host socket registers with an 8-digit code; the
@@ -75,7 +75,7 @@ export class RelayCore {
       try {
         this.enterDisposers.push(this.webServer.register({
           kind: 'prefix',
-          path: '/dsh-remote-enter',
+          path: '/dsh-remote-relay-enter',
           handler: (req, res) => {
             try { this.serveEnter(req, res) } catch (error) {
               this.log('relay', `输码页请求失败（已隔离）: ${error?.message ?? error}`)
@@ -90,7 +90,7 @@ export class RelayCore {
   }
 
   /**
-   * Standalone code-entry page: `/dsh-remote-enter?code=NNNNNNNN` renders the
+   * Standalone code-entry page: `/dsh-remote-relay-enter?code=NNNNNNNN` renders the
    * dialog pre-flagged with that code as invalid; without a code it opens the
    * blank dialog. Also the redirect target for edge-level unknown-code rules.
    */
@@ -442,7 +442,7 @@ i.focus();
 
   offlineHtml(code) {
     return `<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="refresh" content="5"><script>(function(){try{localStorage.setItem('dsh-remote-last-code','${code}');sessionStorage.setItem('dsh-remote-last-code','${code}');if((location.search||'').indexOf('gui')===-1)history.replaceState(null,'','/')}catch(e){}})();</script>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="refresh" content="5"><script>(function(){try{localStorage.setItem('dsh-remote-relay-last-code','${code}');sessionStorage.setItem('dsh-remote-relay-last-code','${code}');if((location.search||'').indexOf('gui')===-1)history.replaceState(null,'','/')}catch(e){}})();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>远程控制 ${code}</title>
 <style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:#101114;color:#e8eaed;font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}.big{font-size:17px}.hint{font-size:12.5px;color:#9aa0a6}code{font-family:ui-monospace,Menlo,monospace;color:#6b84ff}</style></head>
@@ -461,7 +461,7 @@ i.focus();
     const map = JSON.stringify(['/api/', '/dsh-dba/', '/dsh-market/'])
     return `<script>(function(){
 window.__DSH_REMOTE_VISITOR__=true;
-try{localStorage.setItem('dsh-remote-last-code',${JSON.stringify(code)})}catch(e){}
+try{localStorage.setItem('dsh-remote-relay-last-code',${JSON.stringify(code)})}catch(e){}
 var P=${prefix};var M=${map};
 function pick(p){for(var i=0;i<M.length;i++){var m=M[i];if(p===m||p.slice(0,m.length)===m)return true}return false}
 function rebase(u){try{var x=new URL(u,location.href);if((x.protocol==='http:'||x.protocol==='https:'||x.protocol==='ws:'||x.protocol==='wss:')&&x.host===location.host&&pick(x.pathname)){return P+x.pathname+x.search+x.hash}}catch(e){}return u}
@@ -475,7 +475,7 @@ window.fetch=function(input,init){
 };
 var OW=window.WebSocket;
 window.WebSocket=class extends OW{constructor(u,p){u=rebase(typeof u==='string'?u:String(u));super(u,p)}};
-})(/* dsh-remote visitor shim */);</script>`
+})(/* dsh-remote-relay visitor shim */);</script>`
   }
 
   /**
@@ -493,17 +493,17 @@ window.WebSocket=class extends OW{constructor(u,p){u=rebase(typeof u==='string'?
 window.__DSH_REMOTE_CONCEAL__=true;
 try{
   var C=${codeJson};
-  if((location.search||'').indexOf('gui')!==-1){try{sessionStorage.setItem('dsh-remote-bypass','1')}catch(e){}return}
+  if((location.search||'').indexOf('gui')!==-1){try{sessionStorage.setItem('dsh-remote-relay-bypass','1')}catch(e){}return}
   var b=document.querySelector('base');
   if(b)b.setAttribute('href',${prefixJson});
-  try{localStorage.setItem('dsh-remote-last-code',C)}catch(e){}
-  try{sessionStorage.setItem('dsh-remote-last-code',C)}catch(e){}
+  try{localStorage.setItem('dsh-remote-relay-last-code',C)}catch(e){}
+  try{sessionStorage.setItem('dsh-remote-relay-last-code',C)}catch(e){}
   try{history.replaceState(null,'','/')}catch(e){}
   if(navigator.serviceWorker&&window.isSecureContext){
-    navigator.serviceWorker.register('/dsh-remote-sw.js?code='+C,{scope:'/'}).catch(function(){})
+    navigator.serviceWorker.register('/dsh-remote-relay-sw.js?code='+C,{scope:'/'}).catch(function(){})
   }
 }catch(e){}
-})(/* dsh-remote conceal */);</script>`
+})(/* dsh-remote-relay conceal */);</script>`
   }
 
   /**
@@ -511,7 +511,7 @@ try{
    * (OpenTargetButton) only hands paths to the host desktop; a remote
    * visitor has no way to save the file locally. This script watches for
    * that menu opening, prepends a "下载文件" item (styled after the native
-   * menu rows) and serves the file through the host's `/dsh-remote-file`
+   * menu rows) and serves the file through the host's `/dsh-remote-relay-file`
    * route via the tunnel.
    *
    * The absolute path comes from the preview header's PathLabel
@@ -525,7 +525,7 @@ try{
    * (OpenTargetButton) only hands paths to the host desktop; a remote
    * visitor has no way to save the file locally. This script watches for
    * that menu opening, prepends a "下载文件" row and serves the file
-   * through the host's `/dsh-remote-file` route via the tunnel.
+   * through the host's `/dsh-remote-relay-file` route via the tunnel.
    *
    * Row construction: a deep clone of the first native row wrapper.
    * MenuRow wraps every `button[role=menuitem]` in a `div` and styles it
@@ -571,8 +571,8 @@ function base(){return location.pathname.replace(new RegExp('^/'+C+'(/|$)'),'/')
   ? '/'+C : location.pathname.split('/').slice(0,2).join('/')}
 var DL_ICON='<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.2v7.6m0 0 2.8-2.8M8 9.8 5.2 7M3 12.6h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function download(path){
-  var url=base()+'/dsh-remote-file?path='+encodeURIComponent(path);
-  return fetch(url,{credentials:'omit',headers:{'x-dsh-remote-key':K}}).then(function(r){
+  var url=base()+'/dsh-remote-relay-file?path='+encodeURIComponent(path);
+  return fetch(url,{credentials:'omit',headers:{'x-dsh-remote-relay-key':K}}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
     var cd=r.headers.get('content-disposition')||'';
     var m=cd.match(/filename\\*=UTF-8''([^;]+)/i);
@@ -614,13 +614,13 @@ function rowSpans(btn){
 function decorate(btn,zh){
   btn.removeAttribute('disabled');btn.removeAttribute('aria-disabled');
   btn.removeAttribute('aria-describedby');btn.removeAttribute('id');
-  btn.setAttribute('data-dsh-remote-dl-item','1');
+  btn.setAttribute('data-dsh-remote-relay-dl-item','1');
   var sp=rowSpans(btn);
   for(var i=0;i<sp.drop.length;i++){if(sp.drop[i].parentNode)sp.drop[i].parentNode.removeChild(sp.drop[i])}
   if(sp.icon)sp.icon.innerHTML=DL_ICON;
   var label=sp.label;
   if(!label){label=document.createElement('span');btn.appendChild(label)}
-  label.setAttribute('data-dsh-remote-dl-item-label','1');
+  label.setAttribute('data-dsh-remote-relay-dl-item-label','1');
   label.textContent=zh?'下载文件':'Download file';
 }
 function bind(btn,zh,trigger){
@@ -630,7 +630,7 @@ function bind(btn,zh,trigger){
     if(busy)return;
     var path=trigger?findPath(trigger):null;
     if(!path&&lastMux&&Date.now()-(lastMux.at||0)<120000)path=lastMux.path;
-    var t=btn.querySelector('[data-dsh-remote-dl-item-label]')||btn;
+    var t=btn.querySelector('[data-dsh-remote-relay-dl-item-label]')||btn;
     // Always give visible feedback: locate failure, progress, and network
     // failures each flash on the row label — a silent click reads as broken.
     var flash=function(msg,ms){
@@ -661,9 +661,9 @@ function patch(menu){
   // React may re-render the open menu (applications arrive async) and drop
   // the inserted row: only skip when the row is still in place, otherwise
   // fall through and re-clone it.
-  var already=menu.querySelector('[data-dsh-remote-dl-item]');
+  var already=menu.querySelector('[data-dsh-remote-relay-dl-item]');
   if(already&&menu.contains(already))return;
-  menu.setAttribute('data-dsh-remote-dl','1');
+  menu.setAttribute('data-dsh-remote-relay-dl','1');
   var first=items[0];
   // Trigger resolution, most-reliable first (rc.1 ground truth: the chevron
   // carries aria-haspopup + aria-expanded but NO aria-controls, and the menu
@@ -731,7 +731,7 @@ if(document.body)start();else document.addEventListener('DOMContentLoaded',start
 // Menus already open before the observer started.
 try{document.querySelectorAll('[role=menu]').forEach(patch)}catch(e){}
 }catch(e){}
-})(/* dsh-remote download menu */);</script>`
+})(/* dsh-remote-relay download menu */);</script>`
   }
 
   injectVisitorShim(html, code, fileKey) {
@@ -1174,7 +1174,7 @@ try{document.querySelectorAll('[role=menu]').forEach(patch)}catch(e){}
 export { PROTOCOL_VERSION }
 
 /**
- * Origin-level service worker served at /dsh-remote-sw.js. It reads its own
+ * Origin-level service worker served at /dsh-remote-relay-sw.js. It reads its own
  * scriptURL query for the code and, from then on, intercepts navigations to
  * the bare origin (which belong to the relay's authenticated GUI and 401 for
  * visitors) and serves the tunnel under /<code>/ instead — the address bar
@@ -1183,7 +1183,7 @@ export { PROTOCOL_VERSION }
  * never hijacked, and `?gui` is a manual escape.
  */
 export function serviceWorkerScript() {
-  return `/* dsh-remote visitor restore worker */
+  return `/* dsh-remote-relay visitor restore worker */
 var CODE='';
 try{CODE=new URL(self.location.href).searchParams.get('code')||''}catch(e){}
 var CODE_RE=/^\\/([1-9]\\d{7})(\\/|$)/;
@@ -1206,7 +1206,7 @@ self.addEventListener('fetch',function(event){
         var probe;
         try{probe=await fetch(new Request(req.url,{method:'HEAD',cache:'no-store'}))}catch(e){return fetch(req)}
         if(probe&&probe.status===404){
-          try{return await fetch('/dsh-remote-enter?code='+cm[1],{cache:'no-store'})}catch(e){return fetch(req)}
+          try{return await fetch('/dsh-remote-relay-enter?code='+cm[1],{cache:'no-store'})}catch(e){return fetch(req)}
         }
         return fetch(req);
       })());
@@ -1218,7 +1218,7 @@ self.addEventListener('fetch',function(event){
       var up;
       try{up=await fetch('/'+CODE+'/',{cache:'no-store'})}catch(e){return}
       if(up.status===404){
-        try{return await fetch('/dsh-remote-enter?code='+CODE,{cache:'no-store'})}catch(e){return fetch(req)}
+        try{return await fetch('/dsh-remote-relay-enter?code='+CODE,{cache:'no-store'})}catch(e){return fetch(req)}
       }
       var ct=up.headers.get('content-type')||'';
       if(ct.indexOf('text/html')===-1)return up;

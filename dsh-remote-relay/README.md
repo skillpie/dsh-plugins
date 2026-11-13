@@ -1,4 +1,4 @@
-# dsh-remote
+# dsh-remote-relay
 
 DeepSeek Harness(DSH)插件:像 ZCodeOnline 远程协助一样,用 **8 位远程码** 在浏览器里访问任意一台装有本插件的 DSH 宿主机 —— 打开 `https://dsh.skillpie.cn/12345678/` 即得到**该宿主机完整的真实 Web GUI**(会话、工具渲染、交付物、终端、设置无一裁剪),而不是另做一套简化前端。
 
@@ -7,14 +7,14 @@ DeepSeek Harness(DSH)插件:像 ZCodeOnline 远程协助一样,用 **8 位远程
 ## 工作模型
 
 ```
-宿主机(你自己的 DSH + dsh-remote)              中转站(dsh.skillpie.cn 的 DSH + relay.enabled)
-  │ 出站 wss /dsh-remote/host ──────────────▶ /<code>/ 与 /<code>/api/remote.mux 随注册挂载
+宿主机(你自己的 DSH + dsh-remote-relay)              中转站(dsh.skillpie.cn 的 DSH + relay.enabled)
+  │ 出站 wss /dsh-remote-relay/host ──────────────▶ /<code>/ 与 /<code>/api/remote.mux 随注册挂载
   │  (无需公网 IP/端口)                        │
   └──────── 字节级桥接 ◀─────────────────────┴── 访客浏览器 https://dsh.skillpie.cn/12345678/
 ```
 
 - **GUI 透传(`mode: 'gui'`,默认)**:中转面把 `/<code>/…` 的 HTTP 请求剥掉前缀后经控制通道转发给宿主机;宿主机侧的 GUI 桥用进程内 launch token 自动铸造 owner 会话 cookie,对自己的 loopback web 服务完成请求;响应(含流式内容)原样回传。GUI 唯一的多路 WebSocket `/api/remote.mux` 按帧拼接(JSON 文本帧与二进制帧双向透传)。
-- **身份与会话**:远程码/宿主 ID/token 持久化在凭据记录 `dsh-remote/identity`(重启不漂移);token 只在中转站存哈希,重连凭 token 顶替旧路由,fail-closed 自愈。
+- **身份与会话**:远程码/宿主 ID/token 持久化在凭据记录 `dsh-remote-relay/identity`(重启不漂移);token 只在中转站存哈希,重连凭 token 顶替旧路由,fail-closed 自愈。
 - **多宿主机隔离**:同一中转域名下,每台宿主机挂在自己的 `/<code>/` 前缀;owner cookie 由宿主机侧持有并逐请求注入,**不落到访客浏览器**,访客之间也互不可见。
 - **入口**：GUI 左侧栏底部（账号区上方）的「远程控制」按钮，点击弹窗进入属主面板；侧栏菜单不再有独立入口。侧栏收起时按钮自动变为纯图标。
 - **`mode: 'console'`(可选)**:轻量只读/控制页(会话列表、消息流、发送/中断),供想要最小暴露面或低带宽的场景使用。
@@ -31,8 +31,8 @@ DeepSeek Harness(DSH)插件:像 ZCodeOnline 远程协助一样,用 **8 位远程
 服务器(dsh.skillpie.cn 等,官方 npm 形态 DSH):安装同一包,并在该 profile 补丁层覆盖:
 
 ```yaml
-- id: dsh-remote
-  name: dsh-remote
+- id: dsh-remote-relay
+  name: dsh-remote-relay
   config:
     enabled: false          # 服务器自身不必外连别的中转站
     direct: false
@@ -62,7 +62,7 @@ DeepSeek Harness(DSH)插件:像 ZCodeOnline 远程协助一样,用 **8 位远程
 
 ## 地址栏隐私（远程码不落 URL）
 
-打开 `https://dsh.skillpie.cn/12345678/` 后,页面脚本会把远程码存入浏览器(localStorage + sessionStorage)、立刻用 `history.replaceState` 把地址栏改写为 `https://dsh.skillpie.cn/`,并把 `<base>` 钉到隧道前缀保证资源继续加载。同时注册一个 origin 级 Service Worker(`/dsh-remote-sw.js`):之后直接访问裸域名也会自动恢复到对应宿主机的隧道,**全程不需要把码拼回 URL**。
+打开 `https://dsh.skillpie.cn/12345678/` 后,页面脚本会把远程码存入浏览器(localStorage + sessionStorage)、立刻用 `history.replaceState` 把地址栏改写为 `https://dsh.skillpie.cn/`,并把 `<base>` 钉到隧道前缀保证资源继续加载。同时注册一个 origin 级 Service Worker(`/dsh-remote-relay-sw.js`):之后直接访问裸域名也会自动恢复到对应宿主机的隧道,**全程不需要把码拼回 URL**。
 
 - 转发/收藏裸域名即可再次进入(同一浏览器);`?gui` 参数可跳过恢复(例如访客想看中转站自己的 GUI 或排除故障)。
 - 携带中转站属主会话 cookie(`dsh-auth-*`)的浏览器不受 SW 影响,裸域名始终是中转站自己的 GUI。
@@ -76,9 +76,9 @@ DeepSeek Harness(DSH)插件:像 ZCodeOnline 远程协助一样,用 **8 位远程
 
 三层机制,层层独立:
 
-1. **输码页路由** `/dsh-remote-enter`(插件自带,gui 模式注册;`?code=<码>` 时显示该码无效的提示)。
+1. **输码页路由** `/dsh-remote-relay-enter`(插件自带,gui 模式注册;`?code=<码>` 时显示该码无效的提示)。
 2. **Service Worker 探测**(覆盖所有已装 SW 的浏览器,任何部署形态都生效):SW 拦截 `/〈8 位码〉` 形状的导航,HEAD 探测一次,后端 404 就改呈现输码页;裸域名恢复时回源到失效码同样转输码页,并清掉失效的缓存码。活码探测一次 200 后正常放行,隧道不受影响。
-3. **nginx 兜底**(公网部署,覆盖首次访问、还没装 SW 的陌生访客):裸码路径 `location ~ "^/[1-9][0-9]{7}/?$"` + `proxy_intercept_errors on` + `error_page 404 = @dsh_remote_enter` 内部改写到 `/dsh-remote-enter?code=〈码〉`。配置见 `deploy/nginx-dsh.skillpie.cn.conf`。
+3. **nginx 兜底**(公网部署,覆盖首次访问、还没装 SW 的陌生访客):裸码路径 `location ~ "^/[1-9][0-9]{7}/?$"` + `proxy_intercept_errors on` + `error_page 404 = @dsh_remote_enter` 内部改写到 `/dsh-remote-relay-enter?code=〈码〉`。配置见 `deploy/nginx-dsh.skillpie.cn.conf`。
 
 已知限制:局域网直连宿主机端口、且浏览器从未装过 SW 的首次访问仍会看到 404(SW 只能在页面加载过一次之后安装)。
 
@@ -88,7 +88,7 @@ DeepSeek Harness(DSH)插件:像 ZCodeOnline 远程协助一样,用 **8 位远程
 
 - 菜单项按原生菜单行**整行克隆**渲染(图标/字号/对齐与 LibreOffice 等原生项完全一致),始终位于菜单第一位。
 - 路径按优先级取三处:聊天文件卡的预览按钮 `title`(含完整绝对路径)→ 文档预览页头的完整路径显示 → 最近一次通过 mux 请求过的文件路径(兜底);都拿不到会提示「无法定位文件」。
-- 下载路由 `/dsh-remote-file` 挂在宿主机自己的 web 服务上,仅接受 GET/HEAD,经隧道访问时由宿主会话 cookie 保护;另外校验一个由宿主 hostId 派生的密钥(`x-dsh-remote-key`,自动注入),防止本机回环的其他进程任意读文件。只允许下载普通文件,单文件上限 512MB。
+- 下载路由 `/dsh-remote-relay-file` 挂在宿主机自己的 web 服务上,仅接受 GET/HEAD,经隧道访问时由宿主会话 cookie 保护;另外校验一个由宿主 hostId 派生的密钥(`x-dsh-remote-relay-key`,自动注入),防止本机回环的其他进程任意读文件。只允许下载普通文件,单文件上限 512MB。
 - 仅访客态注入该菜单项,宿主机本地 GUI 不受影响;React 重渲染摘除插入行时会自动重新补插。
 - 点击反馈:下载中显示「下载中…」;失败按原因区分——404(聊天卡片还在、磁盘文件已被清理)提示「文件已不存在(可能已被清理)」,其余失败提示「下载失败,请重试」;浏览器默认直接保存到「下载」文件夹,想要每次弹保存框请在浏览器设置开启「保存每个文件前询问保存位置」。
 

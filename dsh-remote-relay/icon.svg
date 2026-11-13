@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <!-- dsh-remote: one host radiating an encrypted link to a visitor dot -->
+  <!-- dsh-remote-relay: one host radiating an encrypted link to a visitor dot -->
   <rect x="4" y="4" width="56" height="56" rx="14" fill="currentColor" opacity="0.12"/>
   <circle cx="22" cy="42" r="7" fill="currentColor"/>
   <path d="M32 32a14.5 14.5 0 0 1 10 4.2" stroke="currentColor" stroke-width="4" stroke-linecap="round" opacity="0.55"/>

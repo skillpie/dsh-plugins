@@ -5,7 +5,7 @@
 /* 记住最后访问的 8 位远程码：直接访问根路径时自动跳回上次的宿主机。 */
 (function () {
   try {
-    var c = localStorage.getItem('dsh-remote-last-code')
+    var c = localStorage.getItem('dsh-remote-relay-last-code')
     if (c && /^[1-9]\d{7}$/.test(c)) { location.replace('/' + c + '/'); return }
   } catch (e) { /* 隐私模式等场景忽略 */ }
 })()
@@ -36,7 +36,7 @@
   function go() {
     var v = (i.value || '').trim()
     if (!/^[1-9]\d{7}$/.test(v)) { e.textContent = '请输入 8 位数字远程码（不含 0 开头）'; return }
-    try { localStorage.setItem('dsh-remote-last-code', v) } catch (_) {}
+    try { localStorage.setItem('dsh-remote-relay-last-code', v) } catch (_) {}
     location.href = '/' + v + '/'
   }
   b.onclick = go

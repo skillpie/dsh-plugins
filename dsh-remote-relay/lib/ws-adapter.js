@@ -1,5 +1,5 @@
 /**
- * dsh-remote — adapter from a raw `ws` socket to the small surface the
+ * dsh-remote-relay — adapter from a raw `ws` socket to the small surface the
  * plugin uses:
  *   send(obj)          JSON text frame
  *   sendRaw(buffer)    binary frame (GUI splice payloads)

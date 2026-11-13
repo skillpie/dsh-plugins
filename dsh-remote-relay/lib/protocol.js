@@ -1,5 +1,5 @@
 /**
- * dsh-remote — shared wire constants and small helpers.
+ * dsh-remote-relay — shared wire constants and small helpers.
  *
  * Control channel (relay ↔ host, JSON text frames over one WebSocket):
  *   host → relay  { t:'hello', v, hostId, code, token, name, dsh }
@@ -24,10 +24,10 @@ import { randomInt, randomUUID, createHash } from 'node:crypto'
 export const PROTOCOL_VERSION = 1
 
 /** Exact upgrade path where hosts dial the relay. */
-export const HOST_UPGRADE_PATH = '/dsh-remote/host'
+export const HOST_UPGRADE_PATH = '/dsh-remote-relay/host'
 
 /** Owner panel JSON API, same-origin and behind the web GUI's session auth. */
-export const OWNER_API_PATH = '/dsh-remote/api'
+export const OWNER_API_PATH = '/dsh-remote-relay/api'
 
 /** Commands the visitor console may issue. */
 export const VISITOR_COMMANDS = new Set([

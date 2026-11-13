@@ -1,5 +1,5 @@
 /**
- * dsh-remote — Web client half (module-loader bundle).
+ * dsh-remote-relay — Web client half (module-loader bundle).
  *
  * The sidebar foot gains a compact "远程控制" action button (icon when the
  * rail is collapsed, icon + label when wide). Clicking it opens an
@@ -15,12 +15,12 @@
  * components with hooks rendered through h(Component, props).
  */
 window.__ModuleLoader__.load({
-  id: '@skillpie/dsh-remote',
+  id: 'dsh-remote-relay',
   factory(require) {
     var React = require('react')
     var h = React.createElement
-    var NS = '@skillpie/dsh-remote'
-    var API = '/dsh-remote/api'
+    var NS = 'dsh-remote-relay'
+    var API = '/dsh-remote-relay/api'
 
     var zh = {
       title: '远程控制',
@@ -452,12 +452,12 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      name: '@skillpie/dsh-remote',
+      name: 'dsh-remote-relay',
       inject: ['slots', 'layout', 'locale'],
       apply: function (ctx) {
         ctx.effect(function () {
           return ctx.locale.register(NS, { zh: zh, en: en })
-        }, 'dsh-remote: dictionaries')
+        }, 'dsh-remote-relay: dictionaries')
 
         pageT = (ctx.locale && typeof ctx.locale.bind === 'function')
           ? ctx.locale.bind(NS)
@@ -471,7 +471,7 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('sidebar.footer.action', function () {
           return ctx.slots.register({
             name: 'sidebar.footer.action',
-            id: 'dsh-remote-footer',
+            id: 'dsh-remote-relay-footer',
             order: 10,
             locale: NS,
             label: function () { return pageT('title') },
@@ -482,7 +482,7 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('shell.overlay', function () {
           return ctx.slots.register({
             name: 'shell.overlay',
-            id: 'dsh-remote-overlay',
+            id: 'dsh-remote-relay-overlay',
             order: 20,
             locale: NS,
           }, RemotePanelDialog)
