@@ -1,6 +1,6 @@
 {
   "name": "@skillpie/dsh-project-report",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Project report for DeepSeek Harness: manual & scheduled reports from git commits and session topics with a configurable daily cutover offset, plus optional automatic Moka overtime submission. Per-project built-in scheduling, no DSH timers needed.",
   "type": "module",
   "license": "MIT",
@@ -15,6 +15,10 @@
     "moka"
   ],
   "main": "./lib/index.js",
+  "repository": {
+    "url": "git+https://github.com/skillpie/dsh-plugins.git",
+    "directory": "dsh-project-report"
+  },
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
