@@ -1,0 +1,234 @@
+/**
+ * dsh-gitx — AI assistance over the Host's own model service.
+ *
+ * These calls use `ctx.llm.stream()` directly, the same way the shipped
+ * session-title feature does: they are the plugin's own model calls and never
+ * enter the session log. That matters for two reasons — a "write me a commit
+ * message" button should not look like a conversation turn, and a large diff
+ * should not consume the session's context budget.
+ *
+ * The provider/model default to the active session selection rather than a pinned model,
+ * because a user who switched their default model expects every feature to
+ * follow it. Both can be pinned in the plugin settings.
+ */
+
+import { redact } from './git/commandLog.js'
+
+/** Prompt shared by every call, so the plugin's voice is consistent. */
+const BASE_SYSTEM = [
+  '你是一个严谨的 Git 助手，服务于中文开发者。',
+  '你只输出被要求的内容本身，不写解释、不写前言、不写 Markdown 代码围栏。',
+  '禁止编造 diff 中不存在的信息。如果改动不足以判断意图，就事论事地描述改了什么。',
+].join('\n')
+
+/** Cap on streamed output, guarding against a runaway generation. */
+const MAX_TOKENS = 1500
+
+/**
+ * Build the LLM facade.
+ *
+ * @param deps - plugin dependencies.
+ * @returns an object with the generation methods, or undefined when no `llm`
+ *   service is composed in this profile.
+ */
+export function createLlm(deps) {
+  const { getLlm, getSessionSelection, getDefaultSelection, getConfig, logger } = deps
+
+  const selectionFor = (sessionId, followSession = false) => {
+    const config = getConfig()
+    // A fixed choice is one provider/model pair. Never combine half a saved
+    // choice with the current session's provider or model.
+    if (!followSession && (config.aiProvider || config.aiModel)) return { provider: config.aiProvider || '', model: config.aiModel || '' }
+    const session = getSessionSelection?.(sessionId)
+    const fallback = session?.provider && session?.model ? session : sessionId ? undefined : getDefaultSelection?.()
+    const provider = fallback?.provider || ''
+    const model = fallback?.model || ''
+    return { provider, model,
+      ...(provider === fallback?.provider && model === fallback?.model && fallback?.reasoningEffort !== undefined
+        ? { reasoningEffort: fallback.reasoningEffort } : {}) }
+  }
+
+  /**
+   * Run one streaming completion and collect its text.
+   *
+   * @param input - `{ system, user, signal, maxTokens }`.
+   * @returns the generated text, trimmed.
+   */
+  const complete = async (input) => {
+    const llm = getLlm?.()
+    if (llm === undefined || llm === null) {
+      throw new Error('当前 profile 没有可用的模型服务')
+    }
+    const config = getConfig()
+    if (config.aiEnabled === false) throw new Error('AI 功能已在插件设置中关闭')
+    const selection = selectionFor(input.sessionId)
+    const { provider, model } = selection
+    const reasoningEffort = config.aiReasoningEffort || selection.reasoningEffort
+    if (!provider || !model) {
+      if (config.aiProvider || config.aiModel) throw new Error('请在 Git 设置中完整选择 AI 服务商和模型')
+      throw new Error(input.sessionId ? '无法读取当前会话选中的模型，请重新打开当前会话后重试' : '没有可用的会话模型，请在 DSH 会话中选择模型或在插件设置中指定')
+    }
+    if (config.aiReasoningEffort) {
+      if (typeof llm.resolveModelInfo !== 'function') throw new Error('当前 Host 无法校验思考档位，请更新 Host 或恢复默认思考模式')
+      const info = await llm.resolveModelInfo(provider, model, input.signal)
+      if (!info.reasoning?.efforts?.some(effort => effort.id === config.aiReasoningEffort)) throw new Error('当前模型不支持所选思考档位，请在 Git AI 设置中重新选择')
+    }
+
+    let text = ''
+    let finish
+    const blocks = new Map()
+    const stream = llm.stream({
+      provider,
+      model,
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      system: input.system,
+      messages: [{ role: 'user', content: [{ type: 'text', text: redact(input.user) }] }],
+      maxTokens: input.maxTokens ?? MAX_TOKENS,
+      signal: input.signal,
+    })
+    for await (const chunk of stream) {
+      // The chunk vocabulary differs per adapter; accept the text-bearing
+      // shapes and ignore the rest rather than throwing on an unknown kind.
+      if (chunk === null || typeof chunk !== 'object') continue
+      if (chunk.type === 'finish') {
+        finish = chunk.reason
+      } else if (chunk.type === 'block-end' && chunk.block?.type === 'text') {
+        blocks.set(chunk.index, chunk.block.text)
+      } else if (chunk.type === 'text-delta' || chunk.type === 'text_delta') {
+        text += String(chunk.text ?? chunk.delta ?? '')
+      } else if (chunk.type === 'text' && typeof chunk.text === 'string') {
+        text += chunk.text
+      } else if (typeof chunk.text === 'string' && chunk.type === undefined) {
+        text += chunk.text
+      }
+    }
+    input.signal?.throwIfAborted()
+    if (finish?.kind === 'error' || finish?.kind === 'aborted') {
+      throw new Error(redact(finish.failure?.message || '模型请求失败，请重试'))
+    }
+    if (finish?.kind === 'max-tokens') {
+      throw new Error('模型输出达到长度限制，请减少选择的文件或换用其他模型后重试')
+    }
+    if (finish?.kind === 'tool-calls') {
+      throw new Error('模型未返回提交文案，请重试')
+    }
+    // Some adapters emit completed text blocks without incremental text.
+    if (!text.trim() && blocks.size) text = [...blocks.entries()].sort((a, b) => a[0] - b[0]).map(([, value]) => value).join('\n')
+    if (!text.trim()) throw new Error('模型没有返回提交文案，请重试或在设置中更换模型')
+    return text.trim()
+  }
+
+  return {
+    async modelInfo(input = {}, signal) {
+      const runtime = getLlm?.()
+      const explicit = typeof input.provider === 'string' && typeof input.model === 'string'
+      const selection = explicit ? input.provider || input.model ? input : selectionFor(input.sessionId, true) : selectionFor(input.sessionId)
+      if (typeof runtime?.resolveModelInfo !== 'function' || !selection.provider || !selection.model) return { supported: false, reasoning: null }
+      const info = await runtime.resolveModelInfo(selection.provider, selection.model, signal)
+      return { supported: true, provider: selection.provider, model: selection.model,
+        reasoning: info.reasoning ? { efforts: info.reasoning.efforts.map(effort => ({ id: effort.id, name: effort.name })),
+          defaultEffort: info.reasoning.defaultEffort } : null }
+    },
+    /** Catalog metadata only; credentials and adapter configuration stay local. */
+    async models() {
+      const runtime = getLlm?.()
+      if (typeof runtime?.listProviders !== 'function' || typeof runtime?.listModels !== 'function') return { supported: false, models: [] }
+      const providers = await runtime.listProviders()
+      const results = await Promise.allSettled(providers.map(async provider => {
+        const models = await runtime.listModels(provider.id)
+        return models.filter(model => typeof model.id === 'string' && model.id).map(model => ({
+          provider: provider.id, providerName: provider.name, id: model.id, name: model.name || model.id,
+        }))
+      }))
+      return { supported: true, models: results.flatMap(result => result.status === 'fulfilled' ? result.value : []),
+        partial: results.some(result => result.status === 'rejected') }
+    },
+    /**
+     * Whether generation can actually be attempted right now.
+     *
+     * A truthy facade is not the same as a usable model: `createLlm` always
+     * returns an object, so every caller that tested `llm === undefined` got
+     * "yes" and then failed deep inside the first generation instead of
+     * disabling the button. This asks the real questions — is the service
+     * composed, and do we know which model to call?
+     *
+     * @returns `{ available, reason }`.
+     */
+    available(input = {}) {
+      if (getLlm?.() === undefined || getLlm?.() === null) {
+        return { available: false, reason: '当前 profile 没有可用的模型服务' }
+      }
+      const config = getConfig()
+      if (config.aiEnabled === false) {
+        return { available: false, reason: 'AI 功能已在插件设置中关闭' }
+      }
+      if (config.aiProvider !== '' && config.aiModel !== '') return { available: true, reason: '' }
+      if (config.aiProvider || config.aiModel) return { available: false, reason: '请在 Git 设置中完整选择 AI 服务商和模型' }
+      const selection = selectionFor(input.sessionId)
+      if (selection?.provider && selection?.model) return { available: true, reason: '' }
+      return { available: false, reason: input.sessionId ? '无法读取当前会话选中的模型，请重新打开当前会话后重试' : '没有可用的会话模型，请在 DSH 会话中选择模型或在插件设置中指定' }
+    },
+
+    /**
+     * Draft a commit message from a diff.
+     * @param input - `{ diff, files, recentSubjects, hint, signal }`.
+     * @returns the message.
+     */
+    async generateCommitMessage(input) {
+      const user = [
+        '根据下面的 git diff 写一条提交信息。',
+        '要求：第一行是 Conventional Commits 风格的标题（feat/fix/docs/refactor/test/chore/perf/build/ci），',
+        '用中文，不超过 50 个字符，不加句号。如果改动确实不止一件事，可在空行后补 2~4 条以 "- " 开头的要点。',
+        '差异可能仅包含部分文件的摘录。仅有文件信息的产物或大文件不可据此编造实现细节；若全部只提供文件信息，请保守描述文件更新。',
+        input.recentSubjects.length > 0
+          ? `\n最近的历史标题（保持风格一致，但不要照抄）：\n${input.recentSubjects.slice(0, 10).map((s) => `- ${s}`).join('\n')}`
+          : '',
+        input.hint ? `\n用户补充的意图：${input.hint}` : '',
+        `\n改动的文件：\n${input.files.join('\n')}`,
+        `\n差异摘录（可能不完整）：\n${input.diff || '本次仅提供文件信息，没有差异正文。'}`,
+      ]
+        .filter((part) => part !== '')
+        .join('\n')
+
+      try {
+        return await complete({ system: BASE_SYSTEM, user, signal: input.signal, sessionId: input.sessionId })
+      } catch (error) {
+        logger?.warn?.(`[git] commit message generation failed: ${redact(String(error))}`)
+        throw error
+      }
+    },
+
+    /**
+     * Explain a commit's change.
+     * @param input - `{ subject, message, author, date, diff, signal }`.
+     * @returns the explanation.
+     */
+    async explainCommit(input) {
+      const user = [
+        `请解释这次提交做了什么，以及为什么可能这样做。`,
+        `\n提交标题：${input.subject}`,
+        input.message && input.message !== input.subject ? `\n提交正文：\n${input.message}` : '',
+        `\n改动：\n${input.diff}`,
+        `\n输出结构：先用一句话概括，再用 2~5 条要点说明具体改了什么、可能的影响面。`,
+      ]
+        .filter((part) => part !== '')
+        .join('\n')
+      return complete({ system: BASE_SYSTEM, user, signal: input.signal, sessionId: input.sessionId })
+    },
+
+    /**
+     * Summarize a set of changes.
+     * @param input - `{ diff, files, signal }`.
+     * @returns the summary.
+     */
+    async summarizeDiff(input) {
+      const user = [
+        '请总结下面这组改动，让一个没看过代码的人也能判断要不要仔细审查。',
+        `\n改动的文件：\n${input.files.join('\n')}`,
+        `\n完整 diff：\n${input.diff}`,
+        `\n输出结构：一句话总体判断；然后按「行为变化」「风险点」「建议关注的文件」三节给出要点。`,
+      ].join('\n')
+      return complete({ system: BASE_SYSTEM, user, signal: input.signal, sessionId: input.sessionId })
+    },
+  }
+}

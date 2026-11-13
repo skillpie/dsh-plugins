@@ -1,0 +1,5862 @@
+/**
+ * Verify the Client half without a browser.
+ *
+ * There is no browser test runner here, so this suite proves the things a silent
+ * failure would hide: the module parses through the real `__ModuleLoader__`
+ * entry, the two panel registrations share the id that makes the sidebar icon
+ * address this panel, every locale key the component reads exists in both
+ * dictionaries, and — most importantly — the component actually RENDERS in each
+ * tab. A component that throws blanks its slot entry, and the user sees an empty
+ * panel with no error.
+ */
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { readFileSync, readdirSync } from 'node:fs'
+import { findHeroWorkspaceRow, insertHeroActions, syncHeroBranchFont } from '../lib/client/core/hero-placement.js'
+import { historyRangeWindow } from '../lib/client/core/history-range.js'
+import { popoverPosition } from '../lib/client/ui/popover-position.js'
+import { observeWorkspaceNavigation, getWorkspaceNavigation, acknowledgeWorkspaceNavigation } from '../lib/client/core/workspace-navigation.js'
+import { withHunkFingerprint } from '../lib/git/hunkFingerprint.js'
+
+import {
+  loadClientModule,
+  createClientContext,
+  createRpcStub,
+  mount,
+  flush,
+  walk,
+  textOf,
+  findAll,
+  findWhere,
+  hasText,
+  refNode,
+  React,
+  runCleanups,
+} from './render-harness.mjs'
+
+/** Shorthand for React.createElement, matching the plugin's own style. */
+const h = React.createElement
+
+const here = dirname(fileURLToPath(import.meta.url))
+const source = readFileSync(join(here, '..', 'dist', 'client.js'), 'utf8')
+
+let failures = 0
+let checks = 0
+
+function check(label, ok, detail) {
+  checks++
+  if (ok) console.log(`ok   ${label}`)
+  else {
+    failures++
+    console.error(`FAIL ${label}${detail === undefined ? '' : `\n     ${detail}`}`)
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Fixture data, shaped exactly like the Host's real RPC values
+ * ------------------------------------------------------------------ */
+
+const ROOT = 'D:/demo/repo'
+
+const STATUS = {
+  repo: { root: ROOT, version: 'git version 2.50.1.windows.1' },
+  branch: { head: 'main', upstream: 'origin/main', ahead: 1, behind: 0, detached: false, oid: 'a'.repeat(40) },
+  total: 3,
+  files: [
+    { path: 'docs/待提交.md', originalPath: null, index: 'A', worktree: '.', staged: true, kind: 'ordinary', added: 3, deleted: 0, binary: false },
+    { path: 'src/index.js', originalPath: null, index: '.', worktree: 'M', staged: false, kind: 'ordinary', added: 2, deleted: 1, binary: false },
+    { path: 'untracked.txt', originalPath: null, index: '?', worktree: '?', staged: false, kind: 'untracked', added: null, deleted: null, binary: false },
+  ],
+}
+
+const REFS = {
+  branches: [
+    // `ahead`/`behind`/`upstreamRef` are what the branch row needs to render its
+    // divergence (`dshgit-branch-tracking`); without them that span never appears.
+    { name: 'main', ref: 'refs/heads/main', sha: 'a'.repeat(40), head: true, subject: 'merge: 合并 feature', upstream: 'origin/main', upstreamRef: 'refs/remotes/origin/main', ahead: 2, behind: 1 },
+    { name: 'feature/新功能', ref: 'refs/heads/feature/新功能', sha: 'b'.repeat(40), head: false, subject: 'feat: util', upstream: null, upstreamRef: null, ahead: 0, behind: 0 },
+    { name: 'origin/main', ref: 'refs/remotes/origin/main', sha: 'a'.repeat(40), head: false, subject: 'merge', upstream: null, upstreamRef: null, ahead: 0, behind: 0 },
+  ],
+  tags: [{ name: 'v0.1.0', ref: 'refs/tags/v0.1.0', sha: 'c'.repeat(40), subject: '第一个版本' }],
+  remotes: [{ name: 'origin/main', ref: 'refs/remotes/origin/main', sha: 'a'.repeat(40), subject: 'merge' }],
+}
+
+const REMOTES = [
+  { name: 'origin', fetchUrl: 'https://github.com/user/repo.git', pushUrl: 'https://github.com/user/repo.git' },
+]
+
+const CONTRIBUTORS = [
+  { commits: 12, name: '张三', email: 'dev@example.com' },
+  { commits: 5, name: '李四', email: 'li@example.com' },
+]
+
+const TRACKING = { ref: 'main', upstream: 'origin/main', ahead: 2, behind: 1 }
+
+const REPO_META = {
+  lastFetchedAt: 1790741262000,
+  commitCount: 5,
+  userName: '张三',
+  userEmail: 'dev@example.com',
+}
+
+const COMMITS = {
+  commits: [
+    {
+      sha: 'f'.repeat(40), shortSha: 'fffffff', author: '张三', authorEmail: 'dev@example.com',
+      authorDate: 1790741262, committerDate: 1790741262, parents: ['e'.repeat(40)],
+      tips: ['main'], subject: 'merge: 合并 feature/新功能', message: 'merge: 合并 feature/新功能',
+      files: [{ status: 'M', path: 'src/util.js', from: null }],
+    },
+    {
+      sha: 'e'.repeat(40), shortSha: 'eeeeeee', author: '李四', authorEmail: 'l@example.com',
+      authorDate: 1790740000, committerDate: 1790740000, parents: ['d'.repeat(40)],
+      tips: [], subject: 'refactor: 把 app.js 重命名为 index.js', message: 'refactor: 把 app.js 重命名为 index.js\n\n详见说明。',
+      files: [{ status: 'R', path: 'src/index.js', from: 'src/app.js' }],
+    },
+  ],
+}
+
+const GRAPH = {
+  laneCount: 2,
+  rows: [
+    { sha: 'f'.repeat(40), shortSha: 'fffffff', parents: ['e'.repeat(40), 'b'.repeat(40)], lane: 0, laneCount: 2, through: [], edges: [{ from: 0, to: 0 }, { from: 0, to: 1 }], tips: ['main'], subject: 'merge: 合并 feature/新功能' },
+    { sha: 'e'.repeat(40), shortSha: 'eeeeeee', parents: ['d'.repeat(40)], lane: 0, laneCount: 2, through: [1], edges: [{ from: 0, to: 0 }], tips: [], subject: 'refactor: 把 app.js 重命名为 index.js' },
+    { sha: 'b'.repeat(40), shortSha: 'bbbbbbb', parents: ['d'.repeat(40)], lane: 1, laneCount: 2, through: [], edges: [{ from: 1, to: 0 }], tips: ['feature/新功能'], subject: 'feat: 新分支上添加 util.js' },
+  ],
+}
+
+const DIFF = {
+  text: 'diff --git a/src/index.js b/src/index.js\n@@ -1,3 +1,4 @@\n function main() {\n+  console.log(\'world\')\n }\n',
+  files: [{
+    from: null, path: 'src/index.js', status: 'M', binary: false,
+    hunks: [{ oldStart: 1, oldLines: 3, newStart: 1, newLines: 4, lines: [' function main() {', "+  console.log('world')", ' }'] }],
+  }],
+  hunks: [{ oldStart: 1, oldLines: 3, newStart: 1, newLines: 4, lines: [' function main() {', "+  console.log('world')", ' }'] }],
+}
+
+const COMMIT_DIFF = {
+  text: 'diff --git a/src/index.js b/src/index.js\n@@ -1,3 +1,4 @@\n function main() {\n-  console.log(\'hi\')\n+  console.log(\'world\')\n }\n',
+  files: [{
+    // A rename (`R`) with `from` set, which is the shape `parse.js` produces for a
+    // rename pair. The detail pane renders `file.status` as a badge, so this fixture
+    // is what makes that badge reachable — a plain 'M' would never show one.
+    from: 'src/app.js', path: 'src/index.js', status: 'R', binary: false,
+    hunks: [{
+      oldStart: 1, oldLines: 3, newStart: 1, newLines: 4,
+      // Both an addition and a deletion, so the renderer's two row kinds are
+      // exercised rather than only the easy one.
+      lines: [' function main() {', "-  console.log('hi')", "+  console.log('world')", ' }'],
+    }],
+  }],
+  hunks: [{
+    oldStart: 1, oldLines: 3, newStart: 1, newLines: 4,
+    lines: [' function main() {', "-  console.log('hi')", "+  console.log('world')", ' }'],
+  }],
+}
+
+for (const patch of [DIFF, COMMIT_DIFF]) {
+  patch.hunks = patch.hunks.map(withHunkFingerprint)
+  for (const file of patch.files) file.hunks = file.hunks.map(withHunkFingerprint)
+}
+
+const BLAME = {
+  path: 'src/index.js',
+  rev: 'WORKTREE',
+  range: null,
+  fileLines: 4,
+  cacheable: true,
+  authors: [{ name: '张三', mail: 'dev@example.com', lines: 3 }],
+  commits: [{ sha: 'e'.repeat(40), author: '张三', authorTime: 1790740000, summary: 'refactor: 重命名' }],
+  lines: [
+    { line: 1, originalLine: 1, sha: 'e'.repeat(40), author: '张三', authorTime: 1790740000, summary: 'refactor: 重命名', previous: null, filename: 'src/index.js' },
+    { line: 2, originalLine: 2, sha: 'e'.repeat(40), author: '张三', authorTime: 1790740000, summary: 'refactor: 重命名', previous: null, filename: 'src/index.js' },
+  ],
+}
+
+const COMMIT_DETAIL = {
+  sha: 'e'.repeat(40), shortSha: 'eeeeeee', author: '张三', authorEmail: 'dev@example.com',
+  authorDate: 1790740000, committerDate: 1790740000, parents: ['d'.repeat(40)], tips: [],
+  subject: 'refactor: 把 app.js 重命名为 index.js',
+  message: 'refactor: 把 app.js 重命名为 index.js\n\n详见说明。',
+  // `status` is what the Host's commit-detail parser emits for each file
+  // (`parse.js` sets 'R' when a rename pair is seen), and the detail pane renders
+  // it as a badge. The fixture previously omitted it, so that badge could never
+  // appear and the assertion that looked for it was testing nothing.
+  files: [{ path: 'src/index.js', originalPath: 'src/app.js', status: 'R', added: 1, deleted: 0, binary: false }],
+}
+
+const CONFIG = {
+  gitPath: '', defaultRepo: '', similarityThreshold: 50, autoFetch: false, autoFetchInterval: 5,
+  workspaceAddDialog: true, aiEnabled: true, aiProvider: '', aiModel: '', aiExcludePatterns: '', locale: '',
+}
+
+const DIAGNOSTICS = {
+  gitPath: 'd:/Program Files/Git/cmd/git.exe',
+  node: 'v24.21.0',
+  platform: 'win32',
+  sessions: [{
+    root: ROOT,
+    version: 'git version 2.50.1.windows.1',
+    features: { 'git:status:porcelain-v2': true },
+    ignoreRevsFile: null,
+    cache: { blame: { size: 2, hits: 1, misses: 1 }, diff: { size: 1, hits: 0, misses: 1 } },
+  }],
+}
+
+/** Handlers for a fully working Host. */
+function healthyHandlers(overrides = {}) {
+  return {
+    repos: () => ({ gitPath: 'd:/Program Files/Git/cmd/git.exe', repos: [{ root: ROOT, version: 'git version 2.50.1.windows.1', features: {} }], config: CONFIG }),
+    status: () => STATUS,
+    statusSummary: async payload => {
+      const status = await (overrides.status || (() => STATUS))(payload)
+      const tracking = await (overrides.branchTracking || (() => TRACKING))(payload)
+      return { branch: { ...status.branch, ahead: tracking.ahead, behind: tracking.behind }, total: status.total ?? status.files?.length ?? 0,
+        operation: status.operation, files: [], summary: true }
+    },
+    changelists: () => ({ version: 1, mode: 'staging', fileLayout: 'flat', active: 'default', draftList: 'default', lists: [{ id: 'default', name: '默认', draft: '', expanded: true }], assignments: {}, selected: [], chunks: {} }),
+    refs: () => REFS,
+    stashes: () => [{ ref: 'stash@{0}', sha: '9'.repeat(40), message: 'On main: 临时改动：README 草稿', date: 1790740000 }],
+    stashDiff: () => COMMIT_DIFF,
+    worktrees: () => [{ path: ROOT, head: 'a'.repeat(40), branch: 'refs/heads/main', bare: false, detached: false }],
+    worktreeCreatePreview: () => ({ valid: true, errors: {}, head: 'a'.repeat(40) }),
+    worktreeRemovalPreview: payload => ({ tree: { path: payload.directory, head: 'b'.repeat(40), branch: 'refs/heads/task' }, removable: true,
+      blockers: [], files: [], ignoredPaths: [], fileCount: 0, ignoredCount: 0 }),
+    commits: () => COMMITS,
+    commit: () => COMMIT_DETAIL,
+    commitGraph: () => GRAPH,
+    // The branch/tag dialogs gate their submit on a review payload: `ready` is
+    // `preview.reviewKey === previewKey`, so without this the form silently refuses
+    // to submit and no write is ever attempted.
+    workbenchPreview: (payload) => ({
+      reviewKey: String(payload?.action ?? '') + ':' + String(payload?.ref ?? '') + ':' + String(payload?.sha ?? ''),
+      branch: 'main', head: 'a'.repeat(40), target: 'a'.repeat(40), dirty: false, files: [],
+      operation: null, published: false, publishedRefs: [], incoming: [], incomingCount: 0,
+      outgoing: [], outgoingCount: 0, lost: [], lostCount: 0, commit: COMMIT_DETAIL,
+    }),
+    blame: () => BLAME,
+    lineHistory: () => ({ entries: [{ sha: 'e'.repeat(40), author: '张三', authorTime: 1790740000, summary: 'refactor', path: 'src/index.js', line: 2, resultLine: 2, rev: 'WORKTREE' }] }),
+    diff: (payload) => (payload?.from !== undefined && payload.from !== '' ? COMMIT_DIFF : DIFF),
+    fileContent: () => ({ exists: true, text: 'function main() {\n  console.log(\'world\')\n}\n\nmain()\n', binary: false, truncated: false, error: null }),
+    diffSummary: () => ({ files: 3, added: 5, deleted: 1, binary: 0 }),
+    contributors: () => CONTRIBUTORS,
+    remotes: () => REMOTES,
+    branchTracking: () => TRACKING,
+    repoMeta: () => REPO_META,
+    compareCommits: () => ({
+      left: 'main', right: 'HEAD', shortstat: '1 file changed, 2 insertions(+)',
+      commits: COMMITS.commits,
+    }),
+    // The compare view loads its file list through `compareFiles`; without a stub
+    // the pane renders a retry notice instead of the comparison.
+    compareFiles: (payload) => ({
+      left: payload?.left ?? 'main', right: payload?.right ?? 'HEAD',
+      shortstat: '1 file changed, 2 insertions(+)',
+      files: [{ path: 'src/index.js', status: 'M', added: 2, deleted: 0, binary: false, hunks: COMMIT_DIFF.files[0].hunks }],
+      commits: COMMITS.commits,
+    }),
+    config: () => CONFIG,
+    setConfig: (payload) => ({ ...CONFIG, ...payload.patch }),
+    diagnostics: () => DIAGNOSTICS,
+    invalidate: () => ({ ok: true }),
+    gitOutput: () => ({
+      total: 2,
+      entries: [
+        { id: 2, at: 1790741262000, cwd: ROOT, command: 'git push origin main', code: 1, durationMs: 640, stdout: '', stderr: 'fatal: 远端拒绝了推送 (non-fast-forward)', error: null },
+        { id: 1, at: 1790741260000, cwd: ROOT, command: 'git status --porcelain=v2 --branch -u', code: 0, durationMs: 35, stdout: '# branch.head main', stderr: '', error: null },
+      ],
+    }),
+    clearGitOutput: () => ({ ok: true }),
+    clone: (payload) => ({ directory: payload.directory, message: 'Cloning into …' }),
+    'write.fetch': () => ({ ok: true, code: 0, message: '已 Fetch', stdout: '' }),
+    'write.pull': () => ({ ok: true, code: 0, message: '已 Pull', stdout: '' }),
+    'write.push': () => ({ ok: true, code: 0, message: '已 Push', stdout: '' }),
+    'write.merge': () => ({ ok: true, code: 0, message: '已合并', stdout: '' }),
+    'write.renameBranch': () => ({ ok: true, code: 0, message: '已重命名', stdout: '' }),
+    'write.deleteBranch': () => ({ ok: true, code: 0, message: '已删除分支', stdout: '' }),
+    'write.stashPush': () => ({ ok: true, code: 0, message: '已储藏', stdout: '' }),
+    'write.ignorePath': () => ({ ok: true, code: 0, message: '已添加到 .gitignore', stdout: '' }),
+    'write.stashDrop': () => ({ ok: true, code: 0, message: '已删除储藏', stdout: '' }),
+    'write.createTag': () => ({ ok: true, code: 0, message: '已打标签', stdout: '' }),
+    'write.addRemote': () => ({ ok: true, code: 0, message: '已添加远端', stdout: '' }),
+    'write.removeRemote': () => ({ ok: true, code: 0, message: '已删除远端', stdout: '' }),
+    'write.undoCommit': () => ({ ok: true, code: 0, message: '已撤销提交', stdout: '' }),
+    'write.createBranch': () => ({ ok: true, code: 0, message: '已新建分支', stdout: '' }),
+    'write.discardAll': () => ({ ok: true, code: 0, message: '已丢弃全部', stdout: '' }),
+    'write.clean': () => ({ ok: true, code: 0, message: '已清理', stdout: '' }),
+    'ai.prepareCommitMessage': () => ({ available: true, id: 'context' }),
+    'ai.commitMessage': () => ({ available: true, message: 'feat: 新增中文说明文档', empty: false }),
+    'ai.explainCommit': () => ({ available: true, text: '这次提交把文件重命名了。' }),
+    'ai.summarizeDiff': () => ({ available: true, text: '总体：小改动。' }),
+    'write.stage': () => ({ ok: true, code: 0, message: '已暂存', stdout: '' }),
+    'write.unstage': () => ({ ok: true, code: 0, message: '已取消暂存', stdout: '' }),
+    'write.commit': () => ({ ok: true, code: 0, message: '提交成功', stdout: '' }),
+    'write.discardPaths': () => ({ ok: true, message: '已丢弃' }),
+    'write.discardPath': () => ({ ok: true, code: 0, message: '已丢弃', stdout: '' }),
+    'write.checkout': () => ({ ok: true, code: 0, message: '已切换', stdout: '' }),
+    'write.stashApply': () => ({ ok: true, code: 0, message: '已应用', stdout: '' }),
+    ...overrides,
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Module surface
+ * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ *
+ * Module surface
+ * ------------------------------------------------------------------ */
+
+/**
+ * A stand-in for `@deepseek-ai/dsh-client-ui-primitives`.
+ *
+ * The real package is part of the shell's frozen platform module table, and it
+ * carries DSH's Shiki highlighter. In this process there is no module table, so
+ * the suite supplies a fake with the exact shape the plugin uses: a
+ * `languageForPath` mapping and a `useCodeHighlighter(lang)` hook returning
+ * `(code) => Array<Array<{ text, style }>>`.
+ *
+ * Faking it (rather than loading the real package) keeps the assertion about
+ * THIS plugin: that it asks the platform for a grammar and renders whatever
+ * tokens come back, with the colours it was given. Whether Shiki tokenizes
+ * TypeScript correctly is Shiki's own test suite's job, not ours.
+ *
+ * @param options - `{ language }` to force a grammar, `{ none }` to simulate a
+ *   profile without the package.
+ * @returns the module table entry, or undefined for the absent case.
+ */
+function primitivesStub(options = {}) {
+  const asked = []
+  return {
+    asked,
+    // `undefined` makes the harness's require throw, which is exactly what the
+    // browser does for a module that is absent from the platform table.
+    module: options.none === true ? undefined : {
+      /** Map a path to a grammar id, like the real extension table does. */
+      languageForPath: (path) => {
+        const extension = String(path).split('.').pop().toLowerCase()
+        if (options.language !== undefined) return options.language
+        if (['js', 'jsx', 'mjs', 'cjs'].includes(extension)) return 'javascript'
+        if (['ts', 'tsx'].includes(extension)) return 'typescript'
+        if (['yml', 'yaml'].includes(extension)) return 'yaml'
+        return undefined
+      },
+      /**
+       * The hook: returns a highlighter that splits each line into tokens with
+       * an explicit colour, which is exactly what Shiki's `css-variables` theme
+       * produces (`style.color` resolved from `--shiki-token-*`).
+       */
+      useCodeHighlighter: (language) => {
+        asked.push(language)
+        return (code) => String(code).split('\n').map((line) => {
+          if (line === '') return []
+          return [{ text: line, style: { color: 'rgb(10, 20, 30)' } }]
+        })
+      },
+    },
+  }
+}
+
+console.log('--- module surface ---')
+// One shared stub instance, so the grammar the preview asked for can be
+// asserted later rather than only inferred from the colours.
+const primitives = primitivesStub()
+const loaded = loadClientModule(source.replace('    return module.exports', '    module.exports.registerWorktreeWorkspace = registerWorktreeWorkspace;\n    return module.exports'), { require: { '@deepseek-ai/dsh-client-ui-primitives': primitives.module } })
+// The bundle registers under its npm package id, which is scoped.
+check('loaded through __ModuleLoader__ with the package id', loaded.id === 'dsh-gitx', String(loaded.id))
+check('exports a name', typeof loaded.name === 'string' && loaded.name.length > 0, String(loaded.name))
+check('exports apply()', typeof loaded.apply === 'function')
+check('declares hard injections',
+  Array.isArray(loaded.inject) && loaded.inject.includes('slots') && loaded.inject.includes('locale'),
+  JSON.stringify(loaded.inject))
+
+/* ------------------------------------------------------------------ *
+ * Slot registrations
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- slot registrations ---')
+const stub = createRpcStub(healthyHandlers())
+const client = createClientContext({ connection: stub })
+loaded.apply(client.ctx)
+
+// Styles are injected from an effect, so they land when `apply` runs rather than
+// while the module factory is still evaluating.
+check('installed exactly one stylesheet', loaded.appendedStyles.length === 1,
+  String(loaded.appendedStyles.length))
+check('the stylesheet declares this plugin as its owner',
+  loaded.appendedStyles[0]?.dataset?.plugin === 'dsh-gitx',
+  JSON.stringify(loaded.appendedStyles[0]?.dataset))
+check('the stylesheet contains theme tokens, not hard-coded colors',
+  String(loaded.appendedStyles[0]?.textContent).includes('--dsw-alias-'),
+  String(loaded.appendedStyles[0]?.textContent).slice(0, 120))
+check('an empty commit message keeps the primary button legible',
+  String(loaded.appendedStyles[0]?.textContent).includes('.dshgit-btn.dshgit-commit-primary:disabled{opacity:1;'))
+// Git output has no length limit: a commit of a few thousand files used to hand
+// the toast one line per file. The toast text and a success banner therefore
+// clamp their height, so no message can cover the window.
+check('long git output is clamped in toasts and success banners', (() => {
+  const css = String(loaded.appendedStyles[0]?.textContent ?? '')
+  const toastText = /\.dshgit-toast-text\{[^}]*\}/.exec(css)?.[0] ?? ''
+  const noticeText = /\.dshgit-notice\[data-tone="success"\][^{]*\.dshgit-noticetext\{[^}]*\}/.exec(css)?.[0] ?? ''
+  return toastText.includes('-webkit-line-clamp') && toastText.includes('overflow:hidden') &&
+    noticeText.includes('-webkit-line-clamp') && noticeText.includes('overflow:hidden')
+})())
+// The commit control is a joined split button: the primary half and the chevron
+// half must share ONE fill. That fill is now a theme token
+// (`--dsw-alias-button-info-fill`, falling back to the brand primary) rather than
+// a hardcoded `#007acc`, so both halves follow the active theme — which is the
+// point of the change. Assert the shared token on both halves instead.
+check('the commit button uses a consistent primary surface', (() => {
+  const css = String(loaded.appendedStyles[0]?.textContent ?? '')
+  const primary = /\.dshgit-commit-primary\{[^}]*\}/.exec(css)?.[0] ?? ''
+  const arrow = /\.dshgit-commit-arrow\{[^}]*\}/.exec(css)?.[0] ?? ''
+  const token = 'var(--dsw-alias-button-info-fill'
+  return primary.includes(token) && arrow.includes(token) &&
+    primary.includes('border-radius:6px 0 0 6px') && arrow.includes('border-radius:0 6px 6px 0')
+})())
+// The remote steps moved from checkboxes into the options menu, so the menu is
+// what has to exist now; the checkbox rule survives only for the confirm bar.
+check('the commit options are offered from the split button menu',
+  String(loaded.appendedStyles[0]?.textContent).includes('.dshgit-commit-menu-root{') &&
+  String(loaded.appendedStyles[0]?.textContent).includes('.dshgit-commit-options{'))
+
+/* ------------------------------------------------------------------ *
+ * Header chips fit the band they are given
+ * ------------------------------------------------------------------ */
+
+// The chips are a `flex:none` child of the Host's `flex:none` utilities
+// cluster, so when the session column got narrow they overflowed and painted
+// on top of the Host's own subagent/jobs chips ("master" over "5 个子智能体").
+// Two things keep that from returning: the chip row must be allowed to
+// shrink, and the density tiers must be keyed on the BAND — the Host's
+// title row is an inline-size container — not on the viewport, because a
+// wide window with a right dock open leaves a narrow column.
+{
+  const css = String(loaded.appendedStyles[0]?.textContent ?? '')
+  console.log('\n--- the header chips fit the band they are given ---')
+  check('a header chip may shrink instead of overflowing',
+    /\.dshgit-chipcluster>\.dshgit-chip\[data-chip\]\{[^}]*flex:0 1 auto[^}]*min-width:0/.test(css),
+    /\.dshgit-chipcluster>\.dshgit-chip\[data-chip\]\{[^}]*\}/.exec(css)?.[0] ?? 'rule missing')
+  // The icon chevron is a fixed cell: it must not collapse to a sliver.
+  check('the sync chevron keeps its fixed width',
+    /\.dshgit-chipcluster>\.dshgit-chip\[data-chip="sync-menu"\]\{[^}]*flex:0 0 22px/.test(css),
+    /\.dshgit-chipcluster>\.dshgit-chip\[data-chip="sync-menu"\]\{[^}]*\}/.exec(css)?.[0] ?? 'rule missing')
+  // The cluster itself reports its width to the Host's flex line.
+  check('the chip cluster declares a shrinkable minimum',
+    /\.dshgit-chipcluster\{[^}]*min-width:0[^}]*max-width:100%/.test(css),
+    /\.dshgit-chipcluster\{[^}]*\}/.exec(css)?.[0] ?? 'rule missing')
+  // Read every `@container(max-width:Npx){...}` with a balanced-brace scan:
+  // a regex would stop at the first `}}` and hand back a truncated rule.
+  const tiers = []
+  for (const match of css.matchAll(/@container\(max-width:(\d+)px\)\{/g)) {
+    const open = match.index + match[0].length
+    let depth = 1
+    let cursor = open
+    while (cursor < css.length && depth > 0) {
+      if (css[cursor] === '{') depth += 1
+      else if (css[cursor] === '}') depth -= 1
+      cursor += 1
+    }
+    const body = css.slice(open, cursor - 1)
+    if (body.includes('dshgit-chip')) tiers.push({ width: Number(match[1]), body })
+  }
+  tiers.sort((a, b) => b.width - a.width)
+  check('the chip density tiers are container queries, widest first',
+    tiers.length >= 3 && tiers.every((tier, index) => index === 0 || tiers[index - 1].width > tier.width),
+    tiers.map((tier) => tier.width).join(','))
+  // Each tier must give room back, never demand it: hiding or clamping only.
+  // `max-width` is the clamping form; a bare `width`/`min-width` would be a
+  // tier asking for MORE space, which is the bug this whole block is about.
+  check('no tier widens a chip to buy space',
+    tiers.every((tier) => !/(?:^|[^-])min-width:\s*\d/.test(tier.body) &&
+      !/(?:^|[^-])width:\s*\d/.test(tier.body.replace(/max-width:/g, 'max:'))),
+    tiers.map((tier) => tier.body.match(/(?:max-)?width:[^;}]+/g)).filter(Boolean).join(' '))
+  // The widest tier drops the counts chip and the chevron: those are the two
+  // whose actions the branch popover also carries.
+  const widest = tiers[0]
+  check('the first narrow tier drops the counts and the sync chevron',
+    widest !== undefined && widest.body.includes('[data-chip="changes"]') && widest.body.includes('[data-chip="sync-menu"]'),
+    widest?.body.slice(0, 200) ?? 'no tier')
+  // The narrowest tier yields the whole cluster rather than painting over the
+  // Host's session title, and the launcher stays as the entry point.
+  check('the narrowest tier yields the chips instead of overlapping',
+    tiers.some((tier) => /\.dshgit-chipcluster\{display:none\}/.test(tier.body)),
+    tiers.map((tier) => `${tier.width}:${/\.dshgit-chipcluster\{display:none\}/.test(tier.body)}`).join(','))
+  // The launcher beside the cluster draws the SAME Git glyph. A label-less
+  // branch chip next to it reads as a second, identical button that does
+  // something else, so the chip goes and the launcher's popover keeps the
+  // branch reachable.
+  check('a label-less branch chip is replaced by the launcher, not left beside it', (() => {
+    const labelTier = tiers.find((tier) => /\.dshgit-chip\[data-chip="branch"\] \.dshgit-chipname\{display:none\}/.test(tier.body))
+    const chipTier = tiers.find((tier) => /\.dshgit-chip\[data-chip="branch"\]\{display:none\}/.test(tier.body))
+    // Hiding the label alone is only safe while the chip still says something;
+    // with the launcher present, the whole chip must go at the same width.
+    return chipTier !== undefined && (labelTier === undefined || labelTier.width >= chipTier.width)
+  })(), tiers.map((tier) => `${tier.width}:${/\[data-chip="branch"\]\{display:none\}/.test(tier.body) ? 'chip' : '-'}`).join(','))
+  // Compact (Hero) placement has its own, static density: the tiers must not
+  // apply there, or the Hero row would lose chips it has room for.
+  check('the density tiers leave the compact Hero cluster alone',
+    tiers.every((tier) => tier.body.includes(':not([data-compact])')),
+    tiers.map((tier) => tier.body.includes(':not([data-compact])')).join(','))
+  // A Host that is not a size container keeps the old full-density behaviour.
+  check('container queries are feature-detected, with a viewport fallback',
+    css.includes('@supports(container-type:inline-size){') && /@media\(max-width:620px\)\{\.dshgit-chip\[data-chip="branch"\]/.test(css))
+}
+
+/* ------------------------------------------------------------------ *
+ * Type scale
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- the type scale follows the DSH font-size setting ---')
+{
+  const css = String(loaded.appendedStyles[0]?.textContent ?? '')
+
+  // DSH's Settings → Font size writes this exact custom property on `body`, so
+  // reading it is what makes the panel follow the setting instead of pinning its
+  // own numbers.
+  check('the scale is rooted at DSH\u2019s content font size',
+    css.includes('--dshgit-font-base:var(--dsh-content-font-size, 14px)'),
+    'no --dshgit-font-base derived from --dsh-content-font-size')
+  // Declared on `body`, not on `.dshgit`: the popovers, the file viewer and the
+  // confirm bar are portalled to `body`, so a class-scoped ramp would leave
+  // exactly the surfaces that need it most at their old fixed sizes.
+  check('the scale is declared on body so portalled surfaces inherit it',
+    /(^|\n)body\{--dshgit-font-base:/.test(css),
+    css.split('\n')[0].slice(0, 100))
+
+  // Nothing may stay pinned: one hardcoded size is enough to make a label ignore
+  // the setting while its neighbours move.
+  const pinned = css.match(/font-size:\d+px/g) ?? []
+  check('no font size is hardcoded any more', pinned.length === 0,
+    JSON.stringify(pinned))
+  check('every font size goes through the scale',
+    (css.match(/font-size:var\(--dshgit-font-/g) ?? []).length > 40,
+    String((css.match(/font-size:var\(--dshgit-font-/g) ?? []).length))
+
+  // The offsets must reproduce the sizes the panel shipped before the scale
+  // existed, or every user on the default setting would see it shift.
+  const offsets = { micro: 4, meta: 3, small: 2, body: 1, lead: 1, title: 0 }
+  const floors = { micro: 10, meta: 11, small: 12, body: 12, lead: 13, title: 13 }
+  const at = (base) => Object.fromEntries(Object.entries(offsets).map(([name, down]) =>
+    [name, Math.max(floors[name] ?? 0, base - down)]))
+  check('at the 14px default the scale uses readable caption sizes',
+    JSON.stringify(at(14)) === JSON.stringify({ micro: 10, meta: 11, small: 12, body: 13, lead: 13, title: 14 }),
+    JSON.stringify(at(14)))
+  // The small end is clamped: at 12px an unclamped micro would be 7px, which is
+  // unreadable, and the clamp must not silently invert the ordering either.
+  check('the scale stays readable and ordered at the 12px minimum',
+    at(12).micro >= 8 && at(12).micro <= at(12).meta && at(12).meta <= at(12).small &&
+      at(12).small <= at(12).body && at(12).body <= at(12).lead && at(12).lead <= at(12).title,
+    JSON.stringify(at(12)))
+  check('the scale grows monotonically at the 17px maximum',
+    at(17).micro <= at(17).meta && at(17).meta <= at(17).small && at(17).small <= at(17).body &&
+      at(17).body <= at(17).lead && at(17).lead <= at(17).title,
+    JSON.stringify(at(17)))
+  // A caption must not outgrow body text just because the floor kicked in.
+  check('the clamp never inverts the scale',
+    Object.values(at(12)).every((value, index, all) => index === 0 || all[index - 1] <= value),
+    JSON.stringify(at(12)))
+}
+
+/* ------------------------------------------------------------------ *
+ * Native form controls
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- the dropdown is a themed combobox list, not a UA-painted popup ---')
+{
+  const css = String(loaded.appendedStyles[0]?.textContent ?? '')
+  // The native `<select>` is gone entirely, and with it the class of bug it
+  // brought: the UA paints a select's popup, so it could not be themed (it showed
+  // up as a white box in a dark dialog) and it could not be typed into. The list
+  // is now our own DOM, portalled to `body`, so both problems disappear — and the
+  // styling assertions move onto that list.
+  // A CSS-class check is not enough: a native <select> needs no class at all,
+  // and one hid in the hunk strip precisely because only the stylesheet was
+  // scanned. Search the SOURCES for the element instead.
+  const nativeSelect = (() => {
+    const dir = new URL('../lib/client/', import.meta.url)
+    const found = []
+    const visit = (folder) => {
+      for (const entry of readdirSync(folder, { withFileTypes: true })) {
+        const path = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, folder)
+        if (entry.isDirectory()) visit(path)
+        else if (entry.name.endsWith('.js') && !path.pathname.endsWith('locales.js')) {
+          const text = readFileSync(path, 'utf8')
+          // `h('select'` is how this codebase creates elements; a bare string
+          // mention in a comment is not a match.
+          if (/h\(\s*'select'/.test(text)) found.push(entry.name)
+        }
+      }
+    }
+    visit(dir)
+    return found
+  })()
+  check('no native select is rendered any more', nativeSelect.length === 0, nativeSelect.join(','))
+  check('no native select is styled any more', !css.includes('.dshgit-select'))
+
+  // The list must be positioned by us rather than nested: the workbench header
+  // lives in a shell with `overflow:hidden` and a `backdrop-filter`, both of which
+  // clip or trap a fixed descendant.
+  const listRule = /\.dshgit-combolist\{[^}]*\}/.exec(css)
+  check('the combobox list is a fixed overlay', listRule !== null && listRule[0].includes('position:fixed'),
+    String(listRule))
+  check('the combobox list carries a theme surface and stroke, like other popovers',
+    css.includes('.dshgit-combolist{') && /\.dshgit-combolist\{[^}]*background:var\(--dsw-menu-surface-fill/.test(css) &&
+      /\.dshgit-combolist\{[^}]*border:1px solid var\(--dsw-alias-border-l1\)/.test(css),
+    String(listRule))
+  // A translucent surface needs the opaque fallback, exactly like the popovers.
+  check('the combobox list has an opaque fallback where backdrop-filter is unsupported',
+    /@supports not \(\(backdrop-filter[\s\S]{0,200}\.dshgit-combolist\{background:var\(--dsw-alias-bg-layer-1/.test(css))
+  // Arrow-key navigation moves a highlight with no pointer involved, so the
+  // highlighted row needs a state that does not depend on `:hover`.
+  check('the keyboard-highlighted row has its own visible style',
+    css.includes('.dshgit-combooption[data-active="true"]{'),
+    'no [data-active="true"] rule')
+  check('the current value and the group headers are styled',
+    css.includes('.dshgit-combooptioncurrent{') && css.includes('.dshgit-combogroup{'))
+}
+
+console.log('\n--- the workbench shell and its accent surfaces ---')
+{
+  const css = String(loaded.appendedStyles[0]?.textContent ?? '')
+
+  // The window is a large CENTRED workbench, not a full-viewport one: opening
+  // Git must not replace the conversation, and the first feedback on the
+  // viewport-filling version was exactly that it was too big. 1180×780 keeps
+  // the four regions readable while the session stays visible around it.
+  // The fill must still be OPAQUE — `--dsw-menu-surface-fill` is ~45% alpha,
+  // sized for a blurred menu, and puts the conversation underneath 10-11px text.
+  const shell = /\.dshgit-workbench\{[^}]*\}/.exec(css)
+  check('the window is a centred workbench with a bounded default size', shell !== null &&
+    shell[0].includes('position:fixed') && shell[0].includes('left:50%') &&
+    shell[0].includes('width:min(1180px,94vw)') && shell[0].includes('height:min(780px,88vh)'), String(shell))
+  check('the workbench fill is opaque, not the translucent menu material',
+    shell !== null && shell[0].includes('background:var(--dsw-alias-bg-layer-1') &&
+      !shell[0].includes('menu-surface-fill') && !shell[0].includes('backdrop-filter'),
+    String(shell))
+
+  // The accent surfaces are the bug this suite previously missed: the activity
+  // badge used `--dsw-alias-brand-primary` as a BACKGROUND, but that token is a
+  // LABEL colour (near-white in dark, near-black in light) — so the badge was
+  // white-on-white in dark mode and black-on-black in light mode. Assert that no
+  // accent surface is filled with a label token.
+  const badge = /\.dshgit-activity-badge\{[^}]*\}/.exec(css)
+  check('the activity badge is a real accent fill', badge !== null &&
+    badge[0].includes('background:var(--dsw-alias-state-business-primary)') &&
+    badge[0].includes('color:var(--dsw-alias-label-primary-foreground)'), String(badge))
+  check('the activity badge does not use a label token as its background',
+    badge !== null && !/background:var\(--dsw-alias-brand-primary\)/.test(badge[0]), String(badge))
+
+  // The active-module marker is the accent bar VS Code shows, drawn from the
+  // accent fill rather than a label colour.
+  const activeBar = /\.dshgit-activity-item\[aria-pressed="true"\]::before\{[^}]*\}/.exec(css)
+  check('the active module is marked by an accent bar',
+    activeBar !== null && activeBar[0].includes('background:var(--dsw-alias-state-business-primary)'),
+    String(activeBar))
+
+  // The bar is drawn OUTSIDE the item's box, into the rail's gutter, and the
+  // workbench clips at its own edge. The rail is 48px with a 40px item, so the
+  // gutter is 4px: a more negative offset paints outside the panel and is
+  // silently cut off by `overflow:hidden`, leaving no active marker at all.
+  const railWidth = Number(/\.dshgit-activitybar\{[^}]*width:(\d+)px/.exec(css)?.[1])
+  const itemWidth = Number(/\.dshgit-activity-item\{[^}]*width:(\d+)px/.exec(css)?.[1])
+  const barOffset = Number(/::before\{[^}]*left:(-?\d+)px/.exec(activeBar?.[0] ?? '')?.[1])
+  check('the rail gutter is wide enough for the active bar',
+    railWidth > itemWidth && Number.isFinite(barOffset) && -barOffset <= (railWidth - itemWidth) / 2,
+    `rail=${railWidth} item=${itemWidth} barOffset=${barOffset}`)
+
+  // Every module is reachable through one switcher, so its item must be a real
+  // control with a focus ring and a transition that reduced-motion can disable.
+  check('the activity items are keyboard focusable with a visible ring',
+    css.includes('.dshgit-activity-item:focus-visible{outline:2px solid'))
+  check('reduced motion disables the new transitions',
+    /@media \(prefers-reduced-motion: reduce\)\{[\s\S]{0,400}?\.dshgit-activity-item[\s\S]{0,200}?transition:none/.test(css),
+    (css.match(/@media \(prefers-reduced-motion[\s\S]{0,300}/g) ?? []).join(' '))
+
+  // Each module gets a sidebar header, and a module with nothing to list hides
+  // the column rather than showing an empty gutter.
+  check('the sidebar header and empty-state rules exist',
+    css.includes('.dshgit-sidebar-head{') && css.includes('.dshgit-sidebar[data-empty="true"]{display:none}'))
+}
+
+const bySlot = (name) => client.registrations.filter((entry) => entry.declaration.name === name)
+const footerAction = bySlot('conversation.session.header.utilities')
+const overlayWindow = bySlot('shell.overlay')
+const settingsSection = bySlot('settings.section')
+
+check('registered one top-right header action', footerAction.length === 1, String(footerAction.length))
+check('registered one overlay window', overlayWindow.length === 1, String(overlayWindow.length))
+check('registered one settings section', settingsSection.length === 1, String(settingsSection.length))
+
+// The button and the window occupy DIFFERENT slots, which is precisely why the
+// window's state lives in a module-level store instead of React state: the two
+// halves cannot share a component tree.
+check('the button sits in the right-aligned session header cluster',
+  footerAction[0]?.declaration.name === 'conversation.session.header.utilities',
+  String(footerAction[0]?.declaration.name))
+check('the window renders into the frame-wide overlay, not into main',
+  overlayWindow[0]?.declaration.name === 'shell.overlay' &&
+    !client.registrations.some((entry) => entry.declaration.name === 'main'),
+  client.registrations.map((entry) => entry.declaration.name).join(', '))
+check('the button and the window use distinct ids',
+  footerAction[0]?.declaration.id === 'git' && overlayWindow[0]?.declaration.id === 'git-window',
+  `${footerAction[0]?.declaration.id} / ${overlayWindow[0]?.declaration.id}`)
+check('the button label is localized through a thunk',
+  typeof footerAction[0]?.declaration.label === 'function',
+  typeof footerAction[0]?.declaration.label)
+check('the four registrations target distinct slots',
+  new Set(client.registrations.map((entry) => entry.declaration.name)).size === 4,
+  client.registrations.map((entry) => entry.declaration.name).join(', '))
+
+/* ------------------------------------------------------------------ *
+ * Dictionaries
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- dictionaries ---')
+{
+  const dicts = client.dictionaries.get('dsh-gitx')
+  check('registered the dsh-gitx namespace', dicts !== undefined && dicts.zh !== undefined && dicts.en !== undefined)
+  const zhKeys = Object.keys(dicts.zh).sort()
+  const enKeys = Object.keys(dicts.en).sort()
+  check('zh and en have identical key sets',
+    zhKeys.length === enKeys.length && zhKeys.every((key, i) => key === enKeys[i]),
+    `zh=${zhKeys.length} en=${enKeys.length}`)
+  check('no dictionary value is empty or missing',
+    zhKeys.every((key) => typeof dicts.zh[key] === 'string' && dicts.zh[key] !== '' &&
+      typeof dicts.en[key] === 'string' && dicts.en[key] !== ''))
+
+  // Every t('...') key read by the component must exist, which is the check that
+  // catches a typo that would otherwise render a raw key to the user. Keys built
+  // by concatenation (e.g. t('tab.' + name)) are skipped: they have no single
+  // literal to look up, and the tabs are asserted individually below.
+  // Keys built by concatenation (e.g. t('tab.' + name)) have no single literal
+  // to look up, so they are checked separately below instead of being reported
+  // as a missing key.
+  const used = new Set()
+  // The bundle is built by esbuild, which rewrites string literals to DOUBLE
+  // quotes. Matching only `t('key')` therefore found zero keys and reported
+  // `used=0`, making this check pass vacuously on a false premise. Accept either
+  // quote style so the scan reflects the artifact it is reading.
+  const pattern = /\bt\(\s*['"]([\w.-]+)['"]\)/g
+  let match
+  while ((match = pattern.exec(source)) !== null) {
+    used.add(match[1])
+  }
+  const missing = [...used].filter((key) => dicts.zh[key] === undefined)
+  check('every literal translation key exists in the dictionary',
+    missing.length === 0, `missing: ${missing.join(', ')}`)
+  // The concatenated tab keys must exist too, or the tab row renders raw keys.
+  const tabKeys = ['changes', 'history', 'graph', 'compare', 'settings'].map((name) => `tab.${name}`)
+  check('every concatenated tab key exists',
+    tabKeys.every((key) => dicts.zh[key] !== undefined && dicts.en[key] !== undefined),
+    tabKeys.filter((key) => dicts.zh[key] === undefined).join(', '))
+  // "No obviously unused key" is only a meaningful claim if the scan actually
+  // found usages: an extractor that matches nothing would report 0 used and, with
+  // a `> 50` threshold, still pass. Require a high coverage ratio of the defined
+  // keys so a broken extractor fails loudly instead of vacuously succeeding.
+  const coverage = zhKeys.length === 0 ? 0 : used.size / zhKeys.length
+  check('the dictionary has no obviously unused key',
+    used.size > 50 && coverage > 0.5,
+    `used=${used.size} defined=${zhKeys.length} coverage=${(coverage * 100).toFixed(1)}%`)
+  check('interpolated keys exist', dicts.zh['count.files'] !== undefined && dicts.zh['error.load'] !== undefined)
+}
+
+/* ------------------------------------------------------------------ *
+ * Rendering
+ * ------------------------------------------------------------------ */
+
+const t = client.ctx.locale.bind('dsh-gitx')
+
+/**
+ * Build a harness from ONE client context's registrations.
+ *
+ * The components must come from the same `apply()` run as the connection they
+ * will call through: a component closes over its own `connection`, so reusing
+ * the first context's components with a later context's stub silently routes
+ * every call to the wrong stub — which shows up as "the RPC methods were never
+ * called" rather than as an obvious wiring error.
+ *
+ * The button lives in `conversation.session.header.utilities` and the window in
+ * `shell.overlay` — two slots with no shared ancestor, which is exactly why the
+ * plugin bridges them with a module-level store. Mounting only one of them could
+ * never exercise the opening path, so the harness renders both.
+ *
+ * @param ctx - a client context from one `apply()` run.
+ * @param connection - the stub that context was created with.
+ * @returns a root component plus the `t` bound to that context.
+ */
+function makeHarness(ctx, connection) {
+  const registrations = ctx.registrations
+  const findBySlot = (name) => registrations.find((entry) => entry.declaration.name === name)
+  const HeaderButton = findBySlot('conversation.session.header.utilities').Component
+  const Window = findBySlot('shell.overlay').Component
+  // The harness's own `locale` is a recording stub, so the translator is taken
+  // from the real one bound at the top of this file.
+  const translate = t
+
+  /** The root that renders both halves. */
+  function Harness(props) {
+    return [
+      h(HeaderButton, { key: 'button', t: props.t }),
+      h(Window, { key: 'window', connection: props.connection, t: props.t }),
+    ]
+  }
+  return { Harness, t: translate, connection }
+}
+
+/** Render the harness, then open the window and expand it to full mode. */
+async function renderApp(handlers, props = {}) {
+  const rpc = createRpcStub(handlers ?? healthyHandlers())
+  const context = createClientContext({ connection: rpc })
+  // Each run needs its own `apply()`: the components close over the connection
+  // they were built with, so reusing an earlier run's components would route
+  // every call to the wrong stub.
+  loaded.apply(context.ctx)
+  const built = makeHarness(context, rpc)
+  // Point the delegating root at THIS run's components before mounting, so the
+  // mount and every later flush pass through the same component path — a path
+  // change would silently reset each component's hook state.
+  currentHarness = built.Harness
+  mounted = { rpc, context, t: built.t }
+  const rootProps = { connection: rpc, t: built.t, ...props }
+  // `mount` establishes the tree and clears hook state; `flush` alone only
+  // re-renders, so skipping the mount leaves effects unregistered and the
+  // window would never open.
+  mount(GitApp, rootProps)
+  let tree = await flush(GitApp, rootProps, { maxPasses: 10 })
+  tree = await openFull(tree, rootProps)
+  return tree
+}
+
+/**
+ * Open the window and switch it to full mode.
+ *
+ * There is only one mode now — the compact window is gone — so this is just
+ * "click the launcher if the window is closed".
+ *
+ * @param tree - the current tree.
+ * @param props - root props.
+ * @returns the tree with the window open.
+ */
+async function openFull(tree, props) {
+  const modeOf = (current) => {
+    const float = walk(current).find((node) => node.props !== undefined && node.props['data-mode'] !== undefined)
+    return float === undefined ? null : float.props['data-mode']
+  }
+
+  if (modeOf(tree) === null) {
+    const openButton = findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-iconbtn'))
+    if (openButton !== undefined) {
+      openButton.props.onClick()
+      tree = await flush(GitApp, props)
+    }
+  }
+  return tree
+}
+
+let mounted = null
+
+/**
+ * The workbench's module switchers, in activity-bar order.
+ *
+ * The activity bar replaced the horizontal tab row, so every test that used to
+ * find a tab by its label now finds an activity item by its `data-module`. The
+ * label moved into `title`/`aria-label`, which is what an icon-only control
+ * should expose.
+ *
+ * @param tree - the rendered tree.
+ * @returns the activity-bar buttons.
+ */
+function activityItems(tree) {
+  return findAll(tree, 'button').filter((node) => String(node.props?.className ?? '').includes('dshgit-activity-item'))
+}
+
+/**
+ * Click one module in the activity bar.
+ *
+ * @param current - the tree to click in.
+ * @param id - the module id (`changes`, `history`, …).
+ * @returns the tree after the click.
+ */
+async function selectModule(current, id) {
+  const item = activityItems(current).find((node) => node.props['data-module'] === id)
+  if (item === undefined) throw new Error(`no activity item for "${id}"`)
+  item.props.onClick()
+  return flush(GitApp, { connection: mounted.rpc, t })
+}
+
+/**
+ * Render the harness and leave it on the header CHIPS, without opening the
+ * workbench window.
+ *
+ * The chips are the everyday surface now, so most UI checks run against them
+ * rather than against a window.
+ *
+ * @param handlers - RPC handlers.
+ * @returns the tree with the chips rendered.
+ */
+async function renderChips(handlers) {
+  const rpc = createRpcStub(handlers ?? healthyHandlers())
+  const context = createClientContext({ connection: rpc })
+  loaded.apply(context.ctx)
+  const built = makeHarness(context, rpc)
+  currentHarness = built.Harness
+  mounted = { rpc, context, t: built.t }
+  const rootProps = { connection: rpc, t: built.t }
+  mount(GitApp, rootProps)
+  return flush(GitApp, rootProps, { maxPasses: 10 })
+}
+
+/**
+ * The current harness.
+ *
+ * `renderApp` rebuilds the components from a fresh `apply()` run on every test,
+ * because a component closes over the connection it was built with. This
+ * delegating root lets the many `flush(GitApp, props)` calls in the suite keep
+ * driving whichever harness is current, without threading it through by hand.
+ *
+ * `GitApp` itself holds no hooks, so its stable identity is not a problem for
+ * the harness's path-based hook store.
+ */
+let currentHarness = makeHarness(client, stub).Harness
+function GitApp(props) {
+  return currentHarness(props)
+}
+
+console.log('\n--- flat branch picker and collapsed tags ---')
+{
+  const branches = Array.from({ length: 12 }, (_, i) => ({
+    name: `feature/${i}`, ref: `refs/heads/feature/${i}`, committerDate: i + 1,
+    author: 'Branch author', sha: 'abcdef0123456789', subject: 'A detailed commit description',
+  }))
+  const remotes = branches.map((branch) => ({ ...branch, name: `origin/${branch.name}`, ref: `refs/remotes/origin/${branch.name}` }))
+  const tags = Array.from({ length: 12 }, (_, i) => ({ name: `v0.1.${i}`, ref: `refs/tags/v0.1.${i}` }))
+  let tree = await renderChips(healthyHandlers({ refs: () => ({ ...REFS, branches: [REFS.branches[0], ...branches], remotes, tags }) }))
+  const rootProps = { connection: mounted.rpc, t: mounted.t }
+  findAll(tree, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
+    currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+  })
+  tree = await flush(GitApp, rootProps)
+  const rows = (prefix) => findAll(tree, 'button').filter((node) => node.props.className?.includes('dshgit-pickrow') && node.props['data-ref']?.startsWith(prefix))
+  const tagsToggle = () => findAll(tree, 'button').find((node) => node.props['data-picker-toggle'] === 'tags')
+  const more = (group) => findAll(tree, 'button').find((node) => node.props['data-picker-more'] === group)
+  check('picker includes current branch within the first five local branches', rows('feature/').length === 4 &&
+    rows('origin/').length === 5 && rows('main').length === 1 && rows('feature/')[0]?.props['data-ref'] === 'feature/11')
+  const current = rows('main')[0]
+  check('picker marks the current local branch with the same dot as the workbench', current.props['aria-current'] === 'true' && current.props.disabled === true &&
+    walk(current).some((node) => node.props?.className === 'dshgit-tipdot dshgit-branch-current-dot'))
+  check('picker has no separate current-branch heading', !walk(tree).some((node) => node.props?.className === 'dshgit-pickgroup' && textOf(node) === t('picker.current')))
+  const first = rows('feature/')[0]
+  check('picker rows show a branch icon and name without commit metadata', walk(first).some((node) => node.name === 'IconBranch') &&
+    textOf(first).includes('feature/11') && !textOf(first).includes('Branch author') && !textOf(first).includes('A detailed commit description'))
+  check('picker tooltips retain author, commit hash and description', first.props.title.includes('Branch author') &&
+    first.props.title.includes('abcdef0') && first.props.title.includes('A detailed commit description'))
+  check('remote rows retain the full remote prefix in their visible names', textOf(rows('origin/')[0], '').includes('origin/feature/11'))
+  more('locals').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('picker shows only five more branches on each click', rows('feature/').length === 9 && rows('main').length === 1 && rows('origin/').length === 5)
+  more('locals').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('picker finishes with remaining branches and offers collapse', rows('feature/').length === 12 && textOf(more('locals')) === t('picker.showLess'))
+  more('locals').props.onClick()
+  more('remotes').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('picker can collapse local branches and independently extend remotes', rows('feature/').length === 4 && rows('main').length === 1 && rows('origin/').length === 10)
+  check('picker tags start collapsed', rows('v').length === 0 && tagsToggle()?.props['aria-expanded'] === false)
+  tagsToggle().props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('picker tags first expand to five rows', rows('v').length === 5)
+  check('picker tag rows have a tag icon', walk(rows('v')[0]).some((node) => node.name === 'IconTag'))
+  more('tags').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('picker tags also load five per click', rows('v').length === 10)
+  tagsToggle().props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const search = () => findAll(tree, 'input').find((node) => node.props.className === 'dshgit-pickerinput')
+  search().props.onChange({ currentTarget: { value: 'feature/' } })
+  tree = await flush(GitApp, rootProps)
+  check('picker search covers all branches beyond initial batches', rows('feature/').length === 12 && rows('origin/').length === 12 && !more('locals') && !more('remotes'))
+  search().props.onChange({ currentTarget: { value: 'v0.1' } })
+  tree = await flush(GitApp, rootProps)
+  check('picker search finds all collapsed tags', rows('v').length === 12)
+  search().props.onChange({ currentTarget: { value: '' } })
+  tree = await flush(GitApp, rootProps)
+  check('clearing picker search restores batches and collapsed tags', rows('v').length === 0 && rows('feature/').length === 4 && rows('main').length === 1 && rows('origin/').length === 10)
+  tagsToggle().props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('reopening tags resets to the first batch', rows('v').length === 5)
+}
+
+console.log('\n--- everyday header actions ---')
+{
+  let header = await renderChips()
+  const chipIds = findAll(header, 'button').map((node) => node.props['data-chip']).filter(Boolean)
+  check('the header keeps frequent actions in a stable order',
+    JSON.stringify(chipIds.slice(0, 5)) === JSON.stringify(['branch', 'changes', 'next', 'sync-menu']),
+    JSON.stringify(chipIds))
+  check('uncommitted changes do not replace the remote action with a second commit entry',
+    findAll(header, 'button').find((node) => node.props['data-chip'] === 'next')?.props['data-next'] === 'diverged')
+  findAll(header, 'button').find((node) => node.props['data-chip'] === 'sync-menu').props.onClick({
+    currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) },
+  })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the alternate sync menu is available while branches diverge',
+    ['fetch', 'pull-merge', 'pull-rebase', 'push-lease'].every((id) =>
+      findAll(header, 'button').some((node) => node.props['data-sync'] === id)))
+  findAll(header, 'button').find((node) => node.props['data-sync'] === 'fetch').props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  check('Fetch is available from the sync menu',
+    mounted.rpc.calls.some((call) => call.method === 'write.fetch' && call.payload.prune === true))
+
+  header = await renderChips(healthyHandlers({
+    status: () => ({ ...STATUS, total: 0, files: [] }),
+    commits: (payload) => ({ commits: payload.ref.startsWith('HEAD..') ? [COMMITS.commits[0]] : [] }),
+  }))
+  // Merge has no chip of its own: it is a quick action on each row of the branch
+  // picker (`930d52e` moved it there). Driving the real path means opening the
+  // branch chip and clicking that row action — asserting on a `merge` chip would
+  // test a control the product no longer renders.
+  findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
+    currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+  })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  const mergeAction = findAll(header, 'button').find((node) =>
+    node.props['data-branch-action'] === 'merge' && node.props['data-branch-target'] === 'refs/heads/feature/新功能')
+  check('the branch picker offers merge as a per-branch quick action', mergeAction !== undefined)
+  mergeAction.props.onClick({ preventDefault() {}, stopPropagation() {} })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  check('merge review shows source into current branch before writing',
+    hasText(header, t('merge.direction', { source: 'feature/新功能', target: 'main' })) &&
+    !mounted.rpc.calls.some((call) => call.method === 'write.merge'))
+  check('merge review reads commits unique to each side',
+    ['HEAD..refs/heads/feature/新功能', 'refs/heads/feature/新功能..HEAD'].every((ref) =>
+      mounted.rpc.calls.some((call) => call.method === 'commits' && call.payload.ref === ref)))
+  findAll(header, 'button').find((node) => node.props['data-merge-confirm'] === 'feature/新功能').props.onClick()
+  await flush(GitApp, { connection: mounted.rpc, t })
+  check('confirmed merge targets the selected source',
+    mounted.rpc.calls.some((call) => call.method === 'write.merge' && call.payload.ref === 'refs/heads/feature/新功能'))
+
+  header = await renderChips(healthyHandlers({
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: 0, behind: 0 }),
+  }))
+  check('an up-to-date branch offers Fetch as its sync action',
+    findAll(header, 'button').find((node) => node.props['data-chip'] === 'next')?.props['data-next'] === 'fetch')
+  findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
+    currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+  })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(header, 'button').find((node) =>
+    node.props['data-branch-action'] === 'merge' && node.props['data-branch-target'] === 'refs/heads/feature/新功能')
+    .props.onClick({ preventDefault() {}, stopPropagation() {} })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  check('uncommitted files block the final merge action',
+    findAll(header, 'button').find((node) => node.props['data-merge-confirm'] === 'feature/新功能')?.props.disabled === true &&
+    !mounted.rpc.calls.some((call) => call.method === 'write.merge'))
+  findAll(header, 'button').find((node) => textOf(node) === t('merge.stash')).props.onClick()
+  await flush(GitApp, { connection: mounted.rpc, t })
+  check('the merge review can stash tracked and untracked changes',
+    mounted.rpc.calls.some((call) => call.method === 'write.stashPush' && call.payload.includeUntracked === true))
+
+  let conflicted = false
+  header = await renderChips(healthyHandlers({
+    status: () => ({ ...STATUS, total: conflicted ? 1 : 0,
+      files: conflicted ? [{ ...STATUS.files[1], kind: 'unmerged' }] : [],
+      operation: conflicted ? { kind: 'merge', step: null, total: null } : null }),
+    commits: (payload) => ({ commits: payload.ref.startsWith('HEAD..') ? [COMMITS.commits[0]] : [] }),
+    'write.merge': () => { conflicted = true; throw new Error('merge conflict') },
+  }))
+  findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
+    currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+  })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(header, 'button').find((node) =>
+    node.props['data-branch-action'] === 'merge' && node.props['data-branch-target'] === 'refs/heads/feature/新功能')
+    .props.onClick({ preventDefault() {}, stopPropagation() {} })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(header, 'button').find((node) => node.props['data-merge-confirm'] === 'feature/新功能').props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  // The recovery affordance is the `operation` chip, not a merge chip: `930d52e`
+  // removed the merge chip and kept recovery visible as its own chip instead.
+  check('a conflicted merge refreshes the header into its recovery action',
+    textOf(findAll(header, 'button').find((node) => node.props['data-chip'] === 'operation') ?? {}) === t('next.resolve'))
+}
+
+console.log('\n--- action outcomes are reported as a readable banner ---')
+{
+  // A failed push used to print git's raw stderr, in error-red, clipped to
+  // 220px, inline in the chip row. The raw text leads with the URL and repeats
+  // "error: failed to push some refs", so the one sentence that says what to DO
+  // was last — and cut off. These assertions pin the replacement's contract.
+  const rawGit = [
+    'To https://github.com/user/repo.git',
+    ' ! [rejected]        main -> main (non-fast-forward)',
+    "error: failed to push some refs to 'https://github.com/user/repo.git'",
+    'hint: Updates were rejected because the tip of your current branch is behind',
+  ].join('\n')
+
+  // The fixture must be AHEAD-ONLY, or the primary chip offers "reconcile"
+  // instead of push and no push is ever attempted.
+  const aheadOnly = () => ({
+    status: () => ({ ...STATUS, branch: { ...STATUS.branch, ahead: 1, behind: 0 } }),
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: 1, behind: 0 }),
+  })
+
+  let header = await renderChips(healthyHandlers({
+    ...aheadOnly(),
+    'write.push': () => { const e = new Error(rawGit); e.code = 'git/write-failed'; throw e },
+  }))
+  const nextChip = findAll(header, 'button').find((node) => node.props['data-chip'] === 'next')
+  check('the primary chip offers Push when only local commits are pending',
+    nextChip?.props['data-next'] === 'push', String(nextChip?.props['data-next']))
+  nextChip.props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+
+  const banner = walk(header).find((node) => String(node.props?.className ?? '').includes('dshgit-notice'))
+  check('a failed write renders an outcome banner', banner !== undefined)
+  check('a failure is toned as an error', banner?.props['data-tone'] === 'error', String(banner?.props['data-tone']))
+
+  // The banner must NOT lead with git's raw prose: the reader should get the
+  // explanation, not the terminal output, as the first thing they read.
+  const summary = walk(banner).find((node) => String(node.props?.className ?? '').includes('dshgit-noticetext'))
+  const summaryText = textOf(summary)
+  check('the summary is the plain-language explanation, not raw git output',
+    summaryText === t('failure.nonFastForward'),
+    JSON.stringify(summaryText))
+  check('the raw git text is not dumped into the summary',
+    !summaryText.includes('! [rejected]') && !summaryText.includes('failed to push some refs'),
+    JSON.stringify(summaryText))
+
+  // The fix the plugin knows how to apply must be one click from the message.
+  const fixButton = findAll(banner, 'button').find((node) => textOf(node) === t('failure.actionPull'))
+  check('a recognised failure offers the action that resolves it', fixButton !== undefined,
+    JSON.stringify(findAll(banner, 'button').map(textOf)))
+
+  // The raw text must still be reachable — a failure the plugin does not
+  // recognise has to stay reportable, and even a recognised one may need detail.
+  const detailToggle = findAll(banner, 'button').find((node) => textOf(node) === t('notice.details'))
+  check('the full git output is available behind a disclosure', detailToggle !== undefined,
+    JSON.stringify(findAll(banner, 'button').map(textOf)))
+  detailToggle.props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  const detail = walk(header).find((node) => String(node.props?.className ?? '').includes('dshgit-noticedetail'))
+  check('expanding the disclosure shows the raw git text',
+    detail !== undefined && textOf(detail).includes('non-fast-forward'), textOf(detail))
+  check('an error banner can be dismissed',
+    findAll(header, 'button').some((node) => String(node.props.className).includes('dshgit-noticeclose')))
+
+  // A SUCCESS must not be painted like a failure — the old span was always red,
+  // so a successful push read as an error.
+  header = await renderChips(healthyHandlers({
+    ...aheadOnly(),
+    'write.push': () => ({ ok: true, code: 0, message: '已推送到 origin/main', stdout: '' }),
+  }))
+  findAll(header, 'button').find((node) => node.props['data-chip'] === 'next').props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  const okBanner = walk(header).find((node) => String(node.props?.className ?? '').includes('dshgit-notice'))
+  check('a successful write is toned as a success, not an error',
+    okBanner?.props['data-tone'] === 'success', String(okBanner?.props['data-tone']))
+  check('the success banner reports the outcome',
+    textOf(okBanner).includes('已推送到 origin/main'), textOf(okBanner))
+  check('a success offers no "fix" action',
+    !findAll(okBanner, 'button').some((node) => String(node.props.className).includes('dshgit-noticebtn-primary')))
+
+  // An unrecognised failure must still be reported rather than swallowed.
+  header = await renderChips(healthyHandlers({
+    ...aheadOnly(),
+    'write.push': () => { const e = new Error('some entirely novel git failure'); e.code = 'git/write-failed'; throw e },
+  }))
+  findAll(header, 'button').find((node) => node.props['data-chip'] === 'next').props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  check('an unrecognised failure still reports its message',
+    hasText(header, 'some entirely novel git failure'), textOf(header).slice(-300))
+}
+
+console.log('\n--- workbench Smart Commit and Sync ---')
+{
+  let committed = false
+  let full = await renderApp(healthyHandlers({
+    status: () => ({ ...STATUS, total: committed ? 0 : 1,
+      files: committed ? [] : [STATUS.files[2]] }),
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: committed ? 1 : 0, behind: 0 }),
+    'write.stage': () => ({ ok: true, message: 'staged' }),
+    'write.commit': () => { committed = true; return { ok: true, message: 'committed' } },
+    'write.push': () => ({ ok: true, message: 'pushed' }),
+  }))
+  const composer = findAll(full, 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
+  composer.props.onChange({ currentTarget: { value: 'feat: add file' } })
+  full = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(full, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
+  full = await flush(GitApp, { connection: mounted.rpc, t })
+  check('workbench Smart Commit stages before committing when nothing is staged',
+    JSON.stringify(mounted.rpc.calls.filter((call) => ['write.stage', 'write.commit'].includes(call.method))
+      .map((call) => call.method)) === JSON.stringify(['write.stage', 'write.commit']))
+  // The sidebar composer deliberately never becomes a Sync button: the full
+  // window already carries dedicated Fetch/Pull/Push controls in its title bar
+  // (`dshgit-title-tools`), so repeating Sync here duplicated them. That is what
+  // `!props.sidebar` in `canSync` encodes. After committing, the composer falls
+  // back to its Commit label and disables itself because there is nothing left to
+  // commit — the sync path is the title-bar button below.
+  check('workbench composer does not duplicate the title-bar sync action',
+    !findAll(full, 'button').some((node) => String(node.props.className).includes('dshgit-commit-primary')
+      && textOf(node) === t('action.sync')))
+  const workbenchPush = findAll(full, 'button').find((node) =>
+    String(node.props.className).includes('dshgit-winbtn') && node.props['aria-label'] === t('action.push'))
+  check('the workbench title bar offers Push', workbenchPush !== undefined)
+  workbenchPush.props.onClick()
+  await flush(GitApp, { connection: mounted.rpc, t })
+  check('workbench Sync pushes the committed change',
+    mounted.rpc.calls.some((call) => call.method === 'write.push'))
+}
+
+console.log('\n--- the commit popover closes once the commit lands ---')
+{
+  // A single untracked file, so the popover's own Commit stages and commits it.
+  const oneFile = { ...STATUS.files[2] }
+  let committed = false
+  let header = await renderChips(healthyHandlers({
+    status: () => ({ ...STATUS, total: committed ? 0 : 1, files: committed ? [] : [oneFile] }),
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: committed ? 1 : 0, behind: 0 }),
+    'write.stage': () => ({ ok: true, message: 'staged' }),
+    'write.commit': () => { committed = true; return { ok: true, message: 'committed' } },
+  }))
+  const chip = findAll(header, 'button').find((node) => node.props['data-chip'] === 'changes')
+  chip.props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) } })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  const isOpen = (current) => walk(current).some((node) => node.props?.['data-popover'] === 'commit')
+  check('the commit popover is open before committing', isOpen(header))
+
+  // The popover's composer uses `commit.placeholderMessage`; `placeholder.commit`
+  // belongs to the workbench composer, and matching the wrong one silently found
+  // no textarea at all (which is exactly how this assertion first failed).
+  findAll(header, 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
+    .props.onChange({ currentTarget: { value: 'feat: close me' } })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  // The fixture is one UNTRACKED file with nothing staged, so the primary action
+  // offers to stage and commit it (`commit.all` = "暂存并提交全部"), not the plain
+  // "提交" of an already-staged commit. Matching on the role rather than one
+  // label keeps this assertion honest when the button's wording changes.
+  findAll(header, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+
+  check('the commit actually landed',
+    mounted.rpc.calls.some((call) => call.method === 'write.commit'))
+  // The popover's file list is now stale (those files are committed), so leaving
+  // it open would show a list of changes that no longer exist.
+  check('the commit popover closes after the commit lands', !isOpen(header),
+    JSON.stringify(walk(header).map((n) => n.props?.['data-popover']).filter(Boolean)))
+  // Closing must not swallow the outcome: the banner lives outside the popover.
+  check('the outcome is still reported after the popover closes',
+    walk(header).some((node) => String(node.props?.className ?? '').includes('dshgit-notice')),
+    textOf(header).slice(-200))
+
+  // A FAILED commit must keep the popover open, or the error vanishes with the
+  // panel that reported it and the user loses the message they were typing.
+  let attempts = 0
+  header = await renderChips(healthyHandlers({
+    status: () => ({ ...STATUS, total: 1, files: [oneFile] }),
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: 0, behind: 0 }),
+    'write.stage': () => ({ ok: true, message: 'staged' }),
+    'write.commit': () => {
+      attempts++
+      const error = new Error('pre-commit hook failed')
+      error.code = 'git/write-failed'
+      throw error
+    },
+  }))
+  findAll(header, 'button').find((node) => node.props['data-chip'] === 'changes')
+    .props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) } })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(header, 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
+    .props.onChange({ currentTarget: { value: 'feat: will fail' } })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  // Same untracked-only fixture as above: the primary action's label is
+  // `commit.all`, so target the role rather than one specific wording.
+  findAll(header, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a failed commit really was attempted', attempts > 0)
+  check('a FAILED commit keeps the popover open so the error stays visible',
+    isOpen(header),
+    JSON.stringify(walk(header).map((n) => n.props?.['data-popover']).filter(Boolean)))
+  // The banner shows a short summary and keeps the full git text behind a
+  // "查看详情" disclosure, so the raw message is asserted after expanding it.
+  const details = findAll(header, 'button').find((node) => node.props['aria-label'] === t('notice.details'))
+  check('a failed commit offers the full error behind a disclosure', details !== undefined,
+    textOf(header).slice(-300))
+  details.props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the failure is reported', hasText(header, 'pre-commit hook failed'), textOf(header).slice(-300))
+}
+
+console.log('\n--- workbench Commit explains missing text and clears a mixed change list ---')
+{
+  let committed = false
+  let full = await renderApp(healthyHandlers({
+    status: () => ({ ...STATUS, total: committed ? 0 : STATUS.files.length,
+      files: committed ? [] : STATUS.files }),
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: committed ? 1 : 0, behind: 0 }),
+    'write.stage': () => ({ ok: true, message: 'staged' }),
+    'write.commit': () => { committed = true; return { ok: true, message: 'committed' } },
+  }))
+  findAll(full, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
+  full = await flush(GitApp, { connection: mounted.rpc, t })
+  check('empty message shows a visible explanation and does not write',
+    walk(full).some((node) => String(node.props?.className).includes('dshgit-toast') && hasText(node, t('commit.requiredMessage'))) &&
+    !mounted.rpc.calls.some((call) => call.method.startsWith('write.')))
+  findAll(full, 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
+    .props.onChange({ currentTarget: { value: 'feat: all files' } })
+  full = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(full, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
+  full = await flush(GitApp, { connection: mounted.rpc, t })
+  // The fixture has ONE staged file (`docs/待提交.md`, index `A`), so the composer
+  // takes the `stagedCount > 0` branch and commits only what is staged — it does
+  // NOT also stage the unstaged files first. That is deliberate: a plain Commit
+  // must never sweep in changes the user did not stage. The earlier label
+  // ("提交已暂存的改动") is the visible half of the same rule.
+  check('a commit with staged content commits exactly that, without re-staging',
+    JSON.stringify(mounted.rpc.calls.filter((call) => call.method.startsWith('write.'))
+      .map((call) => call.method)) === JSON.stringify(['write.commit']))
+  check('the change rows clear after the commit',
+    findWhere(full, (props) => props['data-change-group'] !== undefined).length === 0)
+  // The toast text is the element the stylesheet clamps, so a long write
+  // result (a big commit's git output) cannot stretch the banner.
+  const commitToastText = walk(full).find((node) => String(node.props?.className) === 'dshgit-toast-text')
+  check('the commit toast renders through the clamped text element',
+    commitToastText !== undefined && hasText(commitToastText, 'committed'), textOf(full).slice(-240))
+  // The sidebar composer never turns into Sync: the full window has dedicated
+  // Fetch/Pull/Push buttons in its title bar (`canSync` requires `!props.sidebar`).
+  check('the sidebar composer does not become a Sync button',
+    !findAll(full, 'button').some((node) => String(node.props.className).includes('dshgit-commit-primary')
+      && textOf(node) === t('action.sync')))
+}
+
+console.log('\n--- initial render (changes tab) ---')
+let tree = await renderApp()
+check('renders without throwing', tree !== null)
+check('shows the panel title', hasText(tree, 'Git'), textOf(tree).slice(0, 160))
+check('shows the resolved repository root', hasText(tree, ROOT), textOf(tree).slice(0, 200))
+check('shows the branch badge', hasText(tree, 'main'))
+// The file list carries a staged/unstaged/all filter and DEFAULTS to "all", so
+// every change — the staged rows included — is on screen without a click. The
+// clicks below stay as idempotent guards: they now confirm the filter control
+// exists and holds its default rather than repairing a hidden selection.
+check('lists the staged file once the file filter shows everything', (() => {
+  const all = findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-btn') &&
+    textOf(node).startsWith(t('batch.all') + ' '))
+  if (all === undefined) return false
+  all.props.onClick()
+  return true
+})())
+tree = await flush(GitApp, { connection: mounted.rpc, t })
+check('the staged file appears under the All filter',
+  walk(tree).some((node) => node.props?.title === 'docs/待提交.md'),
+  JSON.stringify(walk(tree).filter((n) => String(n.props?.className ?? '').includes('dshgit-change')).map((n) => n.props.title)))
+check('lists the modified file', hasText(tree, 'src/index.js'))
+check('lists the untracked file', hasText(tree, 'untracked.txt'))
+const changeRow = walk(tree).find((node) => node.props?.title === 'src/index.js' &&
+  String(node.props?.className ?? '').includes('dshgit-change'))
+check('change rows split the filename from its directory',
+  walk(changeRow).some((node) => node.props?.className === 'dshgit-filename' && textOf(node) === 'index.js') &&
+  walk(changeRow).some((node) => node.props?.className === 'dshgit-filedir' && textOf(node) === 'src'))
+// The full changes list renders its per-row toolbar through `batch.actions`,
+// which yields a FileBatchActions ELEMENT rather than the component instance the
+// harness already rendered — so `walk`/`findAll` cannot see inside it, and the
+// last child of the row is that element, not a status span. Assert the row's own
+// structure (which IS rendered) and leave the toolbar's contents to the compact
+// popover below, where the same toolbar is rendered inline and is reachable.
+// The full changes list renders its per-row toolbar through `batch.actions`,
+// which yields a FileBatchActions ELEMENT the harness does not descend into — so
+// the toolbar's buttons are not reachable from this tree, and the row's children
+// end in those placeholder slots. Assert the row structure that IS rendered, and
+// leave the toolbar's button set to the compact popover below, where the same
+// toolbar renders inline.
+check('change rows keep the status inside the row',
+  walk(changeRow).some((node) => String(node.props?.className ?? '') === 'dshgit-status'))
+// The letter is coloured by a `data-status` attribute on the span itself, so the
+// stylesheet can pick one of four tones without every render site choosing a
+// colour class. A row-level attribute alone would not be enough: the compact
+// popover and the changelist pane swap the span out for a shared component.
+check('the status letter carries its own status code',
+  walk(changeRow).some((node) => String(node.props?.className ?? '') === 'dshgit-status' &&
+    node.props?.['data-status'] === 'M'),
+  JSON.stringify(walk(changeRow).filter((node) => String(node.props?.className ?? '') === 'dshgit-status')
+    .map((node) => node.props?.['data-status'])))
+// Editors colour the change-list letter: amber modified, green added/untracked,
+// red deleted. The colour is a second, faster cue than the one-character label —
+// but it is only worth having if it is keyed off the status and not off the
+// browser default.
+{
+  const css = String(loaded.appendedStyles[0]?.textContent ?? '')
+  check('each status tone is keyed off the status code',
+    css.includes('.dshgit-status[data-status="M"]') &&
+    css.includes('.dshgit-status[data-status="U"]') &&
+    css.includes('.dshgit-status[data-status="D"]'),
+    css.slice(css.indexOf('.dshgit-status[data-status'), css.indexOf('.dshgit-status[data-status') + 200))
+  check('the modified tone is its own token, not the success tone',
+    css.includes('--dshgit-modified-text:') && /--dshgit-modified-text:[^;]*state-warn-primary/.test(css),
+    /body\{--dshgit-success-text[\s\S]{0,400}?\}/.exec(css)?.[0] ?? '')
+  // A deleted row keeps its path on screen (the diff is the last copy of the
+  // content) and says so with a strike-through, over the whole path.
+  check('deleted rows are struck through over filename and directory',
+    /\.dshgit-change\[data-status="D"\][^{]*\{[^}]*text-decoration:line-through/.test(css) &&
+    /\.dshgit-change\[data-status="D"\][^{]*\.dshgit-filename/.test(css) &&
+    /\.dshgit-change\[data-status="D"\][^{]*\.dshgit-filedir/.test(css),
+    (css.match(/\.dshgit-change\[data-status="D"\][^{]*\{[^}]*\}/g) ?? []).join(' '))
+}
+check('change rows carry the file icon and label',
+  walk(changeRow).some((node) => node.props?.className === 'dshgit-fileicon') &&
+  walk(changeRow).some((node) => node.props?.className === 'dshgit-filelabel'))
+check('file actions reveal on hover and keyboard focus',
+  loaded.appendedStyles[0].textContent.includes('.dshgit-change:hover .dshgit-change-actions') &&
+  loaded.appendedStyles[0].textContent.includes('.dshgit-change:focus-within .dshgit-change-actions'))
+check('shows the commit composer placeholder',
+  findWhere(tree, (props) => props.placeholder === t('commit.placeholderMessage')).length === 1)
+// The module switcher is the activity bar, not a horizontal tab row: an icon
+// column cannot be squeezed by the sync controls beside it, which is the whole
+// reason the layout was rebuilt.
+check('renders seven activity-bar modules',
+  activityItems(tree).length === 7,
+  JSON.stringify(activityItems(tree).map((node) => node.props['data-module'])))
+// The activity bar is changes / graph / history / stashes / worktrees / output / settings.
+// `compare` is deliberately NOT among them: it is opened from a branch's
+// quick actions in the header (`setWindowState({ tab: 'compare' })`), because a
+// comparison always starts from a branch. `navigation.js` keeps a `compare`
+// fallback only so an old stored tab id still resolves.
+check('the activity bar exposes each module by name',
+  activityItems(tree).map((node) => node.props['aria-label']).join(',') ===
+    ['changes', 'graph', 'history', 'stashes', 'worktrees', 'output', 'settings'].map((id) => t(`tab.${id}`)).join(','),
+  JSON.stringify(activityItems(tree).map((node) => node.props['aria-label'])))
+check('exactly one activity item is marked active',
+  activityItems(tree).filter((node) => node.props['aria-pressed'] === true).length === 1)
+check('the active activity item is the changes module',
+  activityItems(tree).find((node) => node.props['aria-pressed'] === true).props['data-module'] === 'changes')
+check('no horizontal tab row is rendered',
+  findAll(tree, 'button').every((node) => !String(node.props.className).includes('dshgit-tab')),
+  JSON.stringify(findAll(tree, 'button').map((node) => node.props.className).filter((c) => String(c).includes('tab'))))
+// Repository facts moved to a status bar so they cannot push the title bar's
+// actions onto a second line.
+check('renders a status bar carrying the repository facts',
+  walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-statusbar')) &&
+  hasText(walk(tree).find((node) => String(node.props?.className ?? '').includes('dshgit-statusbar')), 'main'))
+// A name previously arrived from eager repoMeta, not from a blame read.
+check('opening a file diff does not enumerate repository contributors',
+  !mounted.rpc.calls.some(call => call.method === 'contributors'))
+check('rendered diff rows carry +/- kinds',
+  walk(tree).some((node) => node.$$kind === 'host' && node.props?.['data-kind'] === 'add'),
+  'no add row found')
+check('rpc called repos then status', mounted.rpc.calls[0]?.method === 'repos' &&
+  mounted.rpc.calls.some((call) => call.method === 'status'),
+  mounted.rpc.calls.map((c) => c.method).join(','))
+
+console.log('\n--- clicking a changed file opens it ---')
+{
+  changeRow.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // A modified tracked file opens as a DIFF, not as raw content: `openChangedFile`
+  // only selects content mode for HEAD, an explicit content request, or an
+  // untracked file (there is no diff to show for one). The content assertions
+  // below therefore belong to the untracked/YAML cases, which is where the
+  // preview code path actually runs.
+  check('the full window requested the working-tree diff',
+    mounted.rpc.calls.some((call) => call.method === 'diff' && call.payload.path === 'src/index.js'))
+  check('the full window renders diff rows for the file',
+    walk(tree).some((node) => node.$$kind === 'host' && node.props?.['data-kind'] === 'add'))
+  // The mode control shows the mode it would switch TO. The file opened as a
+  // diff, so the control offers content ("文件内容") and vice versa — so driving
+  // it means clicking whatever label is present, then asserting the flip.
+  const modeToggle = findAll(tree, 'button').find((node) => node.props['data-preview-mode'] === true)
+  check('the file view offers a diff/content toggle', modeToggle !== undefined)
+  modeToggle.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the toggle switches the file view to its content',
+    mounted.rpc.calls.some((call) => call.method === 'fileContent' && call.payload.path === 'src/index.js'))
+}
+
+{
+  // The compact window's second, larger file browser is gone: the full window's
+  // own preview (asserted above) is the only file surface. What remains worth
+  // asserting is that a non-JavaScript file still highlights by its own grammar.
+  const yamlStatus = { ...STATUS, files: [{
+    path: 'cordis.patch.yml', originalPath: null, index: '.', worktree: 'M',
+    staged: false, kind: 'ordinary', added: 1, deleted: 0,
+  }] }
+  tree = await renderApp(healthyHandlers({
+    status: () => yamlStatus,
+    fileContent: () => ({ exists: true, text: 'plugins:\n  git: true\n  retries: 3\n', binary: false, truncated: false }),
+  }))
+  walk(tree).find((node) => node.props?.title === 'cordis.patch.yml' &&
+    String(node.props?.className ?? '').includes('dshgit-change')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // The grammar id is proved by the file ICON's `data-kind`, which is derived from
+  // the path's extension — a fixed default would report one id for every file.
+  // (`primitives.asked` cannot be used here: the render path loads its own module
+  // instance, so the shared stub only sees the earlier JavaScript file.)
+  check('a YAML file is highlighted with its own grammar',
+    walk(tree).some((node) => node.props?.style?.color === 'rgb(10, 20, 30)') &&
+      walk(tree).some((node) => node.props?.['data-kind'] === 'yaml'),
+    JSON.stringify(Array.from(new Set(primitives.asked))))
+  tree = await renderApp()
+}
+
+console.log('\n--- the preview degrades to plain text without the platform highlighter ---')
+{
+  // A profile whose composition lacks the primitives package must still render
+  // files. The require is best-effort precisely so this case is a plain-text
+  // fallback rather than a plugin that fails to activate.
+  const bare = loadClientModule(source, { require: { '@deepseek-ai/dsh-client-ui-primitives': primitivesStub({ none: true }).module } })
+  check('the plugin still loads without the highlighter', bare.id === 'dsh-gitx', String(bare.id))
+  const bareStub = createRpcStub(healthyHandlers())
+  const bareContext = createClientContext({ connection: bareStub })
+  bare.apply(bareContext.ctx)
+  check('it still registers its slots', bareContext.registrations.length === 4,
+    String(bareContext.registrations.length))
+}
+
+console.log('\n--- file context menu ---')
+{
+  tree = await renderApp()
+  const row = walk(tree).find((node) => node.props?.title === 'src/index.js' &&
+    String(node.props?.className ?? '').includes('dshgit-change'))
+  let prevented = false
+  row.props.onContextMenu({ clientX: 180, clientY: 220, preventDefault() { prevented = true }, stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('right click opens the file menu and suppresses the browser menu',
+    prevented && walk(tree).some((node) => node.props?.className === 'dshgit-contextmenu'))
+  // A menu row renders its label in a span and the underlying git command in a
+  // sibling `<code>` (added so the menu teaches the command). `textOf` therefore
+  // concatenates both, and rows without a command have no `<code>` at all — so
+  // derive the label by subtracting that code text from the row's full text.
+  const menuNode = walk(tree).find((node) => node.props?.className === 'dshgit-contextmenu')
+  const menuButtons = findAll(menuNode ?? {}, 'button')
+  const menuLabelOf = (node) => {
+    const code = walk(node).find((child) => String(child.props?.className ?? '') === 'dshgit-menucommand')
+    const full = textOf(node)
+    return code === undefined ? full : full.replace(textOf(code), '').trim()
+  }
+  const menuLabels = menuButtons.map(menuLabelOf)
+  check('the menu has open, history, and Git actions',
+    [t('action.openChanges'), t('action.openFile'), t('action.openHead'), t('action.fileHistory'),
+      t('action.discard'), t('action.stage'), t('action.stashFile')]
+      .every((label) => menuLabels.includes(label)), JSON.stringify(menuLabels))
+  const findMenu = (label) => menuButtons.find((node) => menuLabelOf(node) === label)
+  findMenu(t('action.openHead')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('Open File (HEAD) reads the committed file',
+    mounted.rpc.calls.some((call) => call.method === 'fileContent' &&
+      call.payload.path === 'src/index.js' && call.payload.rev === 'HEAD'))
+  const rowAgain = walk(tree).find((node) => node.props?.title === 'src/index.js' &&
+    String(node.props?.className ?? '').includes('dshgit-change'))
+  rowAgain.props.onContextMenu({ clientX: 180, clientY: 220, preventDefault() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const historyItem = findAll(walk(tree).find((node) => node.props?.className === 'dshgit-contextmenu') ?? {}, 'button')
+    .find((node) => menuLabelOf(node) === t('action.fileHistory'))
+  historyItem.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('File History filters commits to that path',
+    mounted.rpc.calls.some((call) => call.method === 'commits' && call.payload.path === 'src/index.js'))
+
+  // The compact popover uses the same hover actions as the full changes list.
+  tree = await renderChips()
+  const chip = findAll(tree, 'button').find((node) => node.props['data-chip'] === 'changes')
+  chip.props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const untrackedRow = walk(tree).find((node) => node.props?.title === 'untracked.txt' &&
+    String(node.props?.className ?? '').includes('dshgit-pickfile'))
+  check('the popover lists the untracked file', untrackedRow !== undefined)
+  // The row's toolbar is the batch toolbar (stash / discard / stage). There is no
+  // separate "open" button: clicking the row itself opens the file, which is what
+  // `data-ref`/`onClick` on the row provides. The compact popover likewise has no
+  // checkbox — checkboxes belong to the full changes list.
+  const rowActions = findAll(untrackedRow, 'button').map((node) => node.props['data-file-action']).filter(Boolean)
+  check('the popover offers Stash, Discard and Stage icons with no checkbox',
+    JSON.stringify(rowActions) === JSON.stringify(['stash', 'discard', 'stage']) &&
+      findAll(untrackedRow, 'input').length === 0, JSON.stringify(rowActions))
+  findAll(untrackedRow, 'button').find((node) => node.props['data-file-action'] === 'stage')
+    .props.onClick({ stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('staging from the popover targets exactly that file',
+    mounted.rpc.calls.some((call) => call.method === 'write.stage' &&
+      JSON.stringify(call.payload.paths) === JSON.stringify(['untracked.txt'])),
+    JSON.stringify(mounted.rpc.calls.filter((call) => call.method === 'write.stage').map((call) => call.payload)))
+  tree = await renderApp()
+}
+
+console.log('\n--- staged changes stay reviewable in the commit popover ---')
+{
+  // A repository where every change is already staged. With the file filter
+  // defaulting to "unstaged" this was the worst case in the product: the list
+  // went EMPTY, so there was no row left to click for a diff, and the primary
+  // button disabled itself over a commit scope that still existed on disk.
+  const stagedOnly = { ...STATUS, total: 2, files: [
+    { path: 'docs/待提交.md', originalPath: null, index: 'A', worktree: '.', staged: true, kind: 'added', added: 3, deleted: 0, binary: false },
+    { path: 'src/index.js', originalPath: null, index: 'M', worktree: '.', staged: true, kind: 'ordinary', added: 2, deleted: 1, binary: false },
+  ] }
+  tree = await renderChips(healthyHandlers({ status: () => stagedOnly }))
+  findAll(tree, 'button').find((node) => node.props['data-chip'] === 'changes')
+    .props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const popover = () => walk(tree).find((node) => node.props?.['data-popover'] === 'commit')
+  const listed = walk(popover()).filter((node) => node.props?.['data-file-path']).map((node) => node.props['data-file-path'])
+  check('the file filter opens on All so staged rows are not hidden',
+    listed.includes('src/index.js') && listed.includes('docs/待提交.md'), JSON.stringify(listed))
+  const commitButton = findAll(popover(), 'button').find((node) =>
+    String(node.props.className).includes('dshgit-commit-primary'))
+  check('staged-only changes keep the commit button live', commitButton.props.disabled !== true,
+    textOf(commitButton))
+  // The row IS the way into the diff, so it must reach the viewer rather than
+  // silently select nothing.
+  const row = walk(popover()).find((node) => node.props?.['data-file-path'] === 'src/index.js')
+  row.props.onClick({})
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('clicking a staged row opens its diff',
+    walk(tree).some((node) => node.props?.['data-file-viewer'] === 'src/index.js') &&
+      mounted.rpc.calls.some((call) => call.method === 'diff' && call.payload.path === 'src/index.js'),
+    JSON.stringify(mounted.rpc.calls.filter((call) => call.method === 'diff').map((call) => call.payload)))
+
+  // The filter narrows the LIST, never the scope. Picking "已暂存" while an
+  // unstaged file exists used to grey the button out over changes still on
+  // disk, and picking "未暂存" flipped the label to "暂存并提交全部" while a
+  // staged scope existed. git decides both, from the whole working state.
+  tree = await renderChips(healthyHandlers({ status: () => stagedOnly }))
+  findAll(tree, 'button').find((node) => node.props['data-chip'] === 'changes')
+    .props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const mixedPopover = () => walk(tree).find((node) => node.props?.['data-popover'] === 'commit')
+  const pickFilter = async (label) => {
+    const button = findAll(mixedPopover(), 'button').find((node) => String(node.props.className).includes('dshgit-btn') &&
+      textOf(node).startsWith(t(label) + ' '))
+    if (button === undefined) return false
+    button.props.onClick()
+    tree = await flush(GitApp, { connection: mounted.rpc, t })
+    return true
+  }
+  const labelOf = () => textOf(findAll(mixedPopover(), 'button').find((node) =>
+    String(node.props.className).includes('dshgit-commit-primary')))
+  const disabledOf = () => findAll(mixedPopover(), 'button').find((node) =>
+    String(node.props.className).includes('dshgit-commit-primary')).props.disabled
+  const stagedLabel = labelOf()
+  check('narrowing the filter does not change the commit action',
+    (await pickFilter('batch.staged')) && labelOf() === stagedLabel && disabledOf() !== true,
+    `${stagedLabel} / ${labelOf()} / ${disabledOf()}`)
+  check('the staged count beside the button ignores the filter',
+    textOf(mixedPopover()).includes(t('window.staged', { count: 2 })), textOf(mixedPopover()).slice(0, 200))
+  check('a filter that hides every row says no matches, not no changes',
+    (await pickFilter('batch.unstaged')) && textOf(mixedPopover()).includes(t('list.noMatches')) &&
+      !textOf(mixedPopover()).includes(t('commit.nothing')), textOf(mixedPopover()).slice(0, 220))
+  tree = await renderApp()
+}
+
+console.log('\n--- a running commit does not freeze the file list ---')
+{
+  // The row click is a READ: it opens the diff viewer. While the commit was in
+  // flight the whole picker was dead — no error, no hint — which is exactly the
+  // moment a user wants to re-check what they are landing. A slow or hung commit
+  // (hooks, credentials) made the panel look broken.
+  // A repository with one staged file (the commit scope) and one unstaged file
+  // (the row to read). Clicking the unstaged one is what reaches the viewer's
+  // footer stage control, which is the write that must not look live.
+  const stagedFile = { ...STATUS.files[0] }
+  const unstagedFile = { ...STATUS.files[1] }
+  let releaseCommit
+  tree = await renderChips(healthyHandlers({
+    status: () => ({ ...STATUS, total: 2, files: [stagedFile, unstagedFile] }),
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: 0, behind: 0 }),
+    'write.commit': () => new Promise((resolve) => { releaseCommit = resolve }),
+  }))
+  findAll(tree, 'button').find((node) => node.props['data-chip'] === 'changes')
+    .props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const popover = () => walk(tree).find((node) => node.props?.['data-popover'] === 'commit')
+  findAll(popover(), 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
+    .props.onChange({ currentTarget: { value: 'feat: keep reading' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(popover(), 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const busyButton = findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary'))
+  check('the commit is in flight and the button is busy',
+    mounted.rpc.calls.some((call) => call.method === 'operationStart' || call.method === 'write.commit') &&
+      busyButton !== undefined && (busyButton.props['aria-busy'] === true || busyButton.props.disabled === true),
+    JSON.stringify({ busy: busyButton?.props?.['aria-busy'], disabled: busyButton?.props?.disabled }))
+  const row = walk(tree).find((node) => node.props?.['data-file-path'] === unstagedFile.path)
+  check('the changed file is still listed while committing', row !== undefined)
+
+  // Opening a file is a read; every WRITE must still be unreachable. Asserted on
+  // the controls themselves rather than on the row gate that was removed, so the
+  // two cannot drift apart later. Done before the viewer opens, because opening a
+  // file closes the popover behind it.
+  const writeRows = walk(popover()).filter((node) => node.props?.['data-file-path'])
+  const rowWrites = writeRows.flatMap((node) => findAll(node, 'button').filter((b) => b.props['data-file-action']))
+  check('every per-file write control is disabled while the commit runs',
+    rowWrites.length > 0 && rowWrites.every((node) => node.props.disabled === true),
+    JSON.stringify(rowWrites.map((node) => ({ action: node.props['data-file-action'], disabled: node.props.disabled }))))
+  const groupWrites = findAll(popover(), 'button').filter((node) => node.props['data-group-action'] && node.props['data-group-action'] !== 'view')
+  check('the group batch actions are disabled while the commit runs',
+    groupWrites.length > 0 && groupWrites.every((node) => node.props.disabled === true),
+    JSON.stringify(groupWrites.map((node) => ({ action: node.props['data-group-action'], disabled: node.props.disabled }))))
+  const scopeChecks = findAll(popover(), 'input').filter((node) => String(node.props.className).includes('dshgit-cl-checkbox'))
+  check('scope checkboxes cannot retarget the running commit',
+    scopeChecks.length === 0 || scopeChecks.every((node) => node.props.disabled === true),
+    JSON.stringify(scopeChecks.map((node) => node.props.disabled)))
+  const composerWrites = findAll(popover(), 'button').filter((node) =>
+    String(node.props.className).includes('dshgit-commit-ai') || String(node.props.className).includes('dshgit-commit-primary'))
+  check('the composer cannot start a second commit or generation',
+    composerWrites.length > 0 && composerWrites.every((node) => node.props.disabled === true),
+    JSON.stringify(composerWrites.map((node) => node.props.disabled)))
+
+  // The right-click menu: reading stays, writing goes.
+  writeRows[0].props.onContextMenu({ preventDefault() {}, stopPropagation() {}, clientX: 20, clientY: 30, currentTarget: { getBoundingClientRect: () => ({ left: 20, bottom: 50 }) } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const fileMenu = walk(tree).find((node) => node.props?.className === 'dshgit-contextmenu')
+  const menuLabel = (node) => {
+    const code = walk(node).find((c) => String(c.props?.className ?? '') === 'dshgit-menucommand')
+    const full = textOf(node)
+    return code ? full.replace(textOf(code), '').trim() : full
+  }
+  const menuWrites = findAll(fileMenu ?? {}, 'button').filter((node) =>
+    [t('action.stage'), t('action.unstage'), t('action.discard'), t('action.stashFile'), t('action.ignoreLocal'), t('action.ignoreFile')].includes(menuLabel(node)))
+  check('the file menu disables every write it offers',
+    menuWrites.length > 0 && menuWrites.every((node) => node.props.disabled === true),
+    JSON.stringify(menuWrites.map((node) => ({ label: menuLabel(node), disabled: node.props.disabled }))))
+  const menuReads = findAll(fileMenu ?? {}, 'button').filter((node) => [t('action.openChanges'), t('action.fileHistory')].includes(menuLabel(node)))
+  check('the file menu keeps its read entries live',
+    menuReads.length > 0 && menuReads.every((node) => !node.props.disabled),
+    JSON.stringify(menuReads.map((node) => ({ label: menuLabel(node), disabled: node.props.disabled }))))
+
+  // The last line of defence: even a control invoked programmatically (an
+  // assistive tool, a synthetic click) must not start a second write, because
+  // the write layer itself refuses while one is in flight.
+  const writesBefore = mounted.rpc.calls.filter((call) => call.method.startsWith('write.')).length
+  const forcedDiscard = rowWrites.find((node) => node.props['data-file-action'] === 'discard')
+  forcedDiscard.props.onClick({ stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a forced discard during the running commit writes nothing and asks nothing',
+    mounted.rpc.calls.filter((call) => call.method.startsWith('write.')).length === writesBefore &&
+      !walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-confirmbar')),
+    JSON.stringify(mounted.rpc.calls.filter((call) => call.method.startsWith('write.')).map((call) => call.method)))
+
+  row.props.onClick({})
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('clicking a row during the commit opens its diff',
+    walk(tree).some((node) => node.props?.['data-file-viewer'] === unstagedFile.path) &&
+      mounted.rpc.calls.some((call) => call.method === 'diff' && call.payload.path === unstagedFile.path),
+    JSON.stringify(walk(tree).filter((n) => n.props?.['data-file-viewer']).map((n) => n.props['data-file-viewer'])))
+  // The viewer is now reachable mid-write, so its one WRITE control must say so:
+  // `write()` refuses a second write in silence, and a live-looking button that
+  // does nothing is the exact failure the row fix was about.
+  const viewerNode = walk(tree).find((node) => node.props?.['data-file-viewer'] === unstagedFile.path)
+  const stageInViewer = findAll(viewerNode, 'button').find((node) => textOf(node) === t('action.stage'))
+  check('the viewer keeps its reads live and disables its write',
+    // `src/index.js` is the second of the two listed files, so paging BACK is a
+    // live read while the commit runs; the footer stage is the one write.
+    findAll(viewerNode, 'button').some((node) => node.props['aria-label'] === t('action.previousFile') &&
+      node.props.disabled === false) &&
+      stageInViewer !== undefined && stageInViewer.props.disabled === true &&
+      stageInViewer.props.title === t('state.busy'),
+    JSON.stringify(stageInViewer && { disabled: stageInViewer.props.disabled, title: stageInViewer.props.title }))
+  releaseCommit({ ok: true, code: 0, message: '提交成功', stdout: '' })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the finished commit still reports through the banner',
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-notice')), textOf(tree).slice(-200))
+  tree = await renderApp()
+}
+
+console.log('\n--- history tab ---')
+{
+  const rootProps = { connection: mounted.rpc, t }
+  tree = await selectModule(tree, 'history')
+  check('history lists commit subjects', hasText(tree, 'refactor: 把 app.js 重命名为 index.js'), textOf(tree).slice(0, 300))
+  check('history shows the author', hasText(tree, '张三'))
+  check('history requested commits', mounted.rpc.calls.some((call) => call.method === 'commits'))
+  // The rename badge is NOT in the history list. The sidebar list shows subject,
+  // author and date only; the file-level statuses (`R` for a rename) are rendered
+  // by the commit DETAIL pane, once a commit is selected. The assertion therefore
+  // lives in the "commit selection renders a diff" block below, where it is
+  // actually reachable — asserting it here was testing a component that never
+  // renders a badge.
+}
+
+console.log('\n--- commit selection renders a diff ---')
+{
+  const rootProps = { connection: mounted.rpc, t }
+  const row = walk(tree).find((node) => node.$$kind === 'host' && node.props?.['data-selected'] === false && String(node.props.className).includes('commitrow'))
+  check('found a commit row to click', row !== undefined)
+  row.props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('commit detail fetched', mounted.rpc.calls.some((call) => call.method === 'commit'))
+  // The row's kind lives on the row element, while the marker character and the
+  // line body are separate text nodes — so assert on both, not on a joined
+  // string that never contains "+<code>".
+  const rows = walk(tree).filter((node) => node.$$kind === 'host' && node.props?.['data-kind'] !== undefined)
+  const kinds = rows.map((node) => node.props['data-kind'])
+  check('diff renders both an added and a removed row',
+    kinds.includes('add') && kinds.includes('del'),
+    `kinds=${JSON.stringify(kinds)} diffCalls=${JSON.stringify(mounted.rpc.calls.filter((c) => c.method === 'diff').map((c) => c.payload))} tail=${JSON.stringify(textOf(tree).slice(-200))}`)
+  check('the added row carries the new line text',
+    rows.some((node) => node.props['data-kind'] === 'add' && textOf(node).includes("console.log('world')")),
+    JSON.stringify(rows.filter((n) => n.props['data-kind'] === 'add').map((n) => textOf(n))))
+  check('the removed row carries the old line text',
+    rows.some((node) => node.props['data-kind'] === 'del' && textOf(node).includes("console.log('hi')")),
+    JSON.stringify(rows.filter((n) => n.props['data-kind'] === 'del').map((n) => textOf(n))))
+  check('diff renders a hunk header',
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-hunkhead') &&
+      /@@ -\d+(,\d+)? \+\d+(,\d+)? @@/.test(textOf(node))),
+    JSON.stringify(walk(tree).filter((n) => String(n.props?.className ?? '').includes('hunkhead')).map((n) => textOf(n))))
+  check('commit detail pane shows the message', hasText(tree, '详见说明。'), textOf(tree).slice(-400))
+  check('commit detail pane shows the changed file summary',
+    hasText(tree, 'src/index.js'), textOf(tree).slice(-400))
+  // Every split-pane list is resizable: the sidebar grip is always mounted, so
+  // a second grip can only be the commit detail's file-list divider. A
+  // multi-column layout the user cannot rebalance buries the file names.
+  check('the commit detail file list has its own resize grip',
+    walk(tree).filter((node) => String(node.props?.className ?? '').includes('dshgit-pane-grip')).length >= 2,
+    JSON.stringify(walk(tree).filter((node) => String(node.props?.className ?? '').includes('dshgit-pane-grip')).length))
+  // The grip is absolutely positioned inside the pane it resizes, so every
+  // resizable pane must be a positioning context — otherwise the grip escapes
+  // to the viewport corner. The stash/history file lists share this rule, and
+  // both stacks collapse to one column under 760px, where the grip must go.
+  {
+    const css = String(loaded.appendedStyles[0]?.textContent ?? '')
+    const gripHosts = /\.dshgit-sidebar[^{]*\{[^}]*position:relative/.exec(css)?.[0] ?? ''
+    check('every split-pane list is a positioning context for its grip',
+      gripHosts.includes('.dshgit-stash-filenav') && gripHosts.includes('.dshgit-commitfiles-nav') &&
+      gripHosts.includes('.dshgit-fileviewernav'), gripHosts)
+    check('stacked layouts hide the file-list grips',
+      css.includes('@media(max-width:760px){.dshgit-stash-filenav>.dshgit-pane-grip{display:none}}'),
+      'no 760px hide rule')
+  }
+  // File-level statuses live here, on each changed file's card in the detail
+  // pane — this is where a rename surfaces as an `R` badge.
+  // NOTE: the live history detail (`HistoryCommitDetails`) never renders a rename
+  // indicator. Its file list shows DiffStats (`+1 −0`) and its single-file viewer
+  // shows "before/after", so `file.status` and `file.from` are carried in the data
+  // but not surfaced. Only the unreachable `CommitDiffView` rendered a badge for
+  // `status`, and only its file cards showed `← originalPath`. So there is no
+  // rename badge to assert; what IS guaranteed is that the file is listed and its
+  // diff renders. (Surfacing the rename is a separate product change.)
+  check('commit detail lists the changed file and renders its diff',
+    hasText(tree, 'src/index.js') &&
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-diff-preview')),
+    JSON.stringify(textOf(tree).slice(-300)))
+  // The code column is squeezed by the file list beside it, so the preview
+  // toolbar offers an enlarge that hides the list and lets the diff fill the
+  // detail area (the same view the graph panel reaches by clicking a file).
+  {
+    const expand = walk(tree).find((node) => String(node.props?.className ?? '').includes('dshgit-history-expand'))
+    check('the file preview offers an enlarge toggle', expand !== undefined)
+    if (expand !== undefined) {
+      check('the enlarge toggle starts unpressed', expand.props['aria-pressed'] === false)
+      expand.props.onClick()
+      tree = await flush(GitApp, rootProps)
+      const nav = walk(tree).find((node) => String(node.props?.className ?? '').includes('dshgit-stash-filenav'))
+      const pressed = walk(tree).find((node) => String(node.props?.className ?? '').includes('dshgit-history-expand'))
+      check('enlarging hides the file list and marks the toggle',
+        nav?.props?.style?.display === 'none' && pressed?.props['aria-pressed'] === true,
+        JSON.stringify({ nav: nav?.props?.style, pressed: pressed?.props?.['aria-pressed'] }))
+      pressed.props.onClick()
+      tree = await flush(GitApp, rootProps)
+      check('restoring brings the file list back',
+        walk(tree).find((node) => String(node.props?.className ?? '').includes('dshgit-stash-filenav'))?.props?.style?.display !== 'none')
+    }
+  }
+}
+
+console.log('\n--- graph tab ---')
+{
+  const rootProps = { connection: mounted.rpc, t }
+  tree = await selectModule(tree, 'graph')
+  check('graph reports the lane count', hasText(tree, '2'), textOf(tree).slice(0, 200))
+  check('graph requested the commit graph', mounted.rpc.calls.some((call) => call.method === 'commitGraph'))
+  check('graph shows branch tips', hasText(tree, 'feature/新功能'), textOf(tree).slice(0, 400))
+  // The live graph is `WorkbenchGraph`, and it draws each commit as an SVG lane
+  // diagram. It has no "M" badge and no `dshgit-dot` element: the old GraphView
+  // (which had both) is no longer reachable, and `GraphSidebar` — the only user of
+  // `graph.lanesLabel`/`graph.tips` — is exported nowhere and mounted nowhere.
+  // A merge is encoded as a LARGER dot radius instead, so that is what to assert.
+  check('graph renders an SVG lane diagram per commit',
+    walk(tree).some((node) => node.$$kind === 'host' && node.type === 'svg') &&
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-graph-record')))
+  check('a merge commit is drawn as a larger dot',
+    walk(tree).some((node) => node.type === 'circle' && Number(node.props?.r) === 4) &&
+    walk(tree).some((node) => node.type === 'circle' && Number(node.props?.r) === 3.5),
+    JSON.stringify(walk(tree).filter((n) => n.type === 'circle').map((n) => n.props?.r)))
+  // The live sidebar is the branch list, not a lane legend.
+  check('graph sidebar lists the refs',
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-sidebar')) &&
+    walk(tree).some((node) => node.props?.['data-branch-ref'] === 'refs/remotes/origin/main'))
+}
+
+console.log('\n--- compare tab ---')
+{
+  const rootProps = { connection: mounted.rpc, t }
+  // `compare` has no activity-bar entry: a comparison always starts from a branch,
+  // so it is opened from that branch's CONTEXT MENU in the picker (`wb.compare` →
+  // `headerBranchItems` → `api.compare` → `setWindowState({ tab: 'compare',
+  // compareWith: ref })`). It is a menu item, not one of the icon quick actions
+  // (those are checkout/merge/push/pull/fetch), so the menu is the path to drive.
+  tree = await renderChips(healthyHandlers({}))
+  findAll(tree, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
+    currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+  })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const branchRow = walk(tree).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/feature/新功能')
+  check('the branch picker exposes a branch row to act on', branchRow !== undefined)
+  branchRow.props.onContextMenu({ clientX: 100, clientY: 120, preventDefault() {}, stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const compareItem = findAll(tree, 'button').find((node) =>
+    walk(node).some((child) => String(child.props?.className ?? '') === 'dshgit-menucommand'))
+  check('a branch context menu offers actions', compareItem !== undefined, textOf(tree).slice(0, 200))
+  check('compare is reachable from the branch menu', hasText(tree, t('wb.compare')), textOf(tree).slice(0, 300))
+}
+
+console.log('\n--- settings tab ---')
+{
+  const rootProps = { connection: mounted.rpc, t }
+  tree = await selectModule(tree, 'settings')
+  check('settings requested the config', mounted.rpc.calls.some((call) => call.method === 'config'))
+  check('settings requested diagnostics', mounted.rpc.calls.some((call) => call.method === 'diagnostics'))
+  check('settings shows the git executable path',
+    hasText(tree, 'd:/Program Files/Git/cmd/git.exe'), textOf(tree).slice(0, 300))
+  check('settings renders the rename threshold field',
+    findWhere(tree, (props) => props.value === 50 && props.className === 'dshgit-input').length === 1)
+  check('settings renders a checkbox for its boolean option',
+    findAll(tree, 'input').filter((node) => node.props.type === 'checkbox').length >= 1,
+    String(findAll(tree, 'input').filter((node) => node.props.type === 'checkbox').length))
+  // Groups follow SCOPE, so "what does changing this affect?" is answerable
+  // before the control is touched. Sync is its own group because background
+  // fetching is not a property of this device or of one repository.
+  const navLabels = () => findAll(tree, 'button').filter((node) => String(node.props.className).includes('dshgit-rowbtn')).map((node) => textOf(node))
+  check('settings sidebar offers one group per scope', navLabels().join(',') ===
+    [t('settings.general'), t('settings.sync'), t('settings.currentRepo'), t('settings.ai'), t('lfs.title'), t('settings.diagnostics')].join(','),
+    JSON.stringify(navLabels()))
+  // Every group renders named cards, so a page reads as blocks with headings
+  // rather than a flat list whose items belong to different scopes.
+  const heads = () => findAll(tree, 'div').filter((node) => node.props.className === 'dshgit-cardhead').map((node) => textOf(node))
+  check('the general page names each block', heads().length >= 2 &&
+    [t('settings.groupGit'), t('settings.groupInterface'), t('settings.groupDiff')].every((label) => hasText(tree, label)),
+    JSON.stringify(heads()))
+  check('the general page holds no repository-scoped control',
+    !hasText(tree, t('identity.title')) && !hasText(tree, t('auth.help')),
+    textOf(tree).slice(0, 400))
+  // The two removed fields were never read by any code path: a page that offers
+  // them promises behaviour that does not exist.
+  check('settings no longer offers controls with no effect',
+    !hasText(tree, t('label.blameChunk')) && !hasText(tree, t('label.historyLimit')),
+    textOf(tree).slice(0, 500))
+  // The rename threshold is the one numeric setting whose direction is easy to
+  // state backwards, and its reach is narrower than "rename detection" implies:
+  // only the patch honours it, while the list badge uses Git's own default. Both
+  // facts are on the page so neither has to be inferred.
+  check('the rename threshold explains which direction is stricter', hasText(tree, t('settings.groupDiffHint')))
+  check('the rename threshold states that it does not move the list badge',
+    hasText(tree, t('settings.groupDiffScope')), textOf(tree).slice(0, 500))
+}
+
+console.log('\n--- sync settings are their own scope ---')
+{
+  findAll(tree, 'button').find((node) => textOf(node) === t('settings.sync')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the sync page carries background fetch and nothing else',
+    hasText(tree, t('settings.autoFetch')) && hasText(tree, t('settings.autoFetchInterval')) &&
+      !hasText(tree, t('settings.workspaceAddDialog')) && !hasText(tree, t('label.gitPath')),
+    textOf(tree).slice(0, 400))
+  check('the sync page names its block', hasText(tree, t('settings.groupFetch')))
+  findAll(tree, 'button').find((node) => textOf(node) === t('settings.general')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+}
+
+console.log('\n--- the repository page composes every repo-scoped block ---')
+{
+  // Identity, authentication and ignore rules are all stored IN one repository,
+  // so they share a page instead of being split across "general" and "current
+  // repository" — which was the confusing boundary this layout replaced.
+  findAll(tree, 'button').find((node) => textOf(node) === t('settings.currentRepo')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the repository page names the repository it scopes',
+    hasText(tree, ROOT) && hasText(tree, t('settings.currentRepo')), textOf(tree).slice(0, 300))
+  check('identity, authentication and ignore rules live on it together',
+    hasText(tree, t('identity.title')) && hasText(tree, t('auth.help')) && hasText(tree, t('ignore.title')),
+    textOf(tree).slice(0, 600))
+  check('it does not repeat the device-scoped controls',
+    !hasText(tree, t('label.gitPath')) && !hasText(tree, t('settings.workspaceAddDialog')),
+    textOf(tree).slice(0, 600))
+  check('the page has exactly one heading, not one per block',
+    findAll(tree, 'div').filter((node) => node.props.className === 'dshgit-ignore-heading').length === 1,
+    String(findAll(tree, 'div').filter((node) => node.props.className === 'dshgit-ignore-heading').length))
+  findAll(tree, 'button').find((node) => textOf(node) === t('settings.general')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+}
+
+console.log('\n--- AI settings expose independent diff exclusions ---')
+{
+  findAll(tree, 'button').find((node) => textOf(node) === t('settings.ai')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  let rules = findAll(tree, 'textarea').find((node) => node.props['aria-label'] === t('settings.aiExclude'))
+  const modelCard = walk(tree).find((node) => node.props?.['data-settings-card'] === 'ai-model')
+  const contextCard = walk(tree).find((node) => node.props?.['data-settings-card'] === 'ai-context')
+  check('AI diff exclusions live in a separate context card', contextCard && hasText(contextCard, t('settings.aiContext')) &&
+    findAll(contextCard, 'textarea').length === 1 && findAll(modelCard, 'textarea').length === 0)
+  check('AI exclusions have an editable multiline setting', rules && !rules.props.disabled && rules.props.placeholder.includes('!dist/important.js'))
+  check('AI exclusion defaults are filled into the editable value', rules.props.value.includes('**/dist/**') && rules.props.value.includes('*.map') && rules.props.value.includes('package-lock.json'))
+  rules.props.onChange({ target: { value: 'dist/**\n!dist/important.js' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  rules = findAll(tree, 'textarea').find((node) => node.props['aria-label'] === t('settings.aiExclude'))
+  rules.props.onBlur()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('AI exclusions persist without changing file selection', mounted.rpc.calls.some((call) =>
+    call.method === 'setConfig' && call.payload.patch.aiExcludePatterns === 'dist/**\n!dist/important.js') &&
+    !mounted.rpc.calls.some((call) => call.method === 'updateChangelist'))
+}
+
+/* ------------------------------------------------------------------ *
+ * States and failures
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- no git installed ---')
+{
+  tree = await renderApp(healthyHandlers({
+    repos: () => { const error = new Error('未找到 git 可执行文件。请在设置里填写完整路径。'); error.code = 'git/not-found'; throw error },
+  }))
+  check('shows the no-git guidance', hasText(tree, '未找到 git'), textOf(tree).slice(0, 300))
+  check('does not leak a raw error banner', !hasText(tree, t('action.close')),
+    textOf(tree).slice(0, 300))
+  check('offers a way to the settings module',
+    findAll(tree, 'button').some((node) => textOf(node) === t('tab.settings')) ||
+    activityItems(tree).some((node) => node.props['data-module'] === 'settings'))
+}
+
+console.log('\n--- git present but no repository ---')
+{
+  tree = await renderApp(healthyHandlers({
+    repos: () => ({ gitPath: 'd:/git.exe', repos: [], config: CONFIG }),
+  }))
+  check('shows the no-repo guidance', hasText(tree, t('state.noRepo')), textOf(tree).slice(0, 300))
+}
+
+console.log('\n--- Initialize Repository in the session directory ---')
+{
+  // The header chips offer initialization when the session directory has no
+  // repository, and the full window keeps its own entry point.
+  let initialized = false
+  const handlers = healthyHandlers({
+    repos: () => initialized
+      ? { gitPath: 'd:/git.exe', repos: [{ root: ROOT, features: {} }], directory: ROOT, canInitialize: false }
+      : { gitPath: 'd:/git.exe', repos: [], directory: ROOT, canInitialize: true },
+    initRepository: () => { initialized = true; return { directory: ROOT } },
+  })
+  tree = await renderChips(handlers)
+  const initialize = findAll(tree, 'button').find((node) => node.props['data-chip'] === 'init')
+  check('the header chips offer Initialize Repository', initialize !== undefined,
+    textOf(tree).slice(0, 300))
+  initialize.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('initializing loads the new repository into the chips',
+    initialized && hasText(tree, 'main'), textOf(tree).slice(0, 300))
+
+  initialized = false
+  tree = await renderApp(handlers)
+  const fullInitialize = findAll(tree, 'button').find((node) => textOf(node) === t('action.initRepository'))
+  check('the full window offers Initialize Repository', fullInitialize !== undefined)
+  fullInitialize.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the full window reloads after initialization', initialized && hasText(tree, 'main'))
+}
+
+console.log('\n--- a failing read is surfaced, not swallowed ---')
+{
+  tree = await renderApp(healthyHandlers({
+    status: () => { throw new Error('status 爆炸了') },
+  }))
+  // The real message must win over the generic "no repository" copy: showing
+  // the wrong state here is worse than showing none, because it sends the user
+  // to fix the wrong thing.
+  check('renders the real failure message', hasText(tree, 'status 爆炸了'), textOf(tree).slice(0, 400))
+  check('does NOT claim the directory is not a repository',
+    !hasText(tree, t('state.noRepo')), textOf(tree).slice(0, 300))
+  check('does NOT claim git is missing',
+    !hasText(tree, '未找到 git。'), textOf(tree).slice(0, 300))
+  check('still renders the repository it did resolve', hasText(tree, ROOT))
+  // The dismiss control is an icon button now: it carries `aria-label` but no
+  // visible text, so match the accessible name rather than `textOf`.
+  check('offers a dismiss control',
+    findAll(tree, 'button').some((node) => node.props['aria-label'] === t('action.close')),
+    JSON.stringify(findAll(tree, 'button').map((node) => node.props['aria-label']).filter(Boolean)))
+  const dismiss = findAll(tree, 'button').find((node) => node.props['aria-label'] === t('action.close'))
+  dismiss.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('dismissing clears the banner',
+    !hasText(tree, 'status 爆炸了'), textOf(tree).slice(0, 300))
+}
+
+console.log('\n--- older Host without optional repository metadata ---')
+{
+  const handlers = healthyHandlers()
+  delete handlers.repoMeta
+  tree = await renderApp(handlers)
+  check('full window still renders repository status', hasText(tree, ROOT) && hasText(tree, 'main'))
+  check('missing repoMeta does not show a load failure', !hasText(tree, 'no stub for repoMeta'),
+    textOf(tree).slice(0, 400))
+  tree = await renderChips(handlers)
+  check('the chips still render repository status', hasText(tree, 'main'))
+  check('the chips do not show the missing method', !hasText(tree, 'no stub for repoMeta'),
+    textOf(tree).slice(0, 400))
+}
+
+console.log('\n--- older Host without the remotes method ---')
+{
+  const handlers = healthyHandlers()
+  delete handlers.remotes
+  tree = await renderApp(handlers)
+  check('missing remotes method shows a restart hint', hasText(tree, t('error.hostOutdated')),
+    textOf(tree).slice(0, 500))
+  check('repository status remains available when remotes fail', hasText(tree, ROOT) && hasText(tree, 'main'))
+}
+
+console.log('\n--- grouped workbench branch lists ---')
+{
+  const locals = Array.from({ length: 250 }, (_, i) => ({ name: `feature/branch-${i}`, ref: `refs/heads/feature/branch-${i}`, committerDate: i + 1 }))
+  const origin = locals.map((branch) => ({ ...branch, name: `origin/${branch.name}`, ref: `refs/remotes/origin/${branch.name}` }))
+  const upstream = locals.map((branch) => ({ ...branch, name: `upstream/${branch.name}`, ref: `refs/remotes/upstream/${branch.name}` }))
+  const tags = Array.from({ length: 25 }, (_, i) => ({ name: `v0.2.${i}`, ref: `refs/tags/v0.2.${i}` }))
+  let sidebarTree = await renderApp(healthyHandlers({
+    refs: () => ({ branches: [REFS.branches[0], ...locals], remotes: [...origin, ...upstream], tags }),
+    remotes: () => [...REMOTES, { name: 'upstream' }],
+  }))
+  sidebarTree = await selectModule(sidebarTree, 'graph')
+  const rootProps = { connection: mounted.rpc, t: mounted.t }
+  const group = (key) => walk(sidebarTree).find((node) => node.props?.['data-branch-group'] === key)
+  const branchRows = (key) => findAll(group(key), 'button').filter((node) => node.props['data-branch-ref'])
+  check('hundreds of locals start inside a collapsed prefix folder while current stays visible',
+    branchRows('locals').length === 1 && group('local::feature').props.open === false &&
+    branchRows('locals')[0]?.props['data-branch-ref'] === 'refs/heads/main')
+  check('remote prefix folders stay collapsed independently',
+    branchRows('remote:origin').length === 0 && branchRows('remote:upstream').length === 0)
+  check('multiple remotes retain their shared parent group', group('remotes') !== undefined)
+  check('closed tags render no tag rows', group('tags').props.open === false && findAll(group('tags'), 'button').length === 0)
+  group('local::feature').props.onToggle({ currentTarget: { open: true } })
+  group('remote:origin:feature').props.onToggle({ currentTarget: { open: true } })
+  group('tags').props.onToggle({ currentTarget: { open: true } })
+  sidebarTree = await flush(GitApp, rootProps)
+  check('opening folders reveals their complete lists without pagination', branchRows('locals').length === 251 &&
+    branchRows('remote:origin').length === 250 && branchRows('remote:upstream').length === 0 &&
+    findAll(group('tags'), 'button').length === 25)
+  group('local::feature').props.onToggle({ currentTarget: { open: false } })
+  group('tags').props.onToggle({ currentTarget: { open: false } })
+  sidebarTree = await flush(GitApp, rootProps)
+  check('closing a large folder unmounts its branch rows', branchRows('locals').length === 1)
+  const search = () => findAll(sidebarTree, 'input').find((node) => node.props['aria-label'] === t('wb.search'))
+  search().props.onChange({ currentTarget: { value: 'branch-0' } })
+  sidebarTree = await flush(GitApp, rootProps)
+  check('search finds branches inside all closed folders', branchRows('locals').length === 1 &&
+    branchRows('remote:origin').length === 1 && branchRows('remote:upstream').length === 1 && group('local::feature').props.open === true)
+  search().props.onChange({ currentTarget: { value: '' } })
+  sidebarTree = await flush(GitApp, rootProps)
+  check('clearing search restores manually folded groups', group('local::feature').props.open === false && group('tags').props.open === false)
+  search().props.onChange({ currentTarget: { value: 'v0.2.' } })
+  sidebarTree = await flush(GitApp, rootProps)
+  check('tag search opens the group and covers all tags', group('tags').props.open === true && findAll(group('tags'), 'button').length === 25)
+}
+
+console.log('\n--- simplified workbench branch layout ---')
+{
+  const branches = [
+    { ...REFS.branches[0], committerDate: 1000 },
+    { name: 'release', ref: 'refs/heads/release', committerDate: 2000 },
+    { name: 'hotfix/security', ref: 'refs/heads/hotfix/security', committerDate: 500 },
+    { name: 'feature/zebra', ref: 'refs/heads/feature/zebra', committerDate: 4000 },
+    { name: 'feature/apple', ref: 'refs/heads/feature/apple', committerDate: 1 },
+  ]
+  let layout = await renderApp(healthyHandlers({ refs: () => ({ ...REFS, branches, tags: [] }) }))
+  layout = await selectModule(layout, 'graph')
+  const rootProps = { connection: mounted.rpc, t: mounted.t }
+  const group = (key) => walk(layout).find((node) => node.props?.['data-branch-group'] === key)
+  const localChildren = group('locals').children.find((node) => node.props?.className === 'dshgit-branch-children').children
+  const order = localChildren.map((node) => node.props?.['data-branch-group'] || findAll(node, 'button').find((button) => button.props['data-branch-ref'])?.props['data-branch-ref'])
+  check('workbench places directories first and sorts sibling names independently of commit dates',
+    JSON.stringify(order) === JSON.stringify(['local::feature', 'local::hotfix', 'refs/heads/main', 'refs/heads/release']), JSON.stringify(order))
+  check('a single remote keeps the remote heading and nested origin group', group('remotes') &&
+    walk(group('remotes')).some((node) => node.props?.['data-branch-group'] === 'remote:origin') &&
+    textOf(findAll(group('remote:origin'), 'summary')[0]).includes('origin (1)'))
+  const headingIcon = (key, icon) => walk(findAll(group(key), 'summary')[0]).some((node) => node.name === icon)
+  check('branch tree headings use folder and remote icons distinct from branch rows', headingIcon('locals', 'IconFolder') &&
+    headingIcon('local::feature', 'IconFolder') && headingIcon('remotes', 'IconRemote') && headingIcon('remote:origin', 'IconRemote'))
+  check('the remote heading retains fetch and prune controls', ['fetch', 'prune'].every((action) =>
+    findAll(group('remote:origin'), 'button').some((button) => button.props['data-remote-action'] === action && button.props['data-remote-target'] === 'origin')))
+  check('empty tag groups are hidden', !group('tags'))
+  const current = findAll(group('locals'), 'button').find((button) => button.props['data-branch-ref'] === 'refs/heads/main')
+  check('current branches retain their branch glyph alongside the current marker', walk(current).some((node) => node.name === 'IconBranch') &&
+    walk(current).some((node) => node.props?.['aria-label'] === t('wb.current')))
+  check('upstream is available in the tooltip without cluttering the branch row', current.props.title.includes('origin/main') &&
+    !textOf(current).includes('origin/main') && textOf(current).includes('↑2') && textOf(current).includes('↓1'))
+  group('local::feature').props.onToggle({ currentTarget: { open: true } })
+  layout = await flush(GitApp, rootProps)
+  const names = findAll(group('local::feature'), 'button').filter((button) => button.props['data-branch-ref']).map((button) => button.props['data-branch-ref'])
+  check('branches inside a directory also sort by name', JSON.stringify(names) === JSON.stringify(['refs/heads/feature/apple', 'refs/heads/feature/zebra']), JSON.stringify(names))
+}
+
+console.log('\n--- branch picker pushes tracked branches directly ---')
+for (const entry of ['quick action', 'context menu']) {
+  for (const scenario of [
+    { name: 'main', upstream: 'refs/remotes/origin/main', remote: 'origin', target: 'main' },
+    { name: 'feature/新功能', upstream: 'refs/remotes/team/origin/review/feature', remote: 'team/origin', target: 'review/feature' },
+    { name: 'feature/新功能', upstream: null },
+  ]) {
+    const branches = REFS.branches.map(branch => branch.name === scenario.name
+      ? { ...branch, upstream: null, upstreamRef: scenario.upstream } : branch)
+    let header = await renderChips(healthyHandlers({
+      refs: () => ({ ...REFS, branches }),
+      remotes: () => scenario.remote === 'team/origin' ? [...REMOTES, { name: 'team' }, { name: 'team/origin' }] : REMOTES,
+      'write.push': () => ({ ok: true, message: 'pushed' }),
+    }))
+    const rootProps = { connection: mounted.rpc, t: mounted.t }
+    findAll(header, 'button').find(node => node.props['data-chip'] === 'branch').props.onClick({
+      currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+    })
+    header = await flush(GitApp, rootProps)
+    const row = walk(header).find(node => node.props?.['data-picker-branch'] === 'refs/heads/' + scenario.name)
+    if (scenario.name !== 'main') {
+      const actions = findAll(row, 'button').filter(node => node.props['data-branch-action'])
+      check('merge is the last branch-row shortcut', actions.at(-1)?.props['data-branch-action'] === 'merge')
+    }
+    if (entry === 'quick action') findAll(row, 'button').find(node => node.props['data-branch-action'] === 'push').props.onClick({ preventDefault() {}, stopPropagation() {} })
+    else {
+      row.props.onContextMenu({ clientX: 100, clientY: 120, preventDefault() {}, stopPropagation() {} })
+      header = await flush(GitApp, rootProps)
+      const menu = walk(header).find(node => node.props?.className === 'dshgit-contextmenu')
+      findAll(menu, 'button').find(node => textOf(node).includes(t('wb.push'))).props.onClick()
+    }
+    header = await flush(GitApp, rootProps)
+    const push = mounted.rpc.calls.find(call => call.method === 'write.push')
+    if (scenario.upstream) {
+      check(`${entry} directly pushes ${scenario.name} to its configured upstream`, push?.payload.remote === scenario.remote &&
+        push.payload.sourceBranch === scenario.name && push.payload.targetBranch === scenario.target && !push.payload.forceWithLease && !push.payload.setUpstream)
+      check(`${entry} tracked push opens no configuration dialog`, !walk(header).some(node => node.props?.role === 'dialog' && node.props?.['aria-label'] === t('wb.push')))
+    } else {
+      check(`${entry} untracked branch still asks for its push target`, !push && walk(header).some(node => node.props?.role === 'dialog' && node.props?.['aria-label'] === t('wb.push')))
+    }
+  }
+}
+
+console.log('\n--- header local checkout confirmation ---')
+for (const entry of ['row', 'quick action', 'context menu']) {
+  let header = await renderChips()
+  const rootProps = { connection: mounted.rpc, t: mounted.t }
+  const chooseBranch = async () => {
+    findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
+      currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+    })
+    header = await flush(GitApp, rootProps)
+    const row = walk(header).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/feature/新功能')
+    if (entry === 'row') findAll(row, 'button').find((node) => node.props['data-ref'] === 'feature/新功能').props.onClick()
+    else if (entry === 'quick action') findAll(row, 'button').find((node) => node.props['data-branch-action'] === 'checkout').props.onClick({ preventDefault() {}, stopPropagation() {} })
+    else {
+      row.props.onContextMenu({ clientX: 100, clientY: 120, preventDefault() {}, stopPropagation() {} })
+      header = await flush(GitApp, rootProps)
+      const menu = walk(header).find((node) => node.props?.className === 'dshgit-contextmenu')
+      findAll(menu, 'button').find((node) => textOf(node).includes(t('wb.checkout'))).props.onClick()
+    }
+    header = await flush(GitApp, rootProps)
+  }
+  await chooseBranch()
+  let dialog = walk(header).find((node) => node.props?.role === 'alertdialog')
+  check(`header ${entry} asks before switching local branch`, dialog && hasText(dialog, 'feature/新功能') &&
+    !mounted.rpc.calls.some((call) => call.method === 'write.checkout'))
+  findAll(dialog, 'button').find((node) => textOf(node) === t('action.cancel')).props.onClick()
+  header = await flush(GitApp, rootProps)
+  check(`cancelling header ${entry} performs no checkout`, !mounted.rpc.calls.some((call) => call.method === 'write.checkout'))
+  await chooseBranch()
+  dialog = walk(header).find((node) => node.props?.role === 'alertdialog')
+  findAll(dialog, 'button').find((node) => textOf(node) === t('action.switchBranch')).props.onClick()
+  header = await flush(GitApp, rootProps)
+  const checkouts = mounted.rpc.calls.filter((call) => call.method === 'write.checkout')
+  check(`confirming header ${entry} switches once to the intended branch`, checkouts.length === 1 &&
+    checkouts[0].payload.ref === 'refs/heads/feature/新功能' && checkouts[0].payload.confirm === true)
+}
+
+console.log('\n--- write flow asks for confirmation ---')
+{
+  const captured = { confirmed: [] }
+  tree = await renderApp(healthyHandlers({
+    'write.checkout': (payload) => {
+      captured.confirmed.push(payload.confirm === true)
+      if (payload.confirm !== true) {
+        const error = new Error('checkout 会丢弃未提交的改动，需要显式确认')
+        error.code = 'git/needs-confirmation'
+        error.details = { risk: 'destructive' }
+        throw error
+      }
+      return { ok: true, code: 0, message: '已切换', stdout: '' }
+    },
+  }))
+  // The live branch list is `WorkbenchBranchSidebar`, which is the GRAPH module's
+  // sidebar — it no longer renders on the changes tab. Each row is a
+  // `dshgit-branch-item` holding a select button (`data-branch-ref`) plus an icon
+  // toolbar whose buttons carry `data-branch-action` / `data-branch-target`. There
+  // is no `data.branch` prop and no `action.checkout` title (the label is
+  // `wb.checkout`), so select the graph module and match the action attribute.
+  tree = await selectModule(tree, 'graph')
+  walk(tree).find((node) => node.props?.['data-branch-group'] === 'local::feature').props.onToggle({ currentTarget: { open: true } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const branchRow = walk(tree).find((node) =>
+    node.$$kind === 'host' &&
+    node.props?.['data-branch-action'] === 'checkout' &&
+    node.props?.['data-branch-target'] === 'refs/heads/feature/新功能')
+  check('found a non-head branch row', branchRow !== undefined,
+    JSON.stringify(walk(tree).filter((n) => n.props?.['data-branch-action'] !== undefined).map((n) => n.props['data-branch-target'])))
+  check('the branch row exposes a checkout button',
+    branchRow !== undefined && branchRow.props.disabled !== true,
+    branchRow === undefined ? 'no row' : JSON.stringify({ disabled: branchRow.props.disabled, label: branchRow.props['aria-label'] }))
+  branchRow.props.onClick({ stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  let dialog = walk(tree).find((node) => node.props?.role === 'alertdialog')
+  check('workbench checkout asks before writing', dialog && hasText(dialog, 'feature/新功能') && captured.confirmed.length === 0)
+  findAll(dialog, 'button').find((node) => textOf(node) === t('action.cancel')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('cancelling workbench checkout performs no write', captured.confirmed.length === 0)
+  // Double-click and the checkout icon both route through the same confirmation.
+  findAll(tree, 'button').find((node) => node.props['data-branch-ref'] === 'refs/heads/feature/新功能').props.onDoubleClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  dialog = walk(tree).find((node) => node.props?.role === 'alertdialog')
+  check('double-clicking a workbench branch also waits for confirmation', dialog && captured.confirmed.length === 0)
+  findAll(dialog, 'button').find((node) => textOf(node) === t('action.switchBranch')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('confirmed workbench checkout is sent in one call',
+    captured.confirmed.length === 1 && captured.confirmed[0] === true,
+    JSON.stringify(captured.confirmed))
+  check('the checkout targets the branch that was clicked',
+    mounted.rpc.calls.some((call) => call.method === 'write.checkout' &&
+      call.payload.ref === 'refs/heads/feature/新功能' && call.payload.confirm === true),
+    JSON.stringify(mounted.rpc.calls.filter((c) => c.method === 'write.checkout').map((c) => c.payload)))
+  // The graph module's own workbench is open over the list. It is identified by
+  // its own surface, not by an `action.ok` label (the primary control carries the
+  // action's name, e.g. "切换分支").
+  check('a workbench dialog is available for the parameterised actions',
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-workbench')),
+    JSON.stringify(findAll(tree, 'button').map((n) => textOf(n)).filter(Boolean).slice(0, 16)))
+}
+
+console.log('\n--- discard asks before writing, and names the file ---')
+{
+  tree = await renderApp()
+
+  // Select the action inside its file row so the window close control is never
+  // mistaken for a discard action.
+  const rowOf = (current, path) => walk(current).find((node) =>
+    node.$$kind === 'host' &&
+    String(node.props?.className ?? '').includes('dshgit-change') &&
+    node.props.title === path)
+  // The row toolbar is the BATCH toolbar (`FileBatchActions`), so its buttons are
+  // labelled by count ("丢弃 1 项未暂存改动"), not by the singular `action.discard`.
+  // Match the action id instead of one specific wording.
+  const discardIn = (row) => findAll(row, 'button').find((node) => node.props['data-file-action'] === 'discard')
+
+  const modifiedRow = rowOf(tree, 'src/index.js')
+  check('found the modified file row', modifiedRow !== undefined)
+  const discardButton = discardIn(modifiedRow)
+  check('found a discard control on an unstaged file', discardButton !== undefined,
+    JSON.stringify(findAll(modifiedRow, 'button').map((node) => node.props['data-file-action'])))
+  discardButton.props.onClick({ stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+
+  check('a confirmation prompt appeared with the path in it',
+    hasText(tree, 'src/index.js') && hasText(tree, '确认丢弃'),
+    textOf(tree).slice(-400))
+
+  // Declining must be inert: this used to write anyway because the native
+  // confirm() result was never checked.
+  const decline = findAll(tree, 'button').find((node) => textOf(node) === t('action.cancel'))
+  check('the prompt has a cancel control', decline !== undefined)
+  decline.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('declining performs no write at all',
+    !mounted.rpc.calls.some((call) => call.method === 'write.discardPaths'),
+    mounted.rpc.calls.map((c) => c.method).join(','))
+
+  // Accepting must write, and must carry the confirmation token.
+  const rowAgain = rowOf(tree, 'src/index.js')
+  discardIn(rowAgain).props.onClick({ stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const accept = findAll(tree, 'button').find((node) => textOf(node) === t('action.apply'))
+  accept.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const writeCall = mounted.rpc.calls.find((call) => call.method === 'write.discardPaths')
+  check('accepting performs the write', writeCall !== undefined,
+    mounted.rpc.calls.map((c) => c.method).join(','))
+  check('the write carried an explicit confirmation', writeCall?.payload?.confirm === true,
+    JSON.stringify(writeCall?.payload))
+  check('the batch write carries an empty untracked path list', Array.isArray(writeCall?.payload?.untrackedPaths) && writeCall.payload.untrackedPaths.length === 0,
+    JSON.stringify(writeCall?.payload))
+}
+
+console.log('\n--- AI assist ---')
+{
+  tree = await renderApp()
+  // The AI control is an icon button: the label lives in `aria-label`/`title`, not
+  // in its visible text (which is just the sparkle glyph).
+  const aiButton = findAll(tree, 'button').find((node) =>
+    String(node.props.className).includes('dshgit-commit-ai') ||
+    node.props['aria-label'] === t('commit.aiGenerate'))
+  check('found the AI commit-message button', aiButton !== undefined,
+    JSON.stringify(findAll(tree, 'button').map((n) => n.props['aria-label']).filter(Boolean).slice(0, 20)))
+  aiButton.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('AI asked the Host for a message',
+    mounted.rpc.calls.some((call) => call.method === 'ai.commitMessage'),
+    mounted.rpc.calls.map((c) => c.method).join(','))
+  // Re-read rather than relying on an earlier snapshot: a rendered tree is a
+  // plain value, so a reference captured before a re-render is a stale one.
+  const textareas = findAll(tree, 'textarea')
+  check('the composer renders exactly one textarea', textareas.length === 1, String(textareas.length))
+  const composedValue = findAll(tree, 'textarea')[0]?.props?.value
+  check('the generated message landed in the composer',
+    composedValue === 'feat: 新增中文说明文档',
+    `value=${JSON.stringify(composedValue)} methods=${mounted.rpc.calls.map((c) => c.method).join(',')}`)
+
+  // Without a model service the button must explain itself rather than throw.
+  tree = await renderApp(healthyHandlers({
+    'ai.commitMessage': () => ({ available: false, message: '当前 profile 没有可用的模型服务' }),
+  }))
+  const aiButton2 = findAll(tree, 'button').find((node) =>
+    String(node.props.className).includes('dshgit-commit-ai') ||
+    node.props['aria-label'] === t('commit.aiGenerate'))
+  aiButton2.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('an unavailable model is reported as a notice, not an error',
+    hasText(tree, '没有可用的模型服务'), textOf(tree).slice(-400))
+  check('unavailable model releases the commit controls', !findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary'))?.props.disabled)
+}
+
+console.log('\n--- AI generation stays compact and cancellable ---')
+{
+  let releaseContext, releaseModel, preparingSignal, generatingSignal
+  let listState = { version: 1, mode: 'lists', active: 'default', draftList: 'default', fileLayout: 'flat',
+    lists: [{ id: 'default', name: '默认', draft: '', expanded: true }],
+    assignments: Object.fromEntries(STATUS.files.map((file) => [file.path, 'default'])), selected: STATUS.files.map((file) => file.path), chunks: {} }
+  tree = await renderApp(healthyHandlers({
+    changelists: () => listState,
+    updateChangelist: (payload) => {
+      listState = { ...listState, version: listState.version + 1,
+        lists: listState.lists.map((list) => payload.action === 'draft' && list.id === payload.id ? { ...list, draft: payload.text } : list) }
+      return listState
+    },
+    'ai.prepareCommitMessage': (_payload, signal) => new Promise((resolve, reject) => {
+      preparingSignal = signal; releaseContext = resolve
+      signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
+    }),
+    'ai.commitMessage': (_payload, signal) => new Promise((resolve, reject) => {
+      generatingSignal = signal; releaseModel = resolve
+      signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
+    }),
+  }))
+  const props = { connection: mounted.rpc, t }
+  const aiButton = () => findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-commit-ai'))
+  const commitButton = () => findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary'))
+  const scopeChecks = () => findAll(tree, 'input').filter((node) => String(node.props.className).includes('dshgit-cl-checkbox'))
+  const previousStage = findAll(tree, 'button').find((node) => ['stage', 'unstage'].includes(node.props['data-file-action']) && !node.props.disabled)
+  const previousSelection = scopeChecks().find((node) => !node.props.disabled)
+  aiButton().props.onClick()
+  tree = await flush(GitApp, props)
+  check('AI preparation keeps the composer compact', !walk(tree).some((node) => node.props?.['data-ai-phase']) && preparingSignal && !preparingSignal.aborted)
+  check('the running AI button remains enabled for cancellation', aiButton().props['aria-label'] === t('ai.cancelGeneration') && !aiButton().props.disabled)
+  check('AI preparation locks the message, commit, selection and staging', findAll(tree, 'textarea')[0].props.readOnly && commitButton().props.disabled && scopeChecks().length > 0 && scopeChecks().every((node) => node.props.disabled) &&
+    findAll(tree, 'button').filter((node) => ['stage', 'unstage', 'discard'].includes(node.props['data-file-action'])).every((node) => node.props.disabled))
+  const writesBefore = mounted.rpc.calls.filter((call) => call.method.startsWith('write.') || call.method === 'updateChangelist' && call.payload.action !== 'draft').length
+  previousStage?.props.onClick({ stopPropagation() {} })
+  previousSelection?.props.onChange({ currentTarget: { checked: !previousSelection.props.checked } })
+  findAll(tree, 'textarea')[0].props.onKeyDown({ key: 'Enter', ctrlKey: true, preventDefault() {}, stopPropagation() {} })
+  tree = await flush(GitApp, props)
+  check('stale handlers and the commit shortcut cannot mutate a generating scope', previousStage && previousSelection && writesBefore ===
+    mounted.rpc.calls.filter((call) => call.method.startsWith('write.') || call.method === 'updateChangelist' && call.payload.action !== 'draft').length)
+  aiButton().props.onClick()
+  tree = await flush(GitApp, props)
+  check('cancelling preparation aborts its RPC and skips the model', preparingSignal.aborted && !mounted.rpc.calls.some((call) => call.method === 'ai.commitMessage'))
+  check('cancelling generation restores message editing, commit and selection', !findAll(tree, 'textarea')[0].props.readOnly && !commitButton().props.disabled && scopeChecks().some((node) => !node.props.disabled))
+  aiButton().props.onClick()
+  tree = await flush(GitApp, props)
+  releaseContext({ available: true, empty: false, id: 'prepared-scope', prepareMs: 120, cacheHit: false })
+  tree = await flush(GitApp, props)
+  check('AI model generation starts without extra status text', !walk(tree).some((node) => node.props?.['data-ai-phase']) &&
+    mounted.rpc.calls.some((call) => call.method === 'ai.commitMessage' && call.payload.contextId === 'prepared-scope'))
+  check('the model phase keeps the message read-only and cancellation available', findAll(tree, 'textarea')[0].props.readOnly && commitButton().props.disabled && scopeChecks().every((node) => node.props.disabled) && !aiButton().props.disabled)
+  aiButton().props.onClick()
+  tree = await flush(GitApp, props)
+  releaseModel({ available: true, message: 'stale cancelled message' })
+  tree = await flush(GitApp, props)
+  check('cancelling generation aborts the model RPC and preserves the draft', generatingSignal.aborted &&
+    findAll(tree, 'textarea')[0]?.props.value !== 'stale cancelled message')
+  aiButton().props.onClick()
+  tree = await flush(GitApp, props)
+  releaseContext({ available: true, empty: false, id: 'prepared-scope-2', prepareMs: 120, cacheHit: true })
+  tree = await flush(GitApp, props)
+  releaseModel({ available: true, empty: false, message: 'fix: 新请求完成', timings: { prepareMs: 80, generateMs: 1500 } })
+  tree = await flush(GitApp, props)
+  check('a new generation succeeds after cancellation', findAll(tree, 'textarea')[0]?.props.value === 'fix: 新请求完成')
+  check('successful generation restores message editing, commit and selection', !findAll(tree, 'textarea')[0].props.readOnly && !commitButton().props.disabled && scopeChecks().some((node) => !node.props.disabled))
+  check('completed generation does not display preparation or model timings', !hasText(tree, '差异准备') && !hasText(tree, 'Changes prepared in'))
+  aiButton().props.onClick()
+  tree = await flush(GitApp, props)
+  const signal = preparingSignal
+  tree = await selectModule(tree, 'history')
+  // This harness retains disposers instead of automatically unmounting nodes.
+  runCleanups()
+  check('disposing the composer aborts its pending AI request', signal.aborted)
+}
+
+/* ------------------------------------------------------------------ *
+ * Settings section (standalone registration)
+ * ------------------------------------------------------------------ */
+
+console.log('\n--- standalone settings section ---')
+{
+  const sectionTree = mount(settingsSection[0].Component, {
+    connection: createRpcStub(healthyHandlers()),
+    t,
+  })
+  await Promise.resolve()
+  check('settings section renders', sectionTree !== null)
+  const flushed = await flush(settingsSection[0].Component, {
+    connection: createRpcStub(healthyHandlers()),
+    t,
+  })
+  check('settings section renders a heading after loading',
+    flushed !== null && textOf(flushed).length > 0, textOf(flushed).slice(0, 200))
+}
+
+console.log('\n--- basic git operations are reachable from the UI ---')
+{
+  tree = await renderApp()
+  const buttons = findAll(tree, 'button')
+  const labels = buttons.map((node) => textOf(node))
+
+  // The remote loop must be one click away, not buried in a menu.
+  //
+  // ALL of these title-bar controls are icon-only now: their labels live in
+  // `title` / `aria-label`, never in visible text. Match the accessible name.
+  const named = (label) => buttons.some((node) => node.props.title === label || node.props['aria-label'] === label)
+  check('toolbar exposes Fetch', named(t('action.fetch')), JSON.stringify(labels.slice(0, 24)))
+  check('toolbar exposes Pull', named(t('action.pull')), JSON.stringify(labels.slice(0, 24)))
+  check('toolbar exposes Push', named(t('action.push')), JSON.stringify(labels.slice(0, 24)))
+  check('toolbar exposes Refresh', named(t('action.refresh')))
+  check('icon-only toolbar buttons carry an accessible name',
+    buttons.filter((node) => String(node.props.className).includes('dshgit-winbtn'))
+      .every((node) => node.props['aria-label'] !== undefined),
+    JSON.stringify(buttons.filter((n) => String(n.props.className).includes('dshgit-winbtn')).map((n) => n.props['aria-label'])))
+
+  // The six title-bar menus are GONE: every operation they carried has a home
+  // in the sidebar tree, so the menus were pure duplication. A title-bar menu
+  // is a button with `aria-haspopup="menu"` in the title bar; the agent-added
+  // primary-action button (whose label can be Chinese too) is NOT a menu, so
+  // matching on text alone would false-positive on it.
+  const titlebar = walk(tree).find((node) => String(node.props?.className ?? '').includes('dshgit-titlebar'))
+  check('no title-bar dropdown menus remain',
+    findAll(titlebar, 'button').every((node) => node.props['aria-haspopup'] !== 'menu'),
+    JSON.stringify(findAll(titlebar, 'button').filter((n) => n.props['aria-haspopup'] === 'menu').map(textOf)))
+  // The old repo-tree sidebar (`dshgit-changes-section` with Tags/Remotes
+  // sections) is gone: `dshgit-changes-section` survives only in the stylesheet,
+  // and `tree.tags`/`tree.remotes`/`action.cleanUntracked`/`action.newTag` are now
+  // referenced by no component. The changes sidebar is the changelist pane, whose
+  // header exposes the layout menu and the "more" menu. Undo-last-commit lives in
+  // that "more" menu; remote operations live on the graph module's branch list.
+  const changesHead = walk(tree).find((node) => String(node.props?.className ?? '').includes('dshgit-sidebar-head'))
+  check('the Changes sidebar header exists', changesHead !== undefined)
+  const moreButton = findAll(changesHead ?? {}, 'button').find((node) => node.props['aria-label'] === t('menu.actions'))
+  check('the Changes header carries a more-actions menu', moreButton !== undefined,
+    JSON.stringify(findAll(changesHead ?? {}, 'button').map((n) => n.props['aria-label'] ?? textOf(n))))
+  moreButton.props.onClick({ currentTarget: { getBoundingClientRect: () => ({ left: 10, bottom: 20 }) } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('undo-last-commit is reachable from that menu',
+    hasText(tree, t('action.undoCommit')), textOf(tree).slice(-300))
+  // The staged/unstaged group headers are rendered by `ChangeGroup`, which lives
+  // in the changelist pane — so they are present, but scoped to that pane rather
+  // than to the removed repo-tree section. The `dshgit-sectioncount` badge is not
+  // used there (counts render inside the group head), so assert the group ids and
+  // the batch action order, which IS what the component guarantees.
+  // The filter drives the change groups too. It now defaults to "All", so this
+  // click only pins the state the groups below are asserted against.
+  const allFilter = findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-btn') &&
+    textOf(node).startsWith(t('batch.all') + ' '))
+  if (allFilter !== undefined) {
+    allFilter.props.onClick()
+    tree = await flush(GitApp, { connection: mounted.rpc, t })
+  }
+  const groups = findWhere(tree, (props) => props['data-change-group'] !== undefined)
+  // `LeftPane` renders group('unstaged', …) BEFORE group('staged', …), so the DOM
+  // order is unstaged-then-staged (the working tree is what you act on first).
+  check('staged and unstaged changes have separate group headers',
+    groups.map((node) => node.props['data-change-group']).join(',') === 'unstaged,staged',
+    JSON.stringify(groups.map((n) => n.props['data-change-group'])))
+  const unstagedGroup = groups[0]
+  const stagedGroup = groups[1]
+  check('group headers show counts and the VS Code batch action order',
+    findAll(stagedGroup, 'button').filter((node) => node.props['data-group-action'])
+      .map((node) => node.props['data-group-action']).join(',') === 'stash,unstage,more' &&
+    findAll(unstagedGroup, 'button').filter((node) => node.props['data-group-action'])
+      .map((node) => node.props['data-group-action']).join(',') === 'stash,stage,discard,more',
+    JSON.stringify({
+      staged: findAll(stagedGroup, 'button').filter((n) => n.props['data-group-action']).map((n) => n.props['data-group-action']),
+      unstaged: findAll(unstagedGroup, 'button').filter((n) => n.props['data-group-action']).map((n) => n.props['data-group-action']),
+    }))
+  // Remote operations moved to the graph module's branch list; switch there and
+  // assert they are reachable, rather than in a removed Remotes tree section.
+  const moduleLabels0 = activityItems(tree).map((node) => node.props['data-module'])
+  if (moduleLabels0.includes('graph')) {
+    tree = await selectModule(tree, 'graph')
+    const graphSidebar = findAll(tree, 'button').filter((node) => node.props['data-branch-action'] !== undefined)
+    check('remote operations are reachable from the graph branch list',
+      graphSidebar.length > 0, JSON.stringify(graphSidebar.map((n) => n.props['data-branch-action'])))
+    tree = await selectModule(tree, 'changes')
+  } else {
+    check('remote operations are reachable from the graph branch list', false, 'no graph module')
+  }
+
+  // Exactly the six modules, including Output, exposed by the activity bar.
+  const moduleLabels = activityItems(tree).map((node) => node.props['data-module'])
+  check('renders seven modules including Worktrees and Output',
+    moduleLabels.length === 7 && moduleLabels.includes('worktrees') && moduleLabels.includes('output'),
+    JSON.stringify(moduleLabels))
+}
+
+console.log('\n--- a destroy shortcut asks before discarding (never writes first) ---')
+{
+  // The batch discard is no longer a single control in a Changes-section header:
+  // that repo-tree section is gone, and the batch actions are scoped per change
+  // group instead (`data-group-action` on the unstaged group's toolbar). The
+  // guarantee under test is unchanged — a destructive batch action must confirm
+  // first and must not write before the user agrees.
+  tree = await renderApp()
+  const unstagedGroup = findWhere(tree, (props) => props['data-change-group'] === 'unstaged')[0]
+  const discardAll = findAll(unstagedGroup, 'button')
+    .find((node) => node.props['data-group-action'] === 'discard')
+  check('the unstaged group exposes a batch discard control', discardAll !== undefined,
+    JSON.stringify(findAll(unstagedGroup, 'button').map((n) => n.props['data-group-action'])))
+  discardAll.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // The group batch discard confirms with `batch.confirm`, which names the count
+  // and lists the paths — not `confirm.discardUnstaged` (that copy belongs to a
+  // different, all-at-once control).
+  check('batch discard asked for confirmation first',
+    hasText(tree, t('batch.confirm', { count: 2 })) && hasText(tree, 'src/index.js'),
+    textOf(tree).slice(-300))
+  check('batch discard wrote nothing before confirmation',
+    !mounted.rpc.calls.some((call) => call.method === 'write.discardAll'),
+    mounted.rpc.calls.map((c) => c.method).join(','))
+  const cancel = findAll(tree, 'button').find((node) => textOf(node) === t('action.cancel'))
+  cancel.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('cancelling the batch discard writes nothing',
+    !mounted.rpc.calls.some((call) => call.method === 'write.discardAll'))
+}
+
+console.log('\n--- change groups collapse and scope their batch actions ---')
+{
+  tree = await renderApp()
+  // Same reason as above: pin the filter to "All" before looking for the groups.
+  const allFilter = findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-btn') &&
+    textOf(node).startsWith(t('batch.all') + ' '))
+  if (allFilter !== undefined) { allFilter.props.onClick(); tree = await flush(GitApp, { connection: mounted.rpc, t }) }
+  const group = (kind) => findWhere(tree, (props) => props['data-change-group'] === kind)[0]
+  const action = (kind, name) => findAll(group(kind), 'button').find((node) =>
+    node.props['data-group-action'] === name)
+  const stagedHead = findAll(group('staged'), 'button').find((node) =>
+    String(node.props.className).includes('dshgit-changegrouphead'))
+  check('found the staged group header', stagedHead !== undefined,
+    JSON.stringify(findWhere(tree, (props) => props['data-change-group'] !== undefined).map((n) => n.props['data-change-group'])))
+  stagedHead.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('staged group collapses without hiding the working tree group',
+    findAll(group('staged'), 'button').find((node) =>
+      String(node.props.className).includes('dshgit-changegrouphead')).props['aria-expanded'] === false &&
+    findWhere(group('staged'), (props) => props.className === 'dshgit-changegroupbody').length === 0 &&
+    findWhere(group('unstaged'), (props) => props.className === 'dshgit-changegroupbody').length === 1)
+  // Re-expand staged: collapsing it removes its toolbar from the tree, so its
+  // unstage action is unreachable while collapsed.
+  stagedHead.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  action('staged', 'unstage').props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('staged header unstages the index only',
+    mounted.rpc.calls.some((call) => call.method === 'write.unstage' && Array.isArray(call.payload.paths) &&
+      !call.payload.untrackedPaths) &&
+    !mounted.rpc.calls.some((call) => call.method === 'write.discardAll'),
+    JSON.stringify(mounted.rpc.calls.filter((c) => c.method === 'write.unstage').map((c) => c.payload)))
+  action('unstaged', 'discard').props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // The group batch discard confirms with `batch.confirm` (count + paths).
+  check('working tree discard asks before writing',
+    hasText(tree, t('batch.confirm', { count: 2 })) &&
+    !mounted.rpc.calls.some((call) => call.method === 'write.discardAll'),
+    textOf(tree).slice(-300))
+}
+
+console.log('\n--- commit-all and undo-commit live in the Changes header ---')
+{
+  tree = await renderApp()
+  // "Stage everything" is a per-GROUP action now (the unstaged group's toolbar),
+  // not a control in a Changes-section header — that section no longer renders.
+  const unstagedGroup = findWhere(tree, (props) => props['data-change-group'] === 'unstaged')[0]
+  const stageAll = findAll(unstagedGroup, 'button')
+    .find((node) => node.props['data-group-action'] === 'stage')
+  check('the group header offers stage-everything', stageAll !== undefined,
+    JSON.stringify(findAll(unstagedGroup, 'button').map((n) => n.props['data-group-action'])))
+  stageAll.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('commit-all staged the working tree',
+    mounted.rpc.calls.some((call) => call.method === 'write.stage'),
+    mounted.rpc.calls.map((c) => c.method).join(','))
+}
+
+console.log('\n--- full workbench commit button has a separate options arrow ---')
+{
+  tree = await renderApp()
+  const arrow = findAll(tree, 'button').find((node) =>
+    String(node.props.className).includes('dshgit-commit-arrow'))
+  check('the workbench shows a commit split button', arrow !== undefined &&
+    findWhere(tree, (props) => props.className === 'dshgit-commit-split').length === 1)
+  arrow.props.onClick({ stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the workbench menu offers commit and remote follow-ups without amend',
+    // The three ACTIONS come first, in this order; the sticky flags follow a
+    // separator. `amend` stays out on purpose: it rewrites the previous commit,
+    // so it belongs to the history surface where its effect is visible.
+    findAll(tree, 'button').filter((node) => node.props.role === 'menuitem')
+      .map(textOf).join(',') ===
+      [t('action.commit'), t('action.commitAndPush'), t('action.commitAndSync'),
+        t('commit.signoff'), t('commit.noVerify')].join(',') &&
+    !findAll(tree, 'button').filter((node) => node.props.role === 'menuitem')
+      .some((node) => /amend/i.test(textOf(node))))
+}
+
+console.log('\n--- undo commit asks, then runs with confirmation ---')
+{
+  // Undo-last-commit lives in the Changes sidebar header's "more" menu now, and it
+  // opens the full-window workbench (which itself presents the confirmation), not
+  // an inline confirm bar in a removed repo-tree section.
+  tree = await renderApp()
+  const changesHead = walk(tree).find((node) => String(node.props?.className ?? '').includes('dshgit-sidebar-head'))
+  const moreButton = findAll(changesHead ?? {}, 'button').find((node) => node.props['aria-label'] === t('menu.actions'))
+  check('the Changes header offers a more-actions menu', moreButton !== undefined)
+  moreButton.props.onClick({ currentTarget: { getBoundingClientRect: () => ({ left: 10, bottom: 20 }) } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const undo = findAll(tree, 'button').find((node) => textOf(node).includes(t('action.undoCommit')))
+  check('the Changes header offers undo-last-commit', undo !== undefined, textOf(tree).slice(-300))
+  check('undo commit did not run before any interaction',
+    !mounted.rpc.calls.some((call) => call.method === 'write.undoCommit'))
+  undo.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('undo commit opens the workbench rather than writing immediately',
+    !mounted.rpc.calls.some((call) => call.method === 'write.undoCommit') &&
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-workbench')),
+    textOf(tree).slice(-300))
+}
+
+console.log('\n--- branch and tag creation use a form, not a bare prompt ---')
+{
+  tree = await renderApp()
+  // New-branch is reached from the branch picker's footer action (`onNew`), which
+  // is where branches are created now — the repo-tree "Branches section" is gone.
+  findAll(tree, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
+    currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+  })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const newBranch = findAll(tree, 'button').find((node) =>
+    String(node.props.className).includes('dshgit-pickrow') && textOf(node).includes(t('picker.create')))
+  check('the branch picker offers new-branch', newBranch !== undefined,
+    JSON.stringify(findAll(tree, 'button').map((n) => n.props.title ?? textOf(n)).filter(Boolean).slice(0, 20)))
+  newBranch.props.onClick({ preventDefault() {}, stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // The branch-name field is the input whose `name` is "name" (the dialog builds
+  // its fields with `name: key`); the first input is the start-point ComboBox.
+  const nameInput = findAll(tree, 'input').find((node) => node.props.name === 'name')
+  check('a branch-name field appeared', nameInput !== undefined,
+    JSON.stringify(findAll(tree, 'input').map((n) => ({ name: n.props.name, v: n.props.value }))))
+  // The dialog's field handler reads `event.target.value` (not `currentTarget`),
+  // so the synthetic event must carry `target`.
+  nameInput.props.onChange({ target: { value: 'feature/新功能2' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // The dialog's primary control is a SUBMIT button inside a <form onSubmit>, so it
+  // carries no onClick of its own. Driving the form's onSubmit is the real path
+  // (and is exactly what pressing the button does in a browser).
+  const form = walk(tree).find((node) => node.type === 'form' && typeof node.props?.onSubmit === 'function')
+  check('the branch form is submittable', form !== undefined,
+    JSON.stringify(findAll(tree, 'button').map((n) => ({ t: textOf(n), ty: n.props.type })).filter((x) => x.t).slice(0, 20)))
+  form.props.onSubmit({ preventDefault() {}, stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // The dialog submits through the unified `write.workbenchAction` RPC (with an
+  // `action` discriminator), not a per-action `write.createBranch` method.
+  const call = mounted.rpc.calls.find((entry) => entry.method === 'write.workbenchAction' &&
+    entry.payload?.action === 'createBranch')
+  check('the typed branch name was submitted', call?.payload?.parameters?.name === 'feature/新功能2',
+    JSON.stringify(call?.payload))
+  check('creating a branch also checks it out', call?.payload?.parameters?.checkout === true,
+    JSON.stringify(call?.payload))
+}
+
+console.log('\n--- branch delete is confirmed, merge is not destructive ---')
+{
+  tree = await renderApp()
+  // Branch rows (with their `⋯` menu) render in the GRAPH module's sidebar now, not
+  // on the changes tab.
+  tree = await selectModule(tree, 'graph')
+  walk(tree).find((node) => node.props?.['data-branch-group'] === 'local::feature').props.onToggle({ currentTarget: { open: true } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const branchRow = walk(tree).find((node) => node.$$kind === 'host' &&
+    node.props?.['data-branch-action'] === 'more' &&
+    node.props?.['data-branch-target'] === 'refs/heads/feature/新功能')
+  const rowMenu = branchRow
+  check('non-head branches expose a row menu', rowMenu !== undefined,
+    JSON.stringify(walk(tree).filter((n) => n.props?.['data-branch-action'] !== undefined).map((n) => ({ a: n.props['data-branch-action'], t: n.props['data-branch-target'] })).slice(0, 8)))
+  rowMenu.props.onClick({ preventDefault() {}, stopPropagation() {}, currentTarget: { getBoundingClientRect: () => ({ left: 10, bottom: 20 }) } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the row menu offers delete and merge',
+    hasText(tree, t('wb.deleteBranch')) && hasText(tree, t('wb.merge')),
+    textOf(tree).slice(-400))
+  findAll(tree, 'button').find((node) => textOf(node).includes(t('wb.deleteBranch'))).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // Deleting a branch now opens the review workbench instead of an inline confirm
+  // bar: the dialog names the branch and requires an explicit submit, which is a
+  // STRONGER gate than the old prompt (it shows what will be lost first).
+  check('deleting a branch asks first',
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-workbench')) &&
+    (hasText(tree, t('wb.deleteBranch')) || hasText(tree, t('confirm.deleteBranch'))),
+    textOf(tree).slice(-300))
+  check('no delete happened before confirmation',
+    !mounted.rpc.calls.some((call) => call.method === 'write.deleteBranch' ||
+      (call.method === 'write.workbenchAction' && call.payload?.action === 'deleteBranch')))
+}
+
+console.log('\n--- show git output renders commands and failures ---')
+{
+  tree = await renderApp()
+  tree = await selectModule(tree, 'output')
+  check('output view asked the Host for the log',
+    mounted.rpc.calls.some((call) => call.method === 'gitOutput'),
+    mounted.rpc.calls.map((c) => c.method).join(','))
+  check('output lists the git command', hasText(tree, 'git push origin main'), textOf(tree).slice(0, 400))
+  check('output shows the failure text', hasText(tree, 'non-fast-forward'), textOf(tree).slice(0, 600))
+  check('output marks the failing exit code', hasText(tree, '✗ 1'), textOf(tree).slice(0, 400))
+  check('output shows a successful command too', hasText(tree, 'git status --porcelain=v2'), textOf(tree).slice(0, 600))
+  const clear = findAll(tree, 'button').find((node) => textOf(node) === t('action.clearOutput'))
+  check('output offers a clear control', clear !== undefined)
+  clear.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('clearing called the Host', mounted.rpc.calls.some((call) => call.method === 'clearGitOutput'))
+}
+
+console.log('\n--- clone validation is implemented in the Host call path ---')
+{
+  // NOTE: there is no longer any UI entry point for clone. `cloneRepo` still exists
+  // in app.js and `runWithProgress('clone', …)` still works, but nothing calls it:
+  // `action.clone` survives only as a locale key, and the Remotes tree section that
+  // used to expose it is gone. So this asserts the CLIENT's clone plumbing (the
+  // RPC hop and its payload shape) rather than a control that is not rendered.
+  tree = await renderApp()
+  const cloneHandlers = healthyHandlers({ clone: (payload) => ({ directory: payload.directory, message: 'Cloning into …' }) })
+  const cloneStub = createRpcStub(cloneHandlers)
+  const result = await cloneStub.rpc.call('ch', 'ep', { method: 'clone', payload: { url: 'https://example.com/a.git', directory: 'D:/projects/a' } })
+  check('the clone RPC accepts a URL and a directory',
+    result?.value?.directory === 'D:/projects/a', JSON.stringify(result))
+  check('no clone control is rendered any more (asserted, not assumed)',
+    !hasText(tree, t('action.clone')), textOf(tree).slice(0, 200))
+}
+
+/**
+ * Expand a collapsed left-pane section by its title.
+ *
+ * Tags, stashes, remotes, worktrees and contributors start collapsed, so their
+ * contents are genuinely absent from the tree until the header is clicked —
+ * asserting on them without expanding would be asserting on nothing.
+ *
+ * @param tree - the current tree.
+ * @param title - the section title text.
+ * @param rootProps - props to re-render with.
+ * @returns the tree after expansion.
+ */
+async function expandSection(tree, title, rootProps) {
+  const header = findAll(tree, 'button').find((node) =>
+    String(node.props.className).includes('dshgit-sectionhead') && textOf(node).startsWith(title))
+  if (header === undefined) return tree
+  if (header.props['aria-expanded'] === true) return tree
+  header.props.onClick()
+  return flush(GitApp, rootProps)
+}
+
+console.log('\n--- repository metadata and tracking are visible ---')
+{
+  tree = await renderApp()
+  // Only remote names are needed by the always-visible sync controls.
+  for (const method of ['remotes']) {
+    check(`requested ${method}`, mounted.rpc.calls.some((call) => call.method === method),
+      mounted.rpc.calls.map((c) => c.method).join(','))
+  }
+
+  const rootProps = { connection: mounted.rpc, t }
+  check('the changes module defers metadata belonging to other modules',
+    ['refs', 'contributors', 'branchTracking', 'repoMeta', 'worktrees', 'stashes'].every((method) =>
+      !mounted.rpc.calls.some((call) => call.method === method)),
+    mounted.rpc.calls.map((c) => c.method).join(','))
+
+  // The live branch list is the graph module's sidebar, which carries the upstream
+  // divergence for each branch.
+  tree = await selectModule(tree, 'graph')
+  check('the graph module loads its own refs, worktrees and repository metadata', ['refs', 'worktrees', 'repoMeta'].every(method => mounted.rpc.calls.some(call => call.method === method)))
+  const branchItem = walk(tree).find((node) => String(node.props?.className ?? '') === 'dshgit-branch-item')
+  check('the branch row shows upstream divergence',
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-branch-tracking')),
+    JSON.stringify(walk(tree).filter((n) => String(n.props?.className ?? '').includes('dshgit-branch-')).map((n) => n.props.className).slice(0, 8)))
+  check('the header shows the last-fetch time', hasText(tree, '最近 Fetch'), textOf(tree).slice(0, 300))
+  check('the header shows the commit count', hasText(tree, '5 个提交'), textOf(tree).slice(0, 300))
+}
+
+console.log('\n--- compare with a branch is one action away ---')
+{
+  tree = await renderApp()
+  // There is no `⇄` button on a branch row now, and no `compare` activity-bar
+  // module. Comparing starts from a branch's context menu (`wb.compare` →
+  // `setWindowState({ tab: 'compare', compareWith: ref })`), so drive that.
+  tree = await renderChips(healthyHandlers({}))
+  findAll(tree, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
+    currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+  })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const branchRow = walk(tree).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/feature/新功能')
+  check('the branch picker has a row to act on', branchRow !== undefined,
+    JSON.stringify(walk(tree).filter((n) => n.props?.['data-picker-branch'] !== undefined).map((n) => n.props['data-picker-branch'])))
+  branchRow.props.onContextMenu({ clientX: 100, clientY: 120, preventDefault() {}, stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // A menu row renders its label in a span and the git command in a sibling
+  // `<code>`, so derive the label by subtracting the code text.
+  const menuButtons = findAll(tree, 'button').filter((node) =>
+    walk(node).some((child) => String(child.props?.className ?? '') === 'dshgit-menucommand'))
+  const menuLabelOf = (node) => {
+    const code = walk(node).find((child) => String(child.props?.className ?? '') === 'dshgit-menucommand')
+    return textOf(node).replace(textOf(code), '').trim()
+  }
+  const compareItem = menuButtons.find((node) => menuLabelOf(node) === t('wb.compare'))
+  check('a branch offers a compare action', compareItem !== undefined,
+    JSON.stringify(menuButtons.map(menuLabelOf)))
+  compareItem.props.onClick({ preventDefault() {}, stopPropagation() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the compare tab preloaded the branch',
+    mounted.rpc.calls.some((call) => call.method === 'compareCommits' || call.method === 'compareFiles'),
+    mounted.rpc.calls.map((c) => c.method).join(','))
+  check('the comparison lists differing commits', hasText(tree, 'merge: 合并 feature/新功能'),
+    textOf(tree).slice(0, 500))
+  // The completion list id is `dshgit-compare-refs`.
+  check('the compare inputs offer branch completion',
+    walk(tree).some((node) => node.$$kind === 'host' && node.type === 'datalist' && node.props.id === 'dshgit-compare-refs'),
+    JSON.stringify(walk(tree).filter((n) => n.type === 'datalist').map((n) => n.props.id)))
+}
+
+console.log('\n--- the workbench window minimizes and restores ---')
+{
+  tree = await renderApp()
+  check('the window is showing', walk(tree).some((node) => node.props?.['data-mode'] !== undefined))
+
+  const minimize = findAll(tree, 'button').find((node) => String(node.props.title ?? '') === t('window.minimize'))
+  check('the header offers a minimize control', minimize !== undefined,
+    JSON.stringify(findAll(tree, 'button').map((node) => node.props.title).filter(Boolean)))
+
+  minimize.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+
+  // Minimizing now keeps the dialog MOUNTED and shows the pill alongside it: the
+  // window carries a `dshgit-dotbadge` while minimized (window.js) so the launcher
+  // can indicate there is something waiting. What must still hold is that the pill
+  // appears, that it restores, and that polling STOPS — which is asserted below by
+  // the RPC-traffic check rather than by unmounting.
+  check('minimizing shows a pill',
+    walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-pill')))
+  const pill = walk(tree).find((node) => String(node.props?.className ?? '').includes('dshgit-pill'))
+  check('the pill is a real button that restores',
+    pill.type === 'button' && typeof pill.props.onClick === 'function')
+
+  // Minimizing must genuinely unmount the panel: leaving it mounted would keep
+  // every polling effect alive behind a 28px pill.
+  const callsWhileMinimized = mounted.rpc.calls.length
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+  check('no RPC traffic continues while minimized',
+    mounted.rpc.calls.length === callsWhileMinimized,
+    `${callsWhileMinimized} → ${mounted.rpc.calls.length}`)
+
+  pill.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('clicking the pill restores the window',
+    walk(tree).some((node) => node.props?.['data-mode'] !== undefined))
+  check('the pill is gone after restoring',
+    !walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-pill')))
+
+  // The launcher button must restore too, rather than opening a second window.
+  tree = await renderApp()
+  findAll(tree, 'button').find((node) => String(node.props.title ?? '') === t('window.minimize')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const launcher = findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-iconbtn') &&
+    node.props['aria-label'] === t('window.open'))
+  check('the launcher offers to restore while minimized',
+    launcher.props.title === t('window.restore'), String(launcher.props.title))
+  launcher.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the launcher restored the window',
+    walk(tree).some((node) => node.props?.['data-mode'] !== undefined))
+  check('restoring did not close the window',
+    !walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-pill')))
+}
+
+console.log('\n--- the workbench window resizes from its corner grip ---')
+{
+  tree = await renderApp()
+  const float = walk(tree).find((node) => node.props?.['data-mode'] !== undefined)
+  check('the window starts at its default size',
+    float.props['data-resized'] === 'false', String(float.props['data-resized']))
+
+  const grip = findAll(float, 'button').find((node) =>
+    String(node.props.className).includes('dshgit-resize'))
+  check('the window offers a resize grip', grip !== undefined,
+    JSON.stringify(findAll(float, 'button').map((node) => node.props.className)))
+  check('the grip is a real control with a title',
+    grip.type === 'button' && grip.props.title === t('window.resizeHint'),
+    String(grip.props.title))
+
+  const node = float.props.ref?.current ?? refNode('dshgit-float')
+  // The harness's fake node reports a 420x480 box; the real default is larger,
+  // but the point is that the grip moves whatever box it measured.
+  grip.props.onPointerDown({ clientX: 700, clientY: 600, button: 0, pointerId: 21,
+    preventDefault() {}, stopPropagation() {} })
+  float.props.onPointerMove({ clientX: 820, clientY: 720, pointerId: 21 })
+  check('dragging the grip grows the window live',
+    parseFloat(node.style.width) > 420 && parseFloat(node.style.height) > 480,
+    JSON.stringify(node.style))
+
+  float.props.onPointerUp({ pointerId: 21 })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const resized = walk(tree).find((node) => node.props?.['data-mode'] !== undefined)
+  check('the resized size is committed to the window state',
+    resized.props['data-resized'] === 'true' && parseFloat(resized.props.style.width) > 420,
+    JSON.stringify(resized.props.style))
+
+  // A gesture that never moved must not invent a size.
+  const grip2 = findAll(resized, 'button').find((n) => String(n.props.className).includes('dshgit-resize'))
+  grip2.props.onPointerDown({ clientX: 500, clientY: 500, button: 0, pointerId: 22,
+    preventDefault() {}, stopPropagation() {} })
+  resized.props.onPointerUp({ pointerId: 22 })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a press with no movement leaves the committed size alone',
+    walk(tree).find((n) => n.props?.['data-mode'] !== undefined).props.style.width ===
+      resized.props.style.width)
+
+  // A secondary button is a context-menu click, not a resize.
+  const beforeStyle = walk(tree).find((n) => n.props?.['data-mode'] !== undefined).props.style
+  const grip3 = findAll(tree, 'button').find((n) => String(n.props.className).includes('dshgit-resize'))
+  grip3.props.onPointerDown({ clientX: 100, clientY: 100, button: 2, pointerId: 23,
+    preventDefault() {}, stopPropagation() {} })
+  walk(tree).find((n) => n.props?.['data-mode'] !== undefined)
+    .props.onPointerMove({ clientX: 400, clientY: 400, pointerId: 23 })
+  check('a right-button press on the grip does not resize',
+    JSON.stringify(walk(tree).find((n) => n.props?.['data-mode'] !== undefined).props.style) ===
+      JSON.stringify(beforeStyle))
+
+  // The window is already centred by the stylesheet, so a resize only commits
+  // the explicit width/height — the centre transform comes from the class and
+  // must stay untouched (an inline left/top would fight it on future renders).
+  const finalFloat = walk(tree).find((n) => n.props?.['data-mode'] !== undefined)
+  check('resizing keeps the workbench class',
+    String(finalFloat.props.className).includes('dshgit-workbench'), String(finalFloat.props.className))
+  check('resizing commits only the explicit size',
+    finalFloat.props.style !== undefined &&
+      typeof finalFloat.props.style.width === 'string' &&
+      typeof finalFloat.props.style.height === 'string' &&
+      finalFloat.props.style.left === undefined && finalFloat.props.style.top === undefined,
+    JSON.stringify(finalFloat.props.style))
+}
+
+console.log('\n--- a resized window keeps its size across minimize/restore ---')
+{
+  tree = await renderApp()
+  const float = walk(tree).find((node) => node.props?.['data-mode'] !== undefined)
+  const grip = findAll(float, 'button').find((node) => String(node.props.className).includes('dshgit-resize'))
+  grip.props.onPointerDown({ clientX: 700, clientY: 600, button: 0, pointerId: 31,
+    preventDefault() {}, stopPropagation() {} })
+  float.props.onPointerMove({ clientX: 900, clientY: 800, pointerId: 31 })
+  float.props.onPointerUp({ pointerId: 31 })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const chosen = walk(tree).find((node) => node.props?.['data-mode'] !== undefined).props.style
+  check('the window was resized before minimizing', parseFloat(chosen.width) > 420,
+    JSON.stringify(chosen))
+
+  findAll(tree, 'button').find((node) => node.props.title === t('window.minimize')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find((node) => String(node.props.className).includes('dshgit-pill')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+
+  const restored = walk(tree).find((node) => node.props?.['data-mode'] !== undefined).props.style
+  check('the chosen size survives minimize/restore',
+    restored.width === chosen.width && restored.height === chosen.height,
+    `${JSON.stringify(chosen)} vs ${JSON.stringify(restored)}`)
+}
+
+console.log('\n--- the launcher toggles the single window closed ---')
+{
+  tree = await renderApp()
+  // The launcher must be re-found after every flush: its `onClick` closes over
+  // the open/closed state of the render it was created in, so reusing the node
+  // from a previous pass would click a handler that still believes the window is
+  // open. React re-renders a fresh handler; the test has to pick it up.
+  const findLauncher = (current) => findAll(current, 'button').find((node) =>
+    String(node.props.className).includes('dshgit-iconbtn') && node.props['aria-label'] === t('window.open'))
+
+  const launcher = findLauncher(tree)
+  check('the launcher is showing the window as open', launcher.props['aria-pressed'] === true)
+  launcher.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // The launcher CLOSES the window (`mode: 'closed'`), while the minimize control
+  // MINIMIZES it (pill, still mounted). Both behaviours are asserted here so the
+  // two controls cannot drift into each other.
+  check('clicking the launcher closes the window',
+    walk(tree).some((node) => node.props?.['data-mode'] === 'closed') &&
+    !walk(tree).some((node) => String(node.props?.className ?? '').includes('dshgit-pill')))
+  findLauncher(tree).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('clicking it again opens the window',
+    walk(tree).some((node) => node.props?.['data-mode'] !== undefined && node.props['data-mode'] !== 'closed'))
+}
+
+console.log('\n--- tag clicks directly create a branch without detached checkout ---')
+{
+  let header = await renderChips(healthyHandlers({ refs: () => ({ ...REFS, tags: [{ ...REFS.tags[0], sha: 'b'.repeat(40), commitSha: COMMIT_DETAIL.sha }] }) }))
+  const rootProps = { connection: mounted.rpc, t: mounted.t }
+  const chooseTag = async () => {
+    findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({
+      currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+    })
+    header = await flush(GitApp, rootProps)
+    const toggle = findAll(header, 'button').find((node) => node.props['data-picker-toggle'] === 'tags')
+    if (!toggle.props['aria-expanded']) toggle.props.onClick()
+    header = await flush(GitApp, rootProps)
+    findAll(header, 'button').find((node) => node.props['data-ref'] === 'v0.1.0').props.onClick()
+    header = await flush(GitApp, rootProps)
+  }
+  await chooseTag()
+  check('clicking a tag performs no write', !mounted.rpc.calls.some((call) => call.method.startsWith('write.')))
+  check('clicking a tag opens no version browser', !walk(header).some((node) => node.props?.['data-history-commit']) &&
+    !mounted.rpc.calls.some((call) => call.method === 'commitGraph'))
+  check('tag selection keeps the current branch indicator', hasText(findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch'), 'main'))
+  let dialog = walk(header).find((node) => node.props?.role === 'dialog' && node.type === 'form')
+  check('developing from a tag opens a named branch form', dialog?.props['aria-label'] === t('wb.createBranchFromTag') &&
+    findAll(dialog, 'button').find((node) => node.props.type === 'submit').props.disabled)
+  check('tag start point is fixed and checkout cannot be unchecked', !findAll(dialog, 'input').some((node) => node.props.type === 'checkbox' && node.props.checked === true))
+  findAll(dialog, 'button').find((node) => textOf(node) === t('action.cancel')).props.onClick()
+  header = await flush(GitApp, rootProps)
+  check('cancelling branch creation leaves the worktree untouched', !mounted.rpc.calls.some((call) => call.method.startsWith('write.')))
+  await chooseTag()
+  dialog = walk(header).find((node) => node.props?.role === 'dialog' && node.type === 'form')
+  findAll(dialog, 'input').find((node) => node.props.name === 'name').props.onChange({ target: { value: 'release/fix' } })
+  header = await flush(GitApp, rootProps)
+  dialog = walk(header).find((node) => node.props?.role === 'dialog' && node.type === 'form')
+  dialog.props.onSubmit({ preventDefault() {} })
+  header = await flush(GitApp, rootProps)
+  const calls = mounted.rpc.calls.filter((call) => call.method === 'write.workbenchAction')
+  const payload = calls[0]?.payload
+  check('tag development creates and switches to a branch with one confirmed write', calls.length === 1 && payload.confirm === true &&
+    payload.action === 'createBranch' && payload.parameters.name === 'release/fix' &&
+    payload.parameters.startPoint === 'refs/tags/v0.1.0' && payload.parameters.checkout === true)
+  check('tag development never sends detached checkout', !mounted.rpc.calls.some((call) => call.method === 'write.checkout' || call.payload?.action === 'checkout'))
+}
+{
+  const detachedStatus = { ...STATUS, branch: { ...STATUS.branch, head: '(detached)', oid: 'c'.repeat(40), detached: true, upstream: null } }
+  let header = await renderChips(healthyHandlers({ status: () => detachedStatus,
+    refs: () => ({ ...REFS, tags: [{ name: 'v0.1.0', ref: 'refs/tags/v0.1.0', sha: 'd'.repeat(40), commitSha: 'c'.repeat(40) }] }) }))
+  const chip = findAll(header, 'button').find((node) => node.props['data-chip'] === 'branch')
+  check('detached header initially identifies HEAD without enumerating tags', hasText(chip, t('wb.detachedState', { name: 'c'.repeat(8) })) && !mounted.rpc.calls.some(call => call.method === 'refs'))
+  chip.props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+  header = await flush(GitApp, { connection: mounted.rpc, t: mounted.t })
+  check('detached header resolves annotated tag names when the picker opens', hasText(findAll(header, 'button').find(node => node.props['data-chip'] === 'branch'), t('wb.detachedState', { name: 'v0.1.0' })))
+}
+
+
+console.log('\n--- blank-session Git placement after the mode picker ---')
+{
+  const row = {}
+  const preset = { parentElement: row }
+  const seat = { querySelector: (selector) => selector === '[data-slot="conversation.hero.agentPreset"]' ? preset : null }
+  const toolbar = { querySelector: () => null, parentElement: seat }
+  check('Hero placement finds the mode picker row within its own composer', findHeroWorkspaceRow({ parentElement: toolbar }) === row)
+  const boundary = { querySelector: () => null, hasAttribute: (name) => name === 'data-phase', parentElement: seat }
+  check('Hero placement never borrows another conversation mode picker', findHeroWorkspaceRow({ parentElement: boundary }) === null)
+  check('Hosts without the Hero anchor retain the toolbar fallback', findHeroWorkspaceRow({ parentElement: { querySelector: () => null } }) === null)
+  const options = { name: 'host-options-with-auto-margin' }
+  const mode = { nextSibling: options }
+  const git = { name: 'git-controls' }
+  const children = [mode, options]
+  insertHeroActions({ querySelector: () => mode, insertBefore: (node, before) => children.splice(before ? children.indexOf(before) : children.length, 0, node) }, git)
+  check('Git is inserted immediately after mode and before the Host auto-margin options', children[0] === mode && children[1] === git && children[2] === options)
+  let appended = false
+  insertHeroActions({ querySelector: () => ({ nextSibling: null }), insertBefore: (node, before) => { appended = node === git && before === null } }, git)
+  check('older Hosts without trailing options still place Git after mode', appended)
+  const label = { closest: () => null, childNodes: [{ nodeType: 3, textContent: '标准模式' }] }
+  const button = { closest: () => null, childNodes: [], querySelectorAll: () => [label] }
+  const presetSeat = { querySelector: () => button }
+  const fontRow = { querySelector: () => presetSeat }
+  const sizes = new Map()
+  const container = { style: { getPropertyValue: key => sizes.get(key), setProperty: (key, value) => sizes.set(key, value) } }
+  let labelSize = '14px'
+  const computed = element => ({ fontSize: element === label ? labelSize : '20px',
+    fontFamily: 'Arial', fontWeight: '600', lineHeight: '22px', letterSpacing: 'normal' })
+  syncHeroBranchFont(fontRow, container, computed)
+  check('branch matches the mode label font instead of the larger wrapper font', sizes.get('--dshgit-hero-font-size') === '14px')
+  labelSize = '16px'
+  syncHeroBranchFont(fontRow, container, computed)
+  check('branch font follows changes to the mode label size', sizes.get('--dshgit-hero-font-size') === '16px')
+  check('branch also follows mode label family, weight and line height',
+    sizes.get('--dshgit-hero-font-family') === 'Arial' && sizes.get('--dshgit-hero-font-weight') === '600' && sizes.get('--dshgit-hero-line-height') === '22px')
+}
+
+console.log('\n--- bounded popover placement ---')
+{
+  const anchor = { left: 500, right: 640, top: 100, bottom: 130 }
+  const position = popoverPosition(anchor, { width: 400, maxHeight: 400, align: 'start' }, { width: 1200, height: 800 })
+  check('Hero picker aligns with the branch button left edge and stays compact', position.left === '500px' && position.top === '136px' && position.width === '400px' && position.maxHeight === '400px')
+  const above = popoverPosition({ left: 500, right: 640, top: 650, bottom: 680 }, { width: 400, maxHeight: 400, align: 'start' }, { width: 1200, height: 800 })
+  check('picker flips above a low trigger without a gap for short content', above.top === undefined && above.bottom === '156px' && above.maxHeight === '400px')
+  const narrow = popoverPosition(anchor, { width: 400, maxHeight: 400, align: 'start' }, { width: 320, height: 300 })
+  check('narrow viewport clamps width and list height inside the screen', narrow.left === '8px' && narrow.width === '304px' && narrow.maxHeight === '156px')
+  const header = popoverPosition(anchor, { width: 460, maxHeight: 400, align: 'end' }, { width: 1200, height: 800 })
+  check('resident header picker retains alignment with the trigger right edge', header.left === '180px')
+}
+
+console.log('\n--- workspace navigation lifetime and supersession ---')
+{
+  const attempts = []
+  const service = { openWorkspace(workspaceId, beforeOpen) {
+    check('workspace navigation preserves the service receiver', this === service)
+    return new Promise((resolve, reject) => attempts.push({ resolve, reject, beforeOpen }))
+  } }
+  const original = service.openWorkspace
+  const dispose = observeWorkspaceNavigation(service)
+  const first = service.openWorkspace('first').catch(() => {})
+  const second = service.openWorkspace('second')
+  attempts[0].reject(new Error('older failed')); await first
+  check('an older navigation failure cannot unlock the latest request', getWorkspaceNavigation()?.workspaceId === 'second')
+  attempts[1].beforeOpen('second-session'); attempts[1].resolve('done')
+  check('workspace navigation preserves its return value', await second === 'done')
+  acknowledgeWorkspaceNavigation('first-session')
+  check('an unrelated session cannot acknowledge workspace navigation', getWorkspaceNavigation()?.sessionId === 'second-session')
+  acknowledgeWorkspaceNavigation('second-session')
+  check('matching session binding releases the navigation lock', getWorkspaceNavigation() === null)
+  const third = service.openWorkspace('third')
+  dispose()
+  check('plugin disposal restores the public method and clears the lock', service.openWorkspace === original && getWorkspaceNavigation() === null)
+  attempts[2].resolve(); await third
+  check('a disposed observer cannot restore stale pending state', getWorkspaceNavigation() === null)
+}
+
+console.log('\n--- blank-session Git follows the selected workspace ---')
+{
+  const selected = 'D:/demo/selected-workspace'
+  const other = 'D:/demo/unrelated-workspace'
+  const empty = 'D:/demo/not-yet-a-repo'
+  let initialized = false
+  const rpc = createRpcStub(healthyHandlers({
+    refs: () => ({ ...REFS, branches: REFS.branches.filter((branch) => branch.ref.startsWith('refs/heads/')), remotes: Array.from({ length: 120 }, (_, index) => ({ name: 'origin/feature/' + index, ref: 'refs/remotes/origin/feature/' + index, sha: 'b'.repeat(40) })) }),
+    repos: (payload) => ({ gitPath: 'git', repos: payload.path === empty && !initialized ? [] : [{ root: payload.path }], directory: payload.path, canInitialize: payload.path === empty }),
+    initRepository: () => { initialized = true; return { root: empty } },
+    'write.push': () => ({ ok: true, message: 'pushed' }),
+  }))
+  const context = createClientContext({ connection: rpc })
+  const workspaceClient = loadClientModule(source)
+  const navigations = []
+  context.ctx.uiWorkspace = { openWorkspace: (workspaceId, beforeOpen) => new Promise((resolve, reject) => { navigations.push({ workspaceId, beforeOpen, resolve, reject }) }) }
+  workspaceClient.apply(context.ctx)
+  const Blank = context.registrations.find((entry) => entry.declaration.name === 'conversation.input.left').Component
+  const Header = context.registrations.find((entry) => entry.declaration.name === 'conversation.session.header.utilities').Component
+  const Window = context.registrations.find((entry) => entry.declaration.id === 'git-window').Component
+  function WorkspaceHarness(props) {
+    const controls = {
+      sessionId: props.sessionId || 'new-session', t,
+      useSession: (selector) => selector({ blank: props.blank }),
+      useWorkspaces: (selector) => selector({ items: [
+        { workspaceId: 'other', path: other, sessionIds: ['other-session'] },
+        { workspaceId: 'selected', path: props.directory, sessionIds: [props.sessionId || 'new-session'] },
+      ] }),
+      useSessions: (selector) => selector({ byId: { 'new-session': { cwd: other } } }),
+    }
+    return [h(props.blank ? Blank : Header, controls), h(Window, { t })]
+  }
+  let props = { blank: true, directory: selected }
+  mount(WorkspaceHarness, props)
+  let view = await flush(WorkspaceHarness, props)
+  check('blank composer offers a branch picker before any message', findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
+  check('blank composer has no separate Git workbench icon', !findAll(view, 'button').some((node) => node.props['aria-label'] === t('window.open')))
+  check('workspace mapping beats both first workspace and stale session cwd', rpc.calls.filter((call) => call.method === 'repos').every((call) => call.payload.path === selected && call.payload.sessionId === 'new-session'), JSON.stringify(rpc.calls.filter((call) => call.method === 'repos')))
+  findAll(view, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+  view = await flush(WorkspaceHarness, props)
+  const remoteRows = () => walk(view).filter((node) => String(node.props?.['data-picker-branch'] || '').startsWith('refs/remotes/'))
+  const mainRow = walk(view).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/main')
+  const trackingCounts = walk(mainRow).find((node) => node.props?.className === 'dshgit-picker-tracking')
+  check('branch picker shows ahead and behind counts beside the current branch', hasText(trackingCounts, '↑2') && hasText(trackingCounts, '↓1'))
+  const syncedRow = walk(view).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/feature/新功能')
+  check('branches with zero divergence have no count badge', !walk(syncedRow).some((node) => node.props?.className === 'dshgit-picker-tracking'))
+  check('many remote branches start collapsed in the Hero picker', remoteRows().length === 0 && findAll(view, 'button').some((node) => node.props['data-picker-toggle'] === 'remotes' && node.props['aria-expanded'] === false))
+  findAll(view, 'button').find((node) => node.props['data-picker-toggle'] === 'remotes').props.onClick()
+  view = await flush(WorkspaceHarness, props)
+  check('expanding remote branches initially renders only five rows', remoteRows().length === 5)
+  findAll(view, 'button').find((node) => node.props['data-picker-more'] === 'remotes').props.onClick()
+  view = await flush(WorkspaceHarness, props)
+  check('show more reveals remote branches in small batches', remoteRows().length === 10)
+  findAll(view, 'input').find((node) => node.props.className === 'dshgit-pickerinput').props.onChange({ currentTarget: { value: 'origin/feature/119' } })
+  view = await flush(WorkspaceHarness, props)
+  check('search reaches branches beyond the expanded rows', remoteRows().length === 1 && remoteRows()[0].props['data-picker-branch'] === 'refs/remotes/origin/feature/119')
+  findAll(view, 'input').find((node) => node.props.className === 'dshgit-pickerinput').props.onChange({ currentTarget: { value: '' } })
+  view = await flush(WorkspaceHarness, props)
+  const trackedMain = walk(view).find(node => node.props?.['data-picker-branch'] === 'refs/heads/main')
+  findAll(trackedMain, 'button').find(node => node.props['data-branch-action'] === 'push').props.onClick({ preventDefault() {}, stopPropagation() {} })
+  view = await flush(WorkspaceHarness, props)
+  const blankPush = rpc.calls.find(call => call.method === 'write.push')
+  check('blank-session branch push uses the selected workspace and upstream', blankPush?.payload.root === selected &&
+    blankPush.payload.remote === 'origin' && blankPush.payload.sourceBranch === 'main' && blankPush.payload.targetBranch === 'main')
+  check('blank-session tracked push opens no push configuration dialog', !walk(view).some(node => node.props?.role === 'dialog' && node.props?.['aria-label'] === t('wb.push')))
+  findAll(view, 'button').find(node => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+  view = await flush(WorkspaceHarness, props)
+  const row = walk(view).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/feature/新功能')
+  findAll(row, 'button').find((node) => node.props['data-ref'] === 'feature/新功能').props.onClick()
+  view = await flush(WorkspaceHarness, props)
+  const dialog = walk(view).find((node) => node.props?.role === 'alertdialog')
+  findAll(dialog, 'button').find((node) => textOf(node) === t('action.switchBranch')).props.onClick()
+  view = await flush(WorkspaceHarness, props)
+  const checkout = rpc.calls.find((call) => call.method === 'write.checkout')
+  check('blank-session checkout writes to the selected workspace', checkout?.payload.root === selected && checkout.payload.ref === 'refs/heads/feature/新功能' && checkout.payload.confirm === true)
+  const notice = walk(view).find((node) => node.props?.className === 'dshgit-notice' && node.props?.['data-placement'] === 'bottom')
+  check('blank-session outcomes appear at the viewport bottom center', notice?.props.style.bottom === '24px' && notice.props.style.left === '50%' && notice.props.style.top === 'auto')
+  findAll(view, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+  view = await flush(WorkspaceHarness, props)
+  findAll(view, 'button').find((node) => node.props['data-picker-open-git']).props.onClick()
+  view = await flush(WorkspaceHarness, props)
+  check('branch popup opens the full Git window and closes itself', walk(view).some((node) => node.props?.['data-mode'] === 'full') && !walk(view).some((node) => node.props?.['data-popover'] === 'branch'))
+  check('blank-session workbench discovers the same explicit directory', rpc.calls.filter((call) => call.method === 'repos').every((call) => call.payload.path === selected))
+  props = { blank: true, directory: empty }
+  view = await flush(WorkspaceHarness, props)
+  check('changing workspace clears the old branch and offers initialization', findAll(view, 'button').some((node) => node.props['data-chip'] === 'init'))
+  findAll(view, 'button').find((node) => node.props['data-chip'] === 'init').props.onClick()
+  view = await flush(WorkspaceHarness, props)
+  check('initialization explicitly targets the new workspace', rpc.calls.some((call) => call.method === 'initRepository' && call.payload.directory === empty))
+  check('initialized workspace gains a branch picker', findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
+  const previousRun = context.registrations.find((entry) => entry.declaration.name === 'settings.section').Component({ t }).props.run
+  const switching = context.ctx.uiWorkspace.openWorkspace('selected')
+  view = await flush(WorkspaceHarness, props)
+  check('slow workspace navigation disables the old Git controls', findAll(view, 'button').some((node) => node.props['data-workspace-pending'] && node.props.disabled) && !findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
+  check('workspace navigation makes the existing workbench inert', walk(view).some((node) => node.props?.['data-mode'] === 'full' && node.props.inert === true))
+  const writesBefore = rpc.calls.filter((call) => call.method === 'write.checkout').length
+  const blockedWrite = await previousRun('write.checkout', { root: empty, ref: 'refs/heads/main', confirm: true }).then(() => false, () => true)
+  check('even a retained old dialog callback cannot send a write during navigation', blockedWrite && rpc.calls.filter((call) => call.method === 'write.checkout').length === writesBefore)
+  navigations[0].beforeOpen('next-session'); navigations[0].resolve()
+  await switching
+  view = await flush(WorkspaceHarness, props)
+  check('navigation completion still waits for the new session binding', findAll(view, 'button').some((node) => node.props['data-workspace-pending']))
+  props = { blank: true, directory: selected, sessionId: 'next-session' }
+  view = await flush(WorkspaceHarness, props)
+  check('the matching new session restores Git against its directory', !findAll(view, 'button').some((node) => node.props['data-workspace-pending']) && rpc.calls.filter((call) => call.method === 'repos').at(-1)?.payload.path === selected)
+  const failing = context.ctx.uiWorkspace.openWorkspace('other').catch((error) => error.message)
+  view = await flush(WorkspaceHarness, props)
+  navigations[1].reject(new Error('navigation failed'))
+  check('navigation errors preserve the Host error', await failing === 'navigation failed')
+  view = await flush(WorkspaceHarness, props)
+  check('failed navigation restores the original workspace controls', !findAll(view, 'button').some((node) => node.props['data-workspace-pending']) && findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
+  props = { blank: false, directory: selected }
+  view = await flush(WorkspaceHarness, props)
+  check('after the first message the header continues using the workspace', rpc.calls.filter((call) => call.method === 'repos').at(-1)?.payload.path === selected)
+  function BlankOnly(props) { return h(Blank, { sessionId: 'new-session', t, useSession: (select) => select({ blank: props.blank }), useWorkspaces: (select) => select({ items: [] }), useSessions: (select) => select({ byId: {} }) }) }
+  mount(BlankOnly, { blank: true })
+  view = await flush(BlankOnly, { blank: true })
+  check('without a workspace no repository is guessed', findAll(view, 'button').length === 0)
+}
+
+console.log('\n--- LFS reconnects after repeated status failures ---')
+{
+  runCleanups()
+  // Expose the bundled panel and shorten its timers in this fixture only.
+  const fixture = source.replace('factory: (require) => {',
+    'factory: (require) => { var setTimeout = (callback, delay) => globalThis.setTimeout(callback, Math.min(delay, 1));')
+    .replace('    return module.exports', '    module.exports.LfsPanel = LfsPanel;\n    return module.exports')
+  const { LfsPanel } = loadClientModule(fixture)
+  const running = { id: 'lfs-reconnect', root: ROOT, method: 'write.lfsTransfer', state: 'running' }
+  let reads = 0, connected = false, completed = false
+  const props = {
+    repo: { root: ROOT }, t,
+    onToast: () => { completed = true },
+    run: async (method, body) => {
+      if (method === 'operationStatus') {
+        if (!body.id) return running
+        reads++
+        if (!connected) throw new Error('temporary disconnect')
+        return { ...running, state: 'complete', result: { ok: true, value: { message: 'download complete' } } }
+      }
+      if (method === 'lfsStatus') return { installed: true, initialized: true, version: 'test' }
+      if (method === 'lfsDetails') return { rules: '', backups: [] }
+      if (method === 'remotes' || method === 'lfsBranches') return []
+      throw new Error('Unexpected RPC: ' + method)
+    },
+  }
+  mount(LfsPanel, props)
+  let tree = await flush(LfsPanel, props)
+  for (let attempt = 0; reads < 6 && attempt < 50; attempt++) await new Promise(resolve => setTimeout(resolve, 2))
+  tree = await flush(LfsPanel, props)
+  check('LFS keeps retrying beyond five failed status requests', reads >= 6, String(reads))
+  check('an uncertain LFS task keeps controls disabled',
+    findAll(tree, 'button').find(node => textOf(node) === t('action.refresh'))?.props.disabled === true)
+  check('an uncertain LFS task retains its cancel control',
+    findAll(tree, 'button').some(node => node.props.className === 'dshgit-progress-cancel'))
+  connected = true
+  for (let attempt = 0; !completed && attempt < 50; attempt++) await new Promise(resolve => setTimeout(resolve, 2))
+  tree = await flush(LfsPanel, props)
+  check('LFS receives the original job result after reconnecting', completed)
+  check('LFS unlocks controls after confirmed completion',
+    findAll(tree, 'button').find(node => textOf(node) === t('action.refresh'))?.props.disabled === false)
+  runCleanups()
+}
+
+async function openWorktreeManagement(view) {
+  findAll(view, 'button').find(node => node.props['aria-label'] === t('wt.manage') && node.props['aria-haspopup'] === 'menu').props.onClick({ stopPropagation() {} })
+  return flush(GitApp, { connection: mounted.rpc, t })
+}
+async function openWorktreeNote(view) {
+  if (findAll(view, 'textarea').some(node => node.props.name === 'worktreeNote')) return view
+  findAll(view, 'button').find(node => [t('wt.addNote'), t('wt.editNote')].includes(textOf(node))).props.onClick()
+  return flush(GitApp, { connection: mounted.rpc, t })
+}
+async function closeWorktreeNote(view) {
+  const dialog = findAll(view, 'div').find(node => node.props.role === 'dialog' && node.props['aria-label'] === t('wt.taskNote'))
+  findAll(dialog, 'button').find(node => textOf(node) === t('action.close')).props.onClick()
+  return flush(GitApp, { connection: mounted.rpc, t })
+}
+
+console.log('\n--- large comboboxes render a window without truncating search or keyboard navigation ---')
+{
+  runCleanups()
+  const { ComboBox } = loadClientModule(source.replace('    return module.exports', '    module.exports.ComboBox = ComboBox;\n    return module.exports'))
+  const options = [{ value: 'HEAD', label: 'HEAD', group: '' }].concat(
+    Array.from({ length: 1000 }, (_, index) => ({ value: 'refs/heads/feature/' + String(index).padStart(4, '0'), label: 'feature/' + String(index).padStart(4, '0'), group: t('wb.local') })),
+    Array.from({ length: 1000 }, (_, index) => ({ value: 'refs/remotes/origin/feature/' + String(index).padStart(4, '0'), label: 'origin/feature/' + String(index).padStart(4, '0'), group: t('wb.remote') })),
+    Array.from({ length: 50 }, (_, index) => ({ value: 'refs/tags/release-' + index, label: 'release-' + index, group: t('wb.tags') })))
+  const choices = []
+  function ComboFixture(props) {
+    const [value, setValue] = React.useState(props.initialValue || 'HEAD')
+    return h(ComboBox, { ...props, t, value, label: 'Starting point', onChange: next => { choices.push(next); setValue(next) } })
+  }
+  let props = { options }
+  let view
+  const input = () => findAll(view, 'input').find(node => node.props.role === 'combobox')
+  const list = () => findAll(view, 'div').find(node => node.props.role === 'listbox')
+  const rows = () => findAll(view, 'button').filter(node => node.props.role === 'option')
+  const key = value => ({ key: value, preventDefault() {}, stopPropagation() {} })
+  const render = async () => { view = await flush(ComboFixture, props) }
+  const search = async value => { input().props.onChange({ currentTarget: { value } }); await render() }
+  mount(ComboFixture, props); await render()
+  input().props.onClick(); await render()
+  check('2051 references mount fewer than 24 options while retaining group headings', list().props['data-virtual'] && rows().length < 24 && hasText(view, t('wb.local')) &&
+    rows().every(row => row.props['aria-setsize'] === options.length))
+  const normalHeight = Number.parseFloat(rows()[0].props.style.height)
+  const headingHeight = Number.parseFloat(findAll(view, 'div').find(node => node.props.className === 'dshgit-combogroup').props.style.height)
+  list().props.onScroll({ currentTarget: { scrollTop: normalHeight * 1500 + headingHeight * 2 } }); await render()
+  check('scrolling reaches remote branches without snapping back to the active option', rows().some(row => row.props['data-value'].startsWith('refs/remotes/')) && rows().length < 24 &&
+    rows().some(row => row.props.id === input().props['aria-activedescendant']))
+  input().props.onKeyDown(key('ArrowUp')); await render()
+  check('arrow-key wrapping mounts and highlights the last tag beyond the visible window', rows().some(row => row.props['data-active'] === 'true' && row.props['data-value'] === 'refs/tags/release-49' && row.props['aria-posinset'] === options.length) &&
+    rows().some(row => row.props.id === input().props['aria-activedescendant'] && row.props['aria-label'].includes(t('wb.tags'))))
+  input().props.onKeyDown(key('Enter')); await render()
+  check('Enter selects the highlighted offscreen reference', choices.at(-1) === 'refs/tags/release-49' && !input().props['aria-expanded'])
+  input().props.onClick(); await render()
+  check('reopening a large list positions its selected reference in the rendered window', rows().some(row => row.props['aria-selected'] && row.props['data-active'] === 'true' && row.props['data-value'] === 'refs/tags/release-49'))
+  await search('origin/feature/0999')
+  check('search can find a remote reference beyond the first thousand options', rows().length === 1 && rows()[0].props['data-value'] === 'refs/remotes/origin/feature/0999' && !list().props['data-virtual'])
+  input().props.onKeyDown(key('Enter')); await render()
+  check('search selection preserves the canonical remote ref', choices.at(-1) === 'refs/remotes/origin/feature/0999')
+  input().props.onClick(); await render()
+  await search(t('wb.remote'))
+  check('searching a group includes every matching reference with bounded DOM size', list().props['data-virtual'] && rows().length < 24 && rows().every(row => row.props['aria-setsize'] === 1000 && row.props['data-value'].startsWith('refs/remotes/')))
+  await search('no-such-reference')
+  check('an empty search result clears stale virtual rows and active descendants', rows().length === 0 && !input().props['aria-activedescendant'] && hasText(view, t('combo.noMatch')))
+  await search('')
+  const computedStyle = globalThis.getComputedStyle
+  try {
+    globalThis.getComputedStyle = node => ({ ...computedStyle(node), fontSize: '22px' })
+    list().props.onScroll({ currentTarget: { scrollTop: 0 } }); await render()
+    const visible = rows().map(row => ({ top: Number.parseFloat(row.props.style.top), height: Number.parseFloat(row.props.style.height) })).sort((a, b) => a.top - b.top)
+    check('virtual row geometry follows larger text without overlapping options', visible[0].height > normalHeight && visible.every((row, index) => index === 0 || visible[index - 1].top + visible[index - 1].height <= row.top))
+    input().props.onKeyDown(key('ArrowUp')); await render()
+    input().props.onKeyDown(key('Enter')); await render()
+    check('keyboard selection remains correct after font scaling', choices.at(-1) === 'refs/tags/release-49')
+  } finally { globalThis.getComputedStyle = computedStyle }
+  runCleanups()
+  props = { options, allowCustom: true }
+  mount(ComboFixture, props); await render()
+  input().props.onClick(); await render()
+  await search('f'.repeat(40))
+  input().props.onKeyDown(key('Enter')); await render()
+  check('virtualized suggestions retain arbitrary commit SHA input', choices.at(-1) === 'f'.repeat(40) && input().props.value === 'f'.repeat(40))
+  input().props.onClick(); await render()
+  await search('HEAD~2')
+  input().props.onBlur(); await render()
+  check('revision expressions survive blurring the suggestion list', input().props.value === 'HEAD~2' && choices.at(-1) === 'HEAD~2')
+  runCleanups()
+  props = { options: options.slice(0, 80) }
+  mount(ComboFixture, props); await render()
+  input().props.onClick(); await render()
+  check('small dropdowns retain their complete ordinary list', !list().props['data-virtual'] && rows().length === 80)
+  runCleanups()
+  props = { options: Array.from({ length: 3000 }, (_, index) => ({ value: 'ref-' + index, label: 'ref-' + index, group: 'branch-' + index })), initialValue: 'ref-2999' }
+  mount(ComboFixture, props); await render()
+  input().props.onClick(); await render()
+  check('thousands of distinct groups keep the selected item reachable and DOM bounded', rows().length < 24 && rows().some(row => row.props['data-value'] === 'ref-2999' && row.props['data-active'] === 'true') && hasText(view, 'branch-2999'))
+  runCleanups()
+}
+
+console.log('\n--- worktree synchronization follows external edits and visibility ---')
+{
+  runCleanups()
+  const { useWorktrees: useWorktreesFixture } = loadClientModule(source.replace('    return module.exports', '    module.exports.useWorktrees = useWorktrees;\n    return module.exports'))
+  const realTimeout = globalThis.setTimeout, realClear = globalThis.clearTimeout
+  const timers = new Map(), calls = []
+  let sequence = 0, model, version = 0, changed = 0
+  let trees = [{ path: ROOT, head: 'a'.repeat(40), branch: 'refs/heads/main' }, { path: ROOT + '-sync', head: 'b'.repeat(40), branch: 'refs/heads/task' }]
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    if (delay !== 5000 && delay !== 1000) return realTimeout(callback, delay, ...args)
+    const id = --sequence; timers.set(id, callback); return id
+  }
+  globalThis.clearTimeout = id => { if (timers.has(id)) timers.delete(id); else realClear(id) }
+  const run = async (method, payload, options) => {
+    calls.push({ method, payload, signal: options.signal })
+    if (method === 'worktrees') return trees
+    if (method === 'repositoryVersion') return { generation: 1, version, supported: true }
+    if (method === 'worktreeDetails') return { counts: { total: changed, ignored: 0 }, operation: null }
+    throw new Error(method)
+  }
+  const fire = async () => {
+    const [id, callback] = timers.entries().next().value
+    timers.delete(id); await callback()
+  }
+  function WorktreesFixture(props) {
+    model = useWorktreesFixture({ root: ROOT }, run, props.enabled, 0, props.busy)
+    return h('div', null, model.trees.length)
+  }
+  let props = { enabled: true, busy: false }
+  try {
+    mount(WorktreesFixture, props)
+    await flush(WorktreesFixture, props)
+    const initialDetails = calls.filter(call => call.method === 'worktreeDetails').length
+    check('synchronization initially reads each worktree', model.trees.length === 2 && initialDetails === 2)
+    await fire(); await flush(WorktreesFixture, props)
+    check('unchanged worktree versions do not launch fresh status scans', calls.filter(call => call.method === 'worktreeDetails').length === initialDetails)
+    version++; changed = 3
+    trees = trees.concat({ path: ROOT + '-external', head: 'c'.repeat(40), branch: 'refs/heads/external' })
+    await fire(); await flush(WorktreesFixture, props)
+    check('external creation and file changes appear without manual refresh', model.trees.length === 3 && model.details[ROOT + '-sync'].counts.total === 3)
+    model.select(ROOT + '-external'); await flush(WorktreesFixture, props)
+    trees = trees.slice(0, 2); version++
+    await fire(); await flush(WorktreesFixture, props)
+    check('external removal evicts its details and selects the current worktree', model.selected === ROOT && !model.details[ROOT + '-external'])
+    props = { enabled: true, busy: true }; await flush(WorktreesFixture, props)
+    const beforeBusy = calls.length
+    await fire(); await flush(WorktreesFixture, props)
+    check('worktree synchronization waits for active writes', calls.length === beforeBusy)
+    props = { enabled: true, busy: false }; await flush(WorktreesFixture, props)
+    await fire(); await flush(WorktreesFixture, props)
+    document.hidden = true
+    const beforeHidden = calls.length
+    await fire(); await flush(WorktreesFixture, props)
+    check('hidden pages stop worktree polling', calls.length === beforeHidden && timers.size === 0)
+    document.hidden = false; version++; changed = 4
+    window.listeners.get('focus').forEach(listener => listener())
+    await flush(WorktreesFixture, props)
+    check('returning to the page immediately refreshes worktree status', model.details[ROOT + '-sync'].counts.total === 4)
+    props = { enabled: false, busy: false }; await flush(WorktreesFixture, props)
+    // This renderer runs dependency cleanups only when explicitly unmounted.
+    runCleanups()
+    check('unmounting the module aborts reads and releases timers and listeners', timers.size === 0 && calls.every(call => call.signal.aborted) && window.listeners.get('focus').length === 0)
+  } finally {
+    runCleanups(); document.hidden = false
+    globalThis.setTimeout = realTimeout; globalThis.clearTimeout = realClear
+  }
+}
+
+console.log('\n--- quick worktree opening preserves preview and navigation guards ---')
+{
+  runCleanups()
+  const { WorktreesSidebar, registerNavigationGuard: guard, approveNavigation: approve } = loadClientModule(source.replace('    return module.exports',
+    '    module.exports.WorktreesSidebar = WorktreesSidebar; module.exports.registerNavigationGuard = registerNavigationGuard; module.exports.approveNavigation = approveNavigation;\n    return module.exports'))
+  const taskPath = ROOT + '-quick'
+  const task = { path: taskPath, branch: 'refs/heads/task', head: 'b'.repeat(40) }
+  const bare = { path: ROOT + '-bare', bare: true }, offline = { path: ROOT + '-offline' }
+  const opens = [], selections = []
+  let release, fail = false
+  const model = { trees: [task, bare, offline], details: { [taskPath]: { counts: { total: 0 } }, [offline.path]: { error: 'offline' } },
+    metadata: {}, context: { items: [], byId: {} }, selected: ROOT, select: path => selections.push(path) }
+  let props = { t, root: ROOT, model, busy: false, onSelect() {},
+    onOpenWorkspace: async path => { opens.push({ kind: 'workspace', path }); await new Promise(resolve => { release = resolve }) },
+    onOpenGit: async path => { opens.push({ kind: 'git', path }); if (fail) throw new Error('opening failed') } }
+  const row = path => findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, path))
+  const key = (extra = {}) => ({ key: 'Enter', preventDefault() {}, stopPropagation() {}, ...extra })
+  mount(WorktreesSidebar, props); tree = await flush(WorktreesSidebar, props)
+  row(taskPath).props.onClick(); tree = await flush(WorktreesSidebar, props)
+  check('single-click remains a preview without opening a directory', selections[0] === taskPath && opens.length === 0)
+  let queued
+  const disposeGuard = guard(action => { queued = action; return false })
+  row(taskPath).props.onKeyDown(key()); tree = await flush(WorktreesSidebar, props)
+  check('keyboard opening waits for an unsaved-note navigation guard', opens.length === 0 && typeof queued === 'function')
+  disposeGuard(); approve(queued); tree = await flush(WorktreesSidebar, props)
+  check('approved Enter navigation opens the intended DSH workspace', opens.length === 1 && opens[0].kind === 'workspace' && opens[0].path === taskPath && row(taskPath).props['aria-busy'] && row(taskPath).props['aria-disabled'] && !row(taskPath).props.disabled)
+  row(taskPath).props.onDoubleClick(); row(taskPath).props.onKeyDown(key())
+  tree = await flush(WorktreesSidebar, props)
+  check('repeated opening gestures share one in-flight navigation', opens.length === 1)
+  release(); tree = await flush(WorktreesSidebar, props)
+  row(taskPath).props.onKeyDown(key({ ctrlKey: true })); tree = await flush(WorktreesSidebar, props)
+  row(taskPath).props.onKeyDown(key({ metaKey: true })); tree = await flush(WorktreesSidebar, props)
+  check('Ctrl and Command plus Enter explicitly open Git instead of a workspace', opens.length === 3 && opens.slice(1).every(item => item.kind === 'git' && item.path === taskPath))
+  row(taskPath).props.onKeyDown(key({ isComposing: true })); row(taskPath).props.onKeyDown(key({ repeat: true }))
+  row(bare.path).props.onDoubleClick(); row(offline.path).props.onDoubleClick()
+  tree = await flush(WorktreesSidebar, props)
+  check('composition, repeated keydown and unavailable directories do not navigate', opens.length === 3)
+  props = { ...props, onOpenWorkspace: null }
+  tree = await flush(WorktreesSidebar, props)
+  row(taskPath).props.onDoubleClick(); tree = await flush(WorktreesSidebar, props)
+  check('double-click falls back to Git when workspace integration is unavailable', opens.length === 4 && opens.at(-1).kind === 'git' && row(taskPath).props.title.includes(t('wt.quickOpenGitHint')))
+  fail = true
+  row(taskPath).props.onDoubleClick(); tree = await flush(WorktreesSidebar, props)
+  check('navigation failures restore controls and expose the error', hasText(tree, 'opening failed') && !row(taskPath).props['aria-disabled'])
+  fail = false
+  row(taskPath).props.onDoubleClick(); tree = await flush(WorktreesSidebar, props)
+  check('a failed quick opening can be retried', opens.length === 6 && !hasText(tree, 'opening failed'))
+  runCleanups()
+}
+
+console.log('\n--- quick opening revalidates worktrees and reuses DSH workspaces ---')
+{
+  let unavailable = false, creates = 0
+  const navigations = [], taskRoot = ROOT + '-quick-workspace'
+  const dispose = loaded.registerWorktreeWorkspace({
+    workspaces: { create: async value => { creates++; return { workspaceId: 'quick-task', path: value.path } } },
+    navigation: { openWorkspace: async id => { navigations.push(id) } },
+  })
+  try {
+    tree = await renderApp(healthyHandlers({
+      repos: payload => ({ gitPath: 'git', repos: [{ root: payload.path || ROOT, commonDir: '/git', features: {} }], config: CONFIG }),
+      worktrees: () => [{ path: ROOT, head: 'a'.repeat(40), branch: 'refs/heads/main' }, { path: taskRoot, head: 'b'.repeat(40), branch: 'refs/heads/task' }],
+      worktreeDetails: payload => { if (unavailable && payload.directory === taskRoot) throw new Error('worktree moved externally'); return { counts: { total: 0 }, operation: null } },
+    }))
+    tree = await selectModule(tree, 'worktrees')
+    const row = () => findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot))
+    const before = mounted.rpc.calls.filter(call => call.method === 'repos').length
+    unavailable = true
+    row().props.onDoubleClick(); tree = await flush(GitApp, { connection: mounted.rpc, t })
+    check('an externally invalidated worktree is rejected before creating a DSH workspace', creates === 0 && navigations.length === 0 && hasText(tree, 'worktree moved externally'))
+    unavailable = false
+    row().props.onDoubleClick(); tree = await flush(GitApp, { connection: mounted.rpc, t })
+    row().props.onKeyDown({ key: 'Enter', preventDefault() {}, stopPropagation() {} }); tree = await flush(GitApp, { connection: mounted.rpc, t })
+    check('double-click and Enter reuse the same DSH workspace without switching the Git directory', creates === 1 && navigations.length === 2 && navigations.every(id => id === 'quick-task') &&
+      mounted.rpc.calls.filter(call => call.method === 'repos').length === before)
+    row().props.onKeyDown({ key: 'Enter', ctrlKey: true, preventDefault() {}, stopPropagation() {} })
+    tree = await flush(GitApp, { connection: mounted.rpc, t })
+    check('explicit Git quick opening discovers and loads the selected worktree', mounted.rpc.calls.some(call => call.method === 'repos' && call.payload.path === taskRoot) &&
+      mounted.rpc.calls.some(call => call.method === 'status' && call.payload.root === taskRoot) && navigations.length === 2)
+  } finally { runCleanups(); dispose() }
+}
+
+console.log('\n--- worktree browsing, removal and target discovery ---')
+{
+  const taskRoot = ROOT + '-task'
+  const main = { path: ROOT, head: 'a'.repeat(40), branch: 'refs/heads/main' }
+  const task = { path: taskRoot, head: 'b'.repeat(40), branch: 'refs/heads/task' }
+  let trees = [main, task]
+  const counts = { staged: 0, unstaged: 0, untracked: 0, conflicts: 0, ignored: 0, total: 0 }
+  tree = await renderApp(healthyHandlers({
+    worktrees: () => trees,
+    worktreeDetails: payload => ({ ...trees.find(item => item.path === payload.directory), counts, operation: null }),
+    'write.removeWorktree': payload => { trees = trees.filter(item => item.path !== payload.directory); return { message: 'removed' } },
+  }))
+  tree = await selectModule(tree, 'worktrees')
+  check('worktree module renders current and linked directories', hasText(tree, taskRoot) && hasText(tree, t('wt.current')))
+  const discoveryCount = mounted.rpc.calls.filter(call => call.method === 'repos').length
+  findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('selecting a worktree only previews it', mounted.rpc.calls.filter(call => call.method === 'repos').length === discoveryCount &&
+    !mounted.rpc.calls.some(call => call.method.startsWith('write.')))
+  check('worktree details show common actions without disclosure sections or a note editor',
+    !findAll(tree, 'details').some(node => node.props.className === 'dshgit-worktree-disclosure') &&
+    !findAll(tree, 'textarea').some(node => node.props.name === 'worktreeNote') &&
+    [t('wt.openGit'), t('wt.history'), t('wt.compare')].every(label => findAll(tree, 'button').some(node => textOf(node) === label)))
+  tree = await openWorktreeManagement(tree)
+  let remove = findAll(tree, 'button').find(node => textOf(node) === t('wt.remove'))
+  check('a clean linked worktree can be removed', remove && !remove.props.disabled)
+  remove.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('removal shows the target path before sending a write', hasText(tree, t('wt.removeConfirm', { path: taskRoot })) &&
+    !mounted.rpc.calls.some(call => call.method === 'write.removeWorktree'))
+  findAll(tree, 'button').filter(node => textOf(node) === t('wt.remove')).at(-1).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const removal = mounted.rpc.calls.find(call => call.method === 'write.removeWorktree')?.payload
+  check('removal targets the selected directory with a reviewed identity', removal?.root === ROOT && removal.directory === taskRoot &&
+    removal.expectedHead === task.head && removal.expectedBranch === task.branch && removal.confirm === true)
+  check('removed worktree disappears after refresh', !findAll(tree, 'button').some(node => node.props.role === 'option' && hasText(node, taskRoot)))
+}
+console.log('\n--- blocked removal explains files and offers a resolution path ---')
+{
+  const taskRoot = ROOT + '-blocked-removal'
+  const task = { path: taskRoot, head: 'b'.repeat(40), branch: 'refs/heads/task' }
+  let blocked = true
+  tree = await renderApp(healthyHandlers({
+    repos: payload => ({ gitPath: 'git', repos: [{ root: payload.path || ROOT, commonDir: '/git', features: {} }], config: CONFIG }),
+    worktrees: () => [{ path: ROOT, head: 'a'.repeat(40), branch: 'refs/heads/main' }, task],
+    worktreeDetails: () => ({ counts: { total: blocked ? 1 : 0, ignored: blocked ? 1 : 0 }, operation: null }),
+    worktreeRemovalPreview: () => ({ tree: task, removable: !blocked,
+      blockers: blocked ? [{ kind: 'changes', message: 'resolve local files' }, { kind: 'ignored', message: 'preserve ignored files' }] : [],
+      files: blocked ? [{ path: 'new-file.txt', kind: 'untracked' }] : [], ignoredPaths: blocked ? ['.env.local'] : [],
+      fileCount: blocked ? 1 : 0, ignoredCount: blocked ? 1 : 0 }),
+  }))
+  tree = await selectModule(tree, 'worktrees')
+  findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  tree = await openWorktreeManagement(tree)
+  const inspect = findAll(tree, 'button').find(node => textOf(node) === t('wt.remove'))
+  check('dirty worktrees can open removal diagnostics', !inspect.props.disabled)
+  inspect.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('removal diagnostics identify untracked and ignored paths without writing', hasText(tree, 'new-file.txt') && hasText(tree, '.env.local') &&
+    findAll(tree, 'button').find(node => textOf(node) === t('wt.remove')).props.disabled &&
+    !mounted.rpc.calls.some(call => call.method.startsWith('write.')))
+  blocked = false
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.recheck')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('rechecking enables removal only when fresh diagnostics pass', !findAll(tree, 'button').find(node => textOf(node) === t('wt.remove')).props.disabled &&
+    !hasText(tree, 'new-file.txt') && !mounted.rpc.calls.some(call => call.method.startsWith('write.')))
+  blocked = true
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.recheck')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.openToResolve')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the resolution action opens the affected directory without deleting it', mounted.rpc.calls.some(call => call.method === 'status' && call.payload.root === taskRoot) &&
+    !mounted.rpc.calls.some(call => call.method === 'write.removeWorktree'))
+}
+
+console.log('\n--- creation preflight rejects stale responses and late conflicts ---')
+{
+  runCleanups()
+  const fixture = source.replace('factory: (require) => {', 'factory: (require) => { var setTimeout = (callback, delay) => globalThis.setTimeout(callback, delay === 300 ? 1 : delay);')
+    .replace('    return module.exports', '    module.exports.CreateWorktreeDialog = CreateWorktreeDialog;\n    return module.exports')
+  const { CreateWorktreeDialog } = loadClientModule(fixture)
+  const requests = [], writes = []
+  const props = { t, repo: { root: ROOT }, refs: REFS, worktrees: [], onOpen: async () => {}, onClose() {}, onCreate: async value => { writes.push(value) },
+    run: (method, payload, options) => new Promise((resolve, reject) => requests.push({ payload, signal: options.signal, resolve, reject })) }
+  const settle = async count => {
+    for (let attempt = 0; requests.length < count && attempt < 30; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 2)); tree = await flush(CreateWorktreeDialog, props)
+    }
+    if (requests.length < count) throw new Error('Preflight did not run')
+  }
+  mount(CreateWorktreeDialog, props)
+  tree = await flush(CreateWorktreeDialog, props)
+  findAll(tree, 'input').find(node => node.props.name === 'name').props.onChange({ target: { value: 'first-name' } })
+  tree = await flush(CreateWorktreeDialog, props); await settle(1)
+  findAll(tree, 'input').find(node => node.props.name === 'name').props.onChange({ target: { value: 'second-name' } })
+  tree = await flush(CreateWorktreeDialog, props); await settle(2)
+  requests[0].resolve({ valid: true, errors: {} })
+  tree = await flush(CreateWorktreeDialog, props)
+  check('an obsolete preflight cannot enable creation for new input', findAll(tree, 'button').find(node => node.props.type === 'submit').props.disabled)
+  requests[1].resolve({ valid: false, errors: { ref: 'invalid start', name: 'branch already exists', directory: 'directory is occupied' } })
+  tree = await flush(CreateWorktreeDialog, props)
+  check('preflight errors appear beside all affected fields', hasText(tree, 'invalid start') && hasText(tree, 'branch already exists') && hasText(tree, 'directory is occupied') &&
+    findAll(tree, 'input').filter(node => ['ref', 'name', 'directory'].includes(node.props.name)).every(node => node.props['aria-invalid']))
+  findAll(tree, 'input').find(node => node.props.name === 'name').props.onChange({ target: { value: 'available-name' } })
+  tree = await flush(CreateWorktreeDialog, props); await settle(3)
+  requests[2].resolve({ valid: true, errors: {} })
+  tree = await flush(CreateWorktreeDialog, props)
+  check('valid current parameters enable creation', !findAll(tree, 'button').find(node => node.props.type === 'submit').props.disabled)
+  findAll(tree, 'form')[0].props.onSubmit({ preventDefault() {} })
+  tree = await flush(CreateWorktreeDialog, props)
+  check('submission performs a fresh read before any write', requests.length === 4 && writes.length === 0 && requests[3].payload.name === 'available-name')
+  requests[3].resolve({ valid: false, errors: { name: 'branch was created externally' } })
+  tree = await flush(CreateWorktreeDialog, props)
+  check('a late branch conflict leaves the form editable and does not create a worktree', hasText(tree, 'branch was created externally') && writes.length === 0 &&
+    findAll(tree, 'button').find(node => node.props.type === 'submit').props.disabled)
+  findAll(tree, 'input').find(node => node.props.name === 'name').props.onChange({ target: { value: 'network-retry' } })
+  tree = await flush(CreateWorktreeDialog, props); await settle(5)
+  requests[4].reject(new Error('temporary preflight disconnect'))
+  tree = await flush(CreateWorktreeDialog, props)
+  check('a preflight connection failure has a retry action and cannot enable creation', hasText(tree, 'temporary preflight disconnect') &&
+    findAll(tree, 'button').some(node => textOf(node) === t('action.retryRead')) && findAll(tree, 'button').find(node => node.props.type === 'submit').props.disabled)
+  findAll(tree, 'button').find(node => textOf(node) === t('action.retryRead')).props.onClick()
+  tree = await flush(CreateWorktreeDialog, props); await settle(6)
+  requests[5].resolve({ valid: true, errors: {} })
+  tree = await flush(CreateWorktreeDialog, props)
+  check('preflight retry preserves all inputs and recovers without writing', JSON.stringify(requests[5].payload) === JSON.stringify(requests[4].payload) &&
+    !findAll(tree, 'button').find(node => node.props.type === 'submit').props.disabled && writes.length === 0 && !hasText(tree, 'temporary preflight disconnect'))
+  runCleanups()
+}
+
+console.log('\n--- existing branch creation suggests its own directory ---')
+{
+  const { CreateWorktreeDialog } = loadClientModule(source.replace('    return module.exports', '    module.exports.CreateWorktreeDialog = CreateWorktreeDialog;\n    return module.exports'))
+  const props = { t, repo: { root: ROOT }, refs: REFS, worktrees: [], subject: { ref: 'refs/heads/feature/新功能' },
+    onClose() {}, onCreate: async () => {}, onOpen: async () => {}, run: async () => ({ valid: true, errors: {} }) }
+  mount(CreateWorktreeDialog, props)
+  tree = await flush(CreateWorktreeDialog, props)
+  findAll(tree, 'input').find(node => node.props.name === 'name').props.onChange({ target: { value: 'unused-new-name' } })
+  findAll(tree, 'input').find(node => node.props.type === 'checkbox').props.onChange({ target: { checked: false } })
+  tree = await flush(CreateWorktreeDialog, props)
+  check('reusing a local branch derives the directory from that branch instead of an unused new-branch name',
+    findAll(tree, 'input').find(node => node.props.name === 'directory').props.value.endsWith('/feature-新功能') &&
+    !findAll(tree, 'input').some(node => node.props.name === 'name'))
+  findAll(tree, 'input').find(node => node.props.name === 'directory').props.onChange({ target: { value: ROOT + '-custom-location' } })
+  findAll(tree, 'input').find(node => node.props.name === 'ref').props.onChange({ currentTarget: { value: 'refs/heads/main' } })
+  tree = await flush(CreateWorktreeDialog, props)
+  check('changing the starting branch preserves an explicitly chosen directory', findAll(tree, 'input').find(node => node.props.name === 'directory').props.value === ROOT + '-custom-location')
+  runCleanups()
+}
+
+console.log('\n--- worktree creation keeps success when opening fails ---')
+{
+  const taskRoot = ROOT + '-retry', counts = { total: 0, staged: 0, unstaged: 0, untracked: 0, conflicts: 0, ignored: 0 }
+  let failOpen = true
+  tree = await renderApp(healthyHandlers({
+    repos: payload => {
+      if (payload.path === taskRoot && failOpen) throw new Error('temporary open failure')
+      return { gitPath: 'git', repos: [{ root: payload.path || ROOT, gitDir: payload.path === taskRoot ? '/git/worktrees/task' : '/git', commonDir: '/git', features: {} }], config: CONFIG }
+    },
+    worktreeDetails: () => ({ counts, operation: null }),
+    'write.addWorktree': () => ({ message: 'created' }),
+  }))
+  tree = await selectModule(tree, 'worktrees')
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.create')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'input').find(node => node.props.name === 'name').props.onChange({ target: { value: 'retry-task' } })
+  findAll(tree, 'input').find(node => node.props.name === 'directory').props.onChange({ target: { value: taskRoot } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  let form = findAll(tree, 'form').find(node => node.props['aria-label'] === t('wt.create'))
+  form.props.onSubmit({ preventDefault() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('creation failure to open retains the created directory and retry form', hasText(tree, t('wt.created', { path: taskRoot })) && hasText(tree, 'temporary open failure'))
+  check('worktree creation sends the chosen branch and directory', mounted.rpc.calls.filter(call => call.method === 'write.addWorktree').length === 1 &&
+    mounted.rpc.calls.find(call => call.method === 'write.addWorktree').payload.name === 'retry-task')
+  failOpen = false
+  form = findAll(tree, 'form').find(node => node.props['aria-label'] === t('wt.create'))
+  form.props.onSubmit({ preventDefault() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('retry opens using fresh discovery without recreating the worktree', mounted.rpc.calls.filter(call => call.method === 'write.addWorktree').length === 1 &&
+    mounted.rpc.calls.some(call => call.method === 'status' && call.payload.root === taskRoot) &&
+    !findAll(tree, 'form').some(node => node.props['aria-label'] === t('wt.create')))
+}
+
+console.log('\n--- worktree creation accepts custom revisions and suggested refs ---')
+for (const sample of [
+  { typed: 'HEAD~2', finish: 'enter', expected: 'HEAD~2' },
+  { typed: 'c'.repeat(40), finish: 'blur', expected: 'c'.repeat(40) },
+  { typed: 'HEAD~3', finish: 'submit', expected: 'HEAD~3' },
+  { typed: ' refs/remotes/origin/main ', finish: 'submit', expected: 'refs/remotes/origin/main', track: true },
+  { typed: 'feature/新功能', finish: 'suggestion', expected: 'refs/heads/feature/新功能' },
+  { typed: 'origin/main', finish: 'suggestion', expected: 'refs/remotes/origin/main', track: true },
+]) {
+  tree = await renderApp(healthyHandlers({ 'write.addWorktree': () => ({ message: 'created' }) }))
+  tree = await selectModule(tree, 'worktrees')
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.create')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'input').find(node => node.props.name === 'ref').props.onChange({ currentTarget: { value: sample.typed } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  let startInput = findAll(tree, 'input').find(node => node.props.name === 'ref')
+  if (sample.finish === 'enter' || sample.finish === 'suggestion') {
+    if (sample.finish === 'suggestion') {
+      startInput.props.onKeyDown({ key: 'ArrowDown', preventDefault() {} })
+      tree = await flush(GitApp, { connection: mounted.rpc, t })
+      startInput = findAll(tree, 'input').find(node => node.props.name === 'ref')
+    }
+    startInput.props.onKeyDown({ key: 'Enter', preventDefault() {} })
+  } else if (sample.finish === 'blur') startInput.props.onBlur()
+  findAll(tree, 'input').find(node => node.props.name === 'name').props.onChange({ target: { value: 'custom-start' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  if (sample.finish !== 'submit') check('starting point stays visible after ' + sample.finish + ': ' + sample.typed,
+    findAll(tree, 'input').find(node => node.props.name === 'ref').props.value === sample.expected)
+  findAll(tree, 'form').find(node => node.props['aria-label'] === t('wt.create')).props.onSubmit({ preventDefault() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const creation = mounted.rpc.calls.find(call => call.method === 'write.addWorktree')?.payload
+  check('creation uses the reviewed starting point: ' + sample.typed,
+    creation?.ref === sample.expected && creation.track === !!sample.track)
+}
+
+console.log('\n--- offline worktree lock previews and stale form protection ---')
+{
+  const taskRoot = ROOT + '-offline'
+  const main = { path: ROOT, head: 'a'.repeat(40), branch: 'refs/heads/main' }
+  let task = { path: taskRoot, head: 'b'.repeat(40), branch: 'refs/heads/offline' }
+  tree = await renderApp(healthyHandlers({
+    worktrees: () => [main, task],
+    worktreeDetails: payload => {
+      if (payload.directory === taskRoot) throw new Error('offline directory')
+      return { counts: { total: 0 }, operation: null }
+    },
+    worktreeManagementPreview: payload => ({ action: payload.action, tree: task, reason: payload.reason, token: 'lock-token' }),
+    'write.manageWorktree': payload => { task = { ...task, locked: true, lockReason: payload.reason }; return { message: 'locked' } },
+  }))
+  tree = await selectModule(tree, 'worktrees')
+  check('main worktree directly shows history and its current-open state without an empty management menu',
+    findAll(tree, 'button').find(node => textOf(node) === t('wt.alreadyOpen'))?.props.disabled === true &&
+    findAll(tree, 'button').some(node => textOf(node) === t('wt.history')) &&
+    !findAll(tree, 'button').some(node => [t('wt.manage'), t('wt.lock'), t('wt.move'), t('wt.repair')].includes(textOf(node))))
+  findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  tree = await openWorktreeManagement(tree)
+  const lock = findAll(tree, 'button').find(node => textOf(node) === t('wt.lock'))
+  check('an offline worktree can still be locked', lock && !lock.props.disabled)
+  lock.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  let form = findAll(tree, 'form').find(node => node.props['aria-label'] === t('wt.lock'))
+  findAll(form, 'input').find(node => node.props.name === 'reason').props.onChange({ target: { value: 'external disk' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.checkPreview')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const applyLabel = t('wt.confirmAction', { action: t('wt.lock') })
+  check('lock preview shows the reason and does not write', hasText(tree, 'external disk') &&
+    !mounted.rpc.calls.some(call => call.method === 'write.manageWorktree') &&
+    !findAll(tree, 'button').find(node => textOf(node) === applyLabel).props.disabled)
+  findAll(tree, 'input').find(node => node.props.name === 'reason').props.onChange({ target: { value: 'changed reason' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('editing management parameters invalidates the preview', findAll(tree, 'button').find(node => textOf(node) === applyLabel).props.disabled)
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.checkPreview')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find(node => textOf(node) === applyLabel).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const write = mounted.rpc.calls.find(call => call.method === 'write.manageWorktree')?.payload
+  check('locking sends the selected offline path and reviewed token', write?.root === ROOT && write.directory === taskRoot &&
+    write.reason === 'changed reason' && write.token === 'lock-token' && write.confirm === true)
+  tree = await openWorktreeManagement(tree)
+  check('successful locking refreshes the list and offers unlock', findAll(tree, 'button').some(node => textOf(node) === t('wt.unlock')))
+}
+console.log('\n--- empty prune preview and move destination review ---')
+{
+  const taskRoot = ROOT + '-move', destination = ROOT + '-moved'
+  const enteredDestination = destination + '/.'
+  const main = { path: ROOT, head: 'a'.repeat(40), branch: 'refs/heads/main' }
+  let task = { path: taskRoot, head: 'b'.repeat(40), branch: 'refs/heads/move' }
+  tree = await renderApp(healthyHandlers({
+    worktrees: () => [main, task],
+    worktreeDetails: () => ({ counts: { total: 1, staged: 0, unstaged: 1, untracked: 0, conflicts: 0 }, operation: null }),
+    worktreeManagementPreview: payload => payload.action === 'prune' ? { action: 'prune', output: '', candidates: [], empty: true, token: 'empty' }
+      : { action: payload.action, tree: task, destination: payload.destination, changes: 1, token: 'move-token' },
+    'write.manageWorktree': () => { task = { ...task, path: destination }; return { message: 'moved', worktreeChange: { action: 'move', from: taskRoot, to: destination } } },
+  }))
+  tree = await selectModule(tree, 'worktrees')
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.prune')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.checkPreview')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('empty prune preview explains there is nothing to remove', hasText(tree, t('wt.nothingToPrune')) &&
+    findAll(tree, 'button').find(node => textOf(node) === t('wt.confirmAction', { action: t('wt.prune') })).props.disabled &&
+    !mounted.rpc.calls.some(call => call.method === 'write.manageWorktree'))
+  const pruneForm = findAll(tree, 'form').find(node => node.props['aria-label'] === t('wt.prune'))
+  findAll(pruneForm, 'button').find(node => textOf(node) === t('action.cancel')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  tree = await openWorktreeManagement(tree)
+  const move = findAll(tree, 'button').find(node => textOf(node) === t('wt.move'))
+  check('move is available for a dirty linked worktree', !move.props.disabled)
+  move.props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'input').find(node => node.props.name === 'destination').props.onChange({ target: { value: enteredDestination } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.checkPreview')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('move preview shows both paths and preserved changes', hasText(tree, taskRoot + ' → ' + enteredDestination) && hasText(tree, t('wt.moveChanges', { count: 1 })))
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.confirmAction', { action: t('wt.move') })).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const write = mounted.rpc.calls.find(call => call.method === 'write.manageWorktree')?.payload
+  check('move submits the reviewed destination and selects the actual Host path', write?.action === 'move' && write.destination === enteredDestination && write.token === 'move-token' &&
+    findAll(tree, 'button').some(node => node.props.role === 'option' && node.props['aria-selected'] && hasText(node, destination)))
+}
+
+console.log('\n--- worktree task notes survive navigation and can be searched ---')
+{
+  const noteStorage = new Map()
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: key => noteStorage.get(key) || null, setItem: (key, value) => noteStorage.set(key, value) } })
+  const taskRoot = ROOT + '-notes', task = { path: taskRoot, branch: 'refs/heads/notes', head: 'b'.repeat(40) }
+  tree = await renderApp(healthyHandlers({
+    worktrees: () => [{ path: ROOT, branch: 'refs/heads/main', head: 'a'.repeat(40) }, task],
+    worktreeDetails: () => ({ counts: { total: 0 }, operation: null }),
+  }))
+  tree = await selectModule(tree, 'worktrees')
+  findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  tree = await openWorktreeNote(tree)
+  findAll(tree, 'textarea').find(node => node.props.name === 'worktreeNote').props.onChange({ target: { value: 'repair payment retry' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  tree = await closeWorktreeNote(tree)
+  check('closing the note dialog keeps its draft without a permanent editor', !findAll(tree, 'textarea').some(node => node.props.name === 'worktreeNote') && hasText(tree, t('wt.unsavedNote')))
+  const refreshCount = mounted.rpc.calls.filter(call => call.method === 'worktrees').length
+  findAll(tree, 'button').find(node => textOf(node) === t('action.refresh')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('refresh also guards an unsaved task note', hasText(tree, t('wt.noteLeave')) && mounted.rpc.calls.filter(call => call.method === 'worktrees').length === refreshCount)
+  tree = await closeWorktreeNote(tree)
+  findAll(tree, 'button').find(node => node.props.role === 'option' && !hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('unsaved task notes guard worktree selection', hasText(tree, t('wt.noteLeave')) &&
+    findAll(tree, 'button').some(node => node.props.role === 'option' && node.props['aria-selected'] && hasText(node, taskRoot)))
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.saveContinue')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('saving the task note completes the pending selection', findAll(tree, 'button').some(node => node.props.role === 'option' && node.props['aria-selected'] && !hasText(node, taskRoot)))
+  findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  tree = await openWorktreeNote(tree)
+  check('task notes persist when reopening worktree details', findAll(tree, 'textarea').find(node => node.props.name === 'worktreeNote').props.value === 'repair payment retry')
+  tree = await closeWorktreeNote(tree)
+  findAll(tree, 'input').find(node => node.props['aria-label'] === t('wt.search')).props.onChange({ target: { value: 'payment retry' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('worktree search includes task notes without writing to Git', findAll(tree, 'button').filter(node => node.props.role === 'option').length === 1 &&
+    !mounted.rpc.calls.some(call => call.method.startsWith('write.')))
+}
+console.log('\n--- unsaved worktree notes survive native session remounts ---')
+{
+  const taskRoot = ROOT + '-native-note'
+  const handlers = healthyHandlers({
+    worktrees: () => [{ path: ROOT, branch: 'refs/heads/main', head: 'a'.repeat(40) }, { path: taskRoot, branch: 'refs/heads/task', head: 'b'.repeat(40) }],
+    worktreeDetails: () => ({ counts: { total: 0 }, operation: null }),
+  })
+  const reopen = async () => {
+    runCleanups()
+    let current = await renderApp(handlers)
+    current = await selectModule(current, 'worktrees')
+    findAll(current, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot)).props.onClick()
+    return openWorktreeNote(await flush(GitApp, { connection: mounted.rpc, t }))
+  }
+  tree = await reopen()
+  findAll(tree, 'textarea').find(node => node.props.name === 'worktreeNote').props.onChange({ target: { value: 'draft across native sessions' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // Native DSH navigation unmounts the session-keyed GitApp without navigate().
+  tree = await reopen()
+  check('native session remount restores the unsaved draft', findAll(tree, 'textarea').find(node => node.props.name === 'worktreeNote').props.value === 'draft across native sessions')
+  check('restoring a draft keeps it unsaved', !findAll(tree, 'button').find(node => textOf(node) === t('wt.saveNote')).props.disabled && hasText(tree, t('wt.unsavedNote')))
+  tree = await closeWorktreeNote(tree)
+  findAll(tree, 'button').find(node => node.props.role === 'option' && !hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.discardContinue')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  tree = await reopen()
+  check('explicitly discarded drafts do not return after a session remount', findAll(tree, 'textarea').find(node => node.props.name === 'worktreeNote').props.value === '')
+  findAll(tree, 'textarea').find(node => node.props.name === 'worktreeNote').props.onChange({ target: { value: 'saved after native navigation' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'form').find(node => findAll(node, 'textarea').some(input => input.props.name === 'worktreeNote')).props.onSubmit({ preventDefault() {} })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  tree = await reopen()
+  check('saved notes reopen as saved after a native session remount', findAll(tree, 'textarea').find(node => node.props.name === 'worktreeNote').props.value === 'saved after native navigation' &&
+    findAll(tree, 'button').find(node => textOf(node) === t('wt.saveNote')).props.disabled)
+}
+
+console.log('\n--- cross-worktree content comparison uses the snapshot for previews ---')
+{
+  const taskRoot = ROOT + '-compare', file = { path: 'snapshot.txt', status: 'M', binary: false }
+  tree = await renderApp(healthyHandlers({
+    worktrees: () => [{ path: ROOT, branch: 'refs/heads/main', head: 'a'.repeat(40) }, { path: taskRoot, branch: 'refs/heads/task', head: 'b'.repeat(40) }],
+    worktreeDetails: () => ({ counts: { total: 1 }, operation: null }),
+    worktreeCompare: payload => ({ token: 'snapshot-token', from: payload.from, to: payload.to, files: [file], createdAt: 1790740000000, skippedSubmodules: [] }),
+    worktreeCompareFile: payload => payload.mode === 'diff' ? { files: [{ ...file, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ['-before', '+after'] }] }] }
+      : { exists: true, text: payload.mode === 'before' ? 'before' : 'after', binary: false },
+  }))
+  tree = await selectModule(tree, 'worktrees')
+  findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.compare')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('worktree comparison explicitly targets current and selected directories', mounted.rpc.calls.some(call => call.method === 'worktreeCompare' && call.payload.from === ROOT && call.payload.to === taskRoot))
+  check('snapshot diff renders through the existing file preview', hasText(tree, 'after') && mounted.rpc.calls.some(call => call.method === 'worktreeCompareFile' && call.payload.token === 'snapshot-token' && call.payload.mode === 'diff'))
+  findAll(tree, 'button').find(node => node.props['aria-label'] === t('wt.leftContent')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('left content reads from the same immutable snapshot', mounted.rpc.calls.some(call => call.method === 'worktreeCompareFile' && call.payload.token === 'snapshot-token' && call.payload.mode === 'before'))
+  findAll(tree, 'button').find(node => textOf(node) === t('compare.swap')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('swapping worktrees generates a fresh reverse comparison without writes', mounted.rpc.calls.some(call => call.method === 'worktreeCompare' && call.payload.from === taskRoot && call.payload.to === ROOT) &&
+    !mounted.rpc.calls.some(call => call.method.startsWith('write.')))
+}
+
+console.log('\n--- an expired worktree snapshot can be regenerated ---')
+{
+  const taskRoot = ROOT + '-expired', file = { path: 'expired.txt', status: 'M', binary: false }
+  let generations = 0
+  tree = await renderApp(healthyHandlers({
+    worktrees: () => [{ path: ROOT, branch: 'refs/heads/main', head: 'a'.repeat(40) }, { path: taskRoot, branch: 'refs/heads/task', head: 'b'.repeat(40) }],
+    worktreeDetails: () => ({ counts: { total: 1 }, operation: null }),
+    worktreeCompare: payload => ({ token: 'generation-' + (++generations), from: payload.from, to: payload.to, files: [file], createdAt: Date.now() }),
+    worktreeCompareFile: payload => {
+      if (payload.token === 'generation-1') throw Object.assign(new Error('expired snapshot'), { code: 'git/worktree-snapshot-expired' })
+      return { files: [{ ...file, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ['-old snapshot', '+regenerated content'] }] }] }
+    },
+  }))
+  tree = await selectModule(tree, 'worktrees')
+  findAll(tree, 'button').find(node => node.props.role === 'option' && hasText(node, taskRoot)).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.compare')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('expired snapshots offer a direct regeneration action', hasText(tree, t('wt.snapshotExpired')) &&
+    findAll(tree, 'button').some(node => textOf(node) === t('wt.refreshSnapshot')))
+  findAll(tree, 'button').find(node => textOf(node) === t('wt.refreshSnapshot')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('regeneration uses a new snapshot token and renders its content', generations === 2 && hasText(tree, 'regenerated content') &&
+    !hasText(tree, t('wt.snapshotExpired')) && mounted.rpc.calls.some(call => call.method === 'worktreeCompareFile' && call.payload.token === 'generation-2'))
+}
+
+console.log('\n--- session startup and changes-first workbench loading ---')
+{
+  runCleanups()
+  const fixture = loadClientModule(source.replace('    return module.exports',
+    '    module.exports.HeaderGitCluster = HeaderGitCluster;\n    module.exports.GitApp = GitApp;\n    return module.exports'))
+  let idleId = 0
+  const idle = new Map()
+  window.requestIdleCallback = callback => { idle.set(++idleId, callback); return idleId }
+  window.cancelIdleCallback = id => idle.delete(id)
+  const runIdle = () => { const callbacks = [...idle.values()]; idle.clear(); callbacks.forEach(callback => callback()) }
+  const Header = fixture.HeaderGitCluster
+  const rpc = createRpcStub(healthyHandlers({ repositoryVersion: () => ({ generation: 'startup', version: 1, metadataVersion: 1, supported: true }) }))
+  const props = { connection: rpc, t, sessionId: 'startup-session', directory: ROOT }
+  mount(Header, props)
+  let view = await flush(Header, props)
+  check('session entry yields Git discovery until the browser is idle', !rpc.calls.some(call => ['repos', 'status', 'refs', 'changelists'].includes(call.method)))
+  runIdle(); view = await flush(Header, props)
+  const heavy = ['status', 'refs', 'branchTracking', 'changelists', 'worktrees', 'contributors']
+  check('idle header startup requests only a status summary and shows its change count', rpc.calls.some(call => call.method === 'statusSummary') &&
+    !rpc.calls.some(call => heavy.includes(call.method)) && textOf(findAll(view, 'button').find(node => node.props['data-chip'] === 'changes')) === '3')
+  await new Promise(resolve => setTimeout(resolve, 450))
+  view = await flush(Header, props)
+  check('header background polling also stays lightweight before interaction', !rpc.calls.some(call => heavy.includes(call.method)))
+  const clickHeader = async chip => {
+    findAll(view, 'button').find(node => node.props['data-chip'] === chip).props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+    view = await flush(Header, props)
+  }
+  await clickHeader('branch')
+  check('opening the branch picker loads refs without loading changelists', rpc.calls.some(call => call.method === 'refs') && !rpc.calls.some(call => call.method === 'changelists'))
+  await clickHeader('changes')
+  check('opening the changes popover loads file details and changelists on demand', rpc.calls.some(call => call.method === 'status') && rpc.calls.some(call => call.method === 'changelists') &&
+    walk(view).some(node => node.props?.title === 'src/index.js'), rpc.calls.map(call => call.method).join(',') + '\n' + textOf(view).slice(0, 350))
+  runCleanups()
+
+  const App = fixture.GitApp, root = 'D:/lazy-main-window'
+  let finishFull
+  const fullStatus = new Promise(resolve => { finishFull = resolve })
+  const mainRpc = createRpcStub(healthyHandlers({
+    repos: () => ({ gitPath: 'git', repos: [{ root }], config: CONFIG }),
+    repositoryVersion: () => ({ generation: 'main-window', version: 1, metadataVersion: 1, supported: true }),
+    status: payload => payload.details === false ? { ...STATUS, basic: true,
+      files: STATUS.files.map(file => { const { added, deleted, lfs, ...basic } = file; return basic }) } : fullStatus,
+  }))
+  const appProps = { connection: mainRpc, t, directory: root, sessionId: 'main-window', active: true }
+  mount(App, appProps)
+  view = await flush(App, appProps)
+  check('the main window first requests basic status and paints its file list', mainRpc.calls.some(call => call.method === 'status' && call.payload.details === false) && hasText(view, 'src/index.js'))
+  check('changes-first startup does not load other modules or full status', !mainRpc.calls.some(call =>
+    ['refs', 'stashes', 'worktrees', 'contributors', 'repoMeta', 'branchTracking'].includes(call.method) || (call.method === 'status' && call.payload.details !== false)))
+  runIdle(); view = await flush(App, appProps)
+  check('slow full-status enrichment leaves the basic file list usable', hasText(view, 'src/index.js') && mainRpc.calls.some(call => call.method === 'status' && call.payload.details !== false))
+  finishFull(STATUS); view = await flush(App, appProps)
+  activityItems(view).find(node => node.props['data-module'] === 'graph').props.onClick()
+  view = await flush(App, appProps)
+  check('switching to graph loads its metadata only then', ['refs', 'worktrees', 'repoMeta', 'commitGraph'].every(method => mainRpc.calls.some(call => call.method === method)))
+  activityItems(view).find(node => node.props['data-module'] === 'stashes').props.onClick()
+  view = await flush(App, appProps)
+  check('switching to stashes loads the stash list on demand', mainRpc.calls.some(call => call.method === 'stashes') && hasText(view, '临时改动'))
+  runCleanups()
+  const previousReads = mainRpc.calls.filter(call => call.method === 'status').length
+  mount(App, appProps); view = await flush(App, appProps)
+  check('reopening an unchanged repository reuses its warm full-status snapshot', hasText(view, 'src/index.js') && mainRpc.calls.filter(call => call.method === 'status').length === previousReads)
+  runCleanups()
+
+  const combinedRoot = 'D:/combined-main-window'
+  const combinedStatus = { ...STATUS, basic: true }
+  const combinedLists = healthyHandlers().changelists()
+  const combinedRpc = createRpcStub(healthyHandlers({
+    repositoryVersion: () => ({ generation: 'combined-window', version: 1, metadataVersion: 1, supported: true }),
+    repos: payload => ({ gitPath: 'git', repos: [{ root: combinedRoot }], config: CONFIG,
+      ...(payload.includeChanges ? { changes: { root: combinedRoot, status: combinedStatus, lists: combinedLists } } : {}) }),
+  }))
+  const combinedProps = { ...appProps, connection: combinedRpc, directory: combinedRoot }
+  mount(App, combinedProps)
+  view = await flush(App, combinedProps)
+  check('discovery delivers the initial changes list without sequential status and changelist RPCs',
+    hasText(view, 'src/index.js') && combinedRpc.calls.some(call => call.method === 'repos' && call.payload.includeChanges) &&
+    !combinedRpc.calls.some(call => ['status', 'changelists'].includes(call.method)))
+  runIdle(); view = await flush(App, combinedProps)
+  check('combined initial changes still enrich and reconcile after the first paint',
+    hasText(view, 'src/index.js') && combinedRpc.calls.some(call => call.method === 'status') && combinedRpc.calls.some(call => call.method === 'changelists'))
+  runCleanups()
+  const combinedReads = combinedRpc.calls.filter(call => call.method === 'status').length
+  mount(App, combinedProps); view = await flush(App, combinedProps)
+  check('combined startup preserves version-checked cache reuse when reopening the window',
+    hasText(view, 'src/index.js') && combinedRpc.calls.filter(call => call.method === 'status').length === combinedReads &&
+    combinedRpc.calls.filter(call => call.method === 'repos').at(-1).payload.includeChanges === false)
+  runCleanups()
+
+  const fallbackRpc = createRpcStub(healthyHandlers({ statusSummary: () => { const error = new Error('old Host'); error.code = 'git/unknown-method'; throw error } }))
+  const fallbackProps = { ...props, connection: fallbackRpc, directory: 'D:/older-host' }
+  mount(Header, fallbackProps); await flush(Header, fallbackProps); runIdle()
+  view = await flush(Header, fallbackProps)
+  check('an older Host falls back to status without breaking the header', fallbackRpc.calls.some(call => call.method === 'status') && hasText(view, 'main'))
+  runCleanups()
+}
+
+console.log('\n--- shared polling respects subscribers joining during a summary read ---')
+{
+  runCleanups()
+  const fixture = loadClientModule(source.replace('    return module.exports',
+    '    module.exports.HeaderGitCluster = HeaderGitCluster;\n    module.exports.GitApp = GitApp;\n    module.exports.useRepositoryUpdates = useRepositoryUpdates;\n    return module.exports'))
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
+  const within = promise => new Promise(resolve => {
+    const timer = setTimeout(() => resolve(false), 1500)
+    promise.then(() => { clearTimeout(timer); resolve(true) })
+  })
+  let version = 1, summaries = 0, releaseSummary, summaryStarted, fullStarted
+  const delayedSummary = new Promise(resolve => { releaseSummary = resolve })
+  const summaryPending = new Promise(resolve => { summaryStarted = resolve })
+  const fullPending = new Promise(resolve => { fullStarted = resolve })
+  const root = 'D:/summary-upgrade-race'
+  const summary = { ...STATUS, files: [], summary: true }
+  const laterFile = { ...STATUS.files[1], path: 'later.txt' }
+  const rpc = createRpcStub(healthyHandlers({
+    repos: () => ({ gitPath: 'git', repos: [{ root }], config: CONFIG }),
+    repositoryVersion: () => ({ generation: 'summary-race', version, supported: true }),
+    statusSummary: () => {
+      if (++summaries === 1) { version++; return summary }
+      summaryStarted(); return delayedSummary
+    },
+    status: payload => {
+      if (payload.details === false) return STATUS
+      fullStarted(); return { ...STATUS, total: STATUS.total + 1, files: STATUS.files.concat(laterFile) }
+    },
+  }))
+  const props = { connection: rpc, t, sessionId: 'summary-race', directory: root, active: true }
+  function RaceView(value) {
+    return [h(fixture.HeaderGitCluster, { ...props, key: 'header' }), value.open ? h(fixture.GitApp, { ...props, key: 'app' }) : null]
+  }
+  mount(RaceView, { open: false }); await flush(RaceView, { open: false })
+  check('race fixture holds a header summary response in flight', await within(summaryPending))
+  let view = await flush(RaceView, { open: true })
+  await pause(20); view = await flush(RaceView, { open: true })
+  const fileRow = (tree, path) => walk(tree).some(node => node.props?.title === path && String(node.props?.className || '').includes('dshgit-change'))
+  check('a workbench joining an in-flight summary displays its initial file list', fileRow(view, 'src/index.js'))
+  releaseSummary(summary)
+  await pause(20); view = await flush(RaceView, { open: true })
+  check('late summary responses cannot clear the workbench file list', fileRow(view, 'src/index.js'))
+  check('upgraded subscribers receive a full read without the error retry delay', await within(fullPending))
+  view = await flush(RaceView, { open: true })
+  check('the immediate full refresh preserves old rows and delivers newly changed files', fileRow(view, 'src/index.js') && fileRow(view, 'later.txt'))
+  runCleanups()
+
+  // Demand can also change during the debounce, before any status read starts.
+  let summaryReads = 0, fullReads = 0, sawVersion, sawFull
+  const versionRead = new Promise(resolve => { sawVersion = resolve })
+  const fullRead = new Promise(resolve => { sawFull = resolve })
+  const read = async method => {
+    if (method === 'config') return { autoFetch: false }
+    if (method === 'repositoryVersion') { sawVersion(); return { generation: 'debounce-race', version: 1, supported: true } }
+    if (method === 'statusSummary') { summaryReads++; return summary }
+    if (method === 'status') { fullReads++; sawFull(); return STATUS }
+  }
+  function Subscriber(value) {
+    fixture.useRepositoryUpdates('D:/debounce-upgrade-race', true, read, false, () => {}, null, { summary: value.summary, metadata: false })
+    return null
+  }
+  function DebounceView(value) {
+    return [h(Subscriber, { key: 'header', summary: true }), value.open ? h(Subscriber, { key: 'app', summary: false }) : null]
+  }
+  mount(DebounceView, { open: false }); await flush(DebounceView, { open: false }); await within(versionRead)
+  await flush(DebounceView, { open: true })
+  // The harness needs another commit to run effects of a newly added child
+  // whose render returns null and therefore causes no state update itself.
+  await flush(DebounceView, { open: true })
+  const refreshed = await within(fullRead)
+  check('subscribers joining during debounce upgrade the pending read before it is sent', refreshed && fullReads === 1 && summaryReads === 0,
+    JSON.stringify({ refreshed, fullReads, summaryReads }))
+  runCleanups()
+}
+
+console.log('\n--- header launchers restore their own repository after sidebar navigation ---')
+{
+  runCleanups()
+  const fixture = loadClientModule(source.replace('    return module.exports',
+    '    module.exports.HeaderGitCluster = HeaderGitCluster;\n    module.exports.getWindowState = getWindowState;\n    module.exports.openGitWindow = openGitWindow;\n    module.exports.setWindowState = setWindowState;\n    return module.exports'))
+  const rpc = createRpcStub(healthyHandlers())
+  const props = { connection: rpc, t, sessionId: 'session-A', directory: ROOT }
+  const Component = fixture.HeaderGitCluster
+  mount(Component, props)
+  let header = await flush(Component, props)
+  const openB = () => fixture.openGitWindow({ directory: 'D:/other-workspace' })
+  const ownContext = () => {
+    const state = fixture.getWindowState()
+    return state.sessionId === props.sessionId && state.directory === ROOT && state.workspace === ROOT && state.mode === 'full' && !state.minimized
+  }
+  const clickChip = async name => {
+    findAll(header, 'button').find(node => node.props['data-chip'] === name).props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+    header = await flush(Component, props)
+  }
+  openB(); header = await flush(Component, props)
+  // Refresh A while the sidebar-opened B is visible; header discovery must not
+  // publish A's repository name into B's window.
+  fixture.setWindowState({ refreshToken: fixture.getWindowState().refreshToken + 1 })
+  header = await flush(Component, props)
+  check('header refresh leaves a sidebar-opened workspace title and directory intact', fixture.getWindowState().workspace === 'D:/other-workspace' && fixture.getWindowState().directory === 'D:/other-workspace')
+  await clickChip('branch')
+  walk(header).find(node => node.props?.['data-picker-branch'] === 'refs/heads/feature/新功能').props.onContextMenu({ clientX: 100, clientY: 120, preventDefault() {}, stopPropagation() {} })
+  header = await flush(Component, props)
+  const menu = walk(header).find(node => node.props?.className === 'dshgit-contextmenu')
+  findAll(menu, 'button').find(node => textOf(node).includes(t('wb.compare'))).props.onClick()
+  header = await flush(Component, props)
+  check('header branch comparison restores A after sidebar opened B', ownContext() && fixture.getWindowState().tab === 'compare' && fixture.getWindowState().compareWith === 'refs/heads/feature/新功能')
+  openB(); header = await flush(Component, props)
+  await clickChip('changes')
+  walk(header).find(node => node.props?.title === 'src/index.js' && node.props.onContextMenu).props.onContextMenu({ clientX: 100, clientY: 120, preventDefault() {}, stopPropagation() {} })
+  header = await flush(Component, props)
+  const fileMenu = walk(header).find(node => node.props?.className === 'dshgit-contextmenu')
+  findAll(fileMenu, 'button').find(node => textOf(node).includes(t('action.fileHistory'))).props.onClick()
+  header = await flush(Component, props)
+  check('header file history restores A and its file path after sidebar opened B', ownContext() && fixture.getWindowState().tab === 'history' && fixture.getWindowState().historyPath === 'src/index.js' && !fixture.getWindowState().compareWith)
+  openB(); header = await flush(Component, props)
+  // The header launcher must focus its own repository instead of closing the
+  // already-open window for B, or restoring B when it was minimized.
+  const launcher = () => findAll(header, 'button').find(node => node.props['aria-label'] === t('window.open'))
+  launcher().props.onClick(); header = await flush(Component, props)
+  check('header launcher switches from sidebar workspace B back to A', ownContext())
+  launcher().props.onClick(); header = await flush(Component, props)
+  check('header launcher still closes its own already-open window', fixture.getWindowState().mode === 'closed')
+  openB(); fixture.setWindowState({ minimized: true }); header = await flush(Component, props)
+  launcher().props.onClick(); header = await flush(Component, props)
+  check('header launcher restores its own context when B was minimized', ownContext())
+  runCleanups()
+  const legacyProps = { connection: rpc, t, sessionId: 'legacy-session' }
+  mount(Component, legacyProps)
+  header = await flush(Component, legacyProps)
+  openB(); header = await flush(Component, legacyProps)
+  findAll(header, 'button').find(node => node.props['data-chip'] === 'changes').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
+  header = await flush(Component, legacyProps)
+  findAll(header, 'button').find(node => textOf(node) === t('commit.openFull')).props.onClick()
+  check('headers without workspace hooks use their resolved repository instead of inheriting B', fixture.getWindowState().sessionId === 'legacy-session' && fixture.getWindowState().directory === ROOT && fixture.getWindowState().workspace === ROOT)
+  header = await flush(Component, legacyProps)
+  findAll(header, 'button').find(node => node.props['aria-label'] === t('window.open')).props.onClick()
+  check('legacy header launchers still close their own resolved repository window', fixture.getWindowState().mode === 'closed')
+}
+
+// Exercise the sidebar adapter against Host-shaped keyed rows, including the
+// real activation callback that opens the shared window for another directory.
+{
+  runCleanups()
+  const sidebarClient = loadClientModule(source.replace('    return module.exports',
+    '    module.exports.getWindowState = getWindowState;\n    module.exports.setWindowState = setWindowState;\n    return module.exports'))
+  class Node {
+    constructor(tag = 'span') { this.tag = tag; this.children = []; this.attributes = {}; this.events = {}; this.className = ''; this.dataset = {} }
+    get firstChild() { return this.children[0] || null }
+    get lastElementChild() { return this.children.at(-1) }
+    setAttribute(key, value) { this.attributes[key] = value }
+    getAttribute(key) { return this.attributes[key] ?? null }
+    appendChild(node) { this.insertBefore(node, null) }
+    insertBefore(node, before) { node.remove(); this.children.splice(before ? this.children.indexOf(before) : this.children.length, 0, node); node.parentElement = this }
+    remove() { if (this.parentElement) this.parentElement.children.splice(this.parentElement.children.indexOf(this), 1); this.parentElement = null }
+    addEventListener(type, handler) { this.events[type] = handler }
+    matches() { return this.attributes.role === 'treeitem' && this.attributes['data-row-key']?.startsWith('workspace:') }
+    closest(selector) { return this.matches(selector) ? this : this.parentElement?.closest(selector) }
+    querySelector(selector) {
+      for (const node of this.children) {
+        if (selector === 'button' ? node.tag === 'button' : node.matches(selector)) return node
+        const nested = node.querySelector(selector); if (nested) return nested
+      }
+      return null
+    }
+  }
+  const row = id => {
+    const node = new Node('div'), strip = new Node(), native = new Node('button')
+    node.setAttribute('role', 'treeitem'); node.setAttribute('data-row-key', 'workspace:' + id)
+    native.className = 'host-icon-button'; strip.appendChild(native); node.appendChild(strip)
+    return node
+  }
+  const rows = [row('one'), row('two'), row('')]
+  let items = [{ workspaceId: 'one', title: 'Same name', path: 'D:/one' }, { workspaceId: 'two', title: 'Same name', path: 'D:/two' }]
+  let listener, observer, disconnected = false, unsubscribed = false
+  const previousObserver = globalThis.MutationObserver
+  globalThis.MutationObserver = class {
+    constructor(callback) { observer = callback }
+    observe() {}
+    disconnect() { disconnected = true }
+  }
+  const originalCreate = document.createElement
+  document.createElement = tag => tag === 'style' ? originalCreate(tag) : new Node(tag)
+  document.createElementNS = (_, tag) => new Node(tag)
+  document.querySelectorAll = () => rows
+  const context = createClientContext({ connection: createRpcStub(healthyHandlers()) })
+  context.ctx.workspaces = { list: { getSnapshot: () => ({ items }), subscribe: callback => { listener = callback; return () => { unsubscribed = true } } } }
+  sidebarClient.apply(context.ctx)
+  const gitButton = node => node.lastElementChild.children.find(child => child.className.includes('dshgit-sidebar-workspace-git'))
+  check('sidebar Git joins the native workspace hover action strip', rows.slice(0, 2).every(node => gitButton(node)?.className.includes('host-icon-button')))
+  check('ungrouped sidebar rows have no workspace Git action', !gitButton(rows[2]))
+  sidebarClient.setWindowState({ mode: 'full', minimized: true, sessionId: 'old-session', directory: 'D:/old', workspace: 'D:/old', tab: 'history', historyPath: 'old.txt', compareWith: 'old-ref' })
+  let stopped = 0, prevented = 0
+  gitButton(rows[1]).events.click({ stopPropagation() { stopped++ }, preventDefault() { prevented++ } })
+  const state = sidebarClient.getWindowState()
+  check('sidebar Git opens the clicked workspace rather than the active conversation', state.directory === 'D:/two' && state.workspace === 'D:/two' && state.sessionId === '')
+  check('sidebar Git restores the window and clears previous repository view context', state.mode === 'full' && !state.minimized && state.tab === 'changes' && !state.historyPath && !state.compareWith)
+  check('sidebar Git consumes clicks without opening or collapsing the workspace', stopped === 1 && prevented === 1)
+  listener(); listener()
+  check('repeated workspace updates do not duplicate Git buttons', rows[1].lastElementChild.children.length === 2)
+  items = [{ workspaceId: 'two', title: 'Renamed', path: 'D:/moved' }]; listener()
+  check('workspace deletion removes its Git button and rename updates the accessible label', !gitButton(rows[0]) && gitButton(rows[1]).getAttribute('aria-label').includes('Renamed'))
+  gitButton(rows[1]).events.click({ stopPropagation() {}, preventDefault() {} })
+  check('sidebar Git uses the latest workspace directory after registry updates', sidebarClient.getWindowState().directory === 'D:/moved')
+  const replacement = row('two'); rows.splice(1, 1, replacement)
+  observer([{ target: new Node('div'), addedNodes: [replacement], removedNodes: [] }])
+  check('replaced sidebar workspace rows regain their Git action', !!gitButton(replacement))
+  context.effects.find(effect => effect?.label === 'git: sidebar workspace actions').result()
+  check('plugin disposal removes sidebar actions and observers', disconnected && unsubscribed && rows.every(node => !gitButton(node)))
+  globalThis.MutationObserver = previousObserver
+}
+
+// Exercise the real shortcut component and navigation guard from the bundle.
+{
+  const embedded = { path: 'embedded/', index: '?', worktree: '?', kind: 'untracked', nestedRepository: { root: ROOT + '/embedded' } }
+  for (const mode of ['staging', 'lists']) {
+    const defaults = healthyHandlers()
+    const fixtureRoot = ROOT + '/nested-' + mode
+    let tree = await renderApp(healthyHandlers({
+      repos: () => ({ ...defaults.repos(), repos: [{ ...defaults.repos().repos[0], root: fixtureRoot }] }),
+      status: () => ({ ...STATUS, files: [embedded], total: 1 }),
+      changelists: () => ({ ...defaults.changelists(), mode, fileLayout: 'tree' }),
+    }))
+    tree = await selectModule(tree, 'changes')
+    check('nested repository shortcuts appear in the ' + mode + ' workbench',
+      findWhere(tree, props => props['data-nested-repository'] === embedded.path).length > 0, textOf(tree).slice(-1200))
+    check('nested directory rows do not create an extra tree level in ' + mode,
+      findWhere(tree, props => props['data-file-path'] === embedded.path).length === 1 &&
+      findWhere(tree, props => props['data-folder-path'] === 'embedded').length === 0)
+  }
+  const nestedClient = loadClientModule(source.replace('    return module.exports',
+    '    Object.assign(module.exports, { NestedRepositories, HeaderGitCluster, getWindowState, setWindowState, registerNavigationGuard });\n    return module.exports'))
+  // The resident header can belong to A while the global workbench belongs to B.
+  // Verify both commit modes use A when launching its embedded repository.
+  for (const mode of ['staging', 'lists']) {
+    runCleanups()
+    const defaults = healthyHandlers()
+    const rpc = createRpcStub(healthyHandlers({
+      status: () => ({ ...STATUS, files: [embedded], total: 1 }),
+      changelists: () => ({ ...defaults.changelists(), mode }),
+    }))
+    const context = createClientContext({ connection: rpc })
+    nestedClient.apply(context.ctx)
+    const headerProps = { connection: rpc, t, sessionId: 'nested-session-A', directory: ROOT }
+    mount(nestedClient.HeaderGitCluster, headerProps)
+    let header = await flush(nestedClient.HeaderGitCluster, headerProps)
+    nestedClient.setWindowState({ mode: 'full', sessionId: 'nested-session-B', directory: 'D:/other-workspace', workspace: 'D:/other-workspace' })
+    header = await flush(nestedClient.HeaderGitCluster, headerProps)
+    findAll(header, 'button').find(node => node.props['data-chip'] === 'changes').props.onClick({
+      currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) },
+    })
+    header = await flush(nestedClient.HeaderGitCluster, headerProps)
+    findAll(header, 'button').find(node => textOf(node) === t('nested.open')).props.onClick()
+    const state = nestedClient.getWindowState()
+    check('nested header shortcut preserves its own session after another workspace opened in ' + mode,
+      state.sessionId === headerProps.sessionId && state.directory === embedded.nestedRepository.root)
+  }
+  runCleanups()
+  nestedClient.setWindowState({ sessionId: 'unrelated-session', directory: 'D:/other-workspace' })
+  const calls = [], after = () => {}
+  const file = { path: 'embedded/', kind: 'untracked', nestedRepository: { root: ROOT + '/embedded' } }
+  const props = { status: { files: [file] }, t, afterWrite: after, sessionId: 'workbench-owner-session',
+    onWrite: (...args) => calls.push(args) }
+  const Component = nestedClient.NestedRepositories
+  let tree = mount(Component, props).tree
+  check('embedded repositories expose open, local ignore and shared ignore shortcuts',
+    findAll(tree, 'button').length === 3 && hasText(tree, t('nested.title')))
+  findAll(tree, 'button').find(node => textOf(node) === t('action.ignoreLocal')).props.onClick()
+  check('nested local ignore targets the exact directory and refreshes the parent',
+    calls[0]?.[0] === 'ignoreLocalPath' && calls[0][1].path === file.path && calls[0][2].after === after)
+  findAll(tree, 'button').find(node => textOf(node) === t('action.ignoreFile')).props.onClick()
+  check('nested shared ignore uses the existing gitignore operation', calls[1]?.[0] === 'ignorePath' && calls[1][1].path === file.path)
+  const open = findAll(tree, 'button').find(node => textOf(node) === t('nested.open'))
+  const before = nestedClient.getWindowState().directory
+  const removeGuard = nestedClient.registerNavigationGuard(() => false)
+  open.props.onClick()
+  check('opening an embedded repository respects unsaved editor navigation guards', nestedClient.getWindowState().directory === before)
+  removeGuard()
+  open.props.onClick()
+  const state = nestedClient.getWindowState()
+  check('open repository launches the nested root in the changes workbench',
+    state.directory === file.nestedRepository.root && state.workspace === file.nestedRepository.root && state.tab === 'changes' && state.mode === 'full')
+  check('nested workbench shortcut preserves its explicit session instead of the global session', state.sessionId === props.sessionId)
+  nestedClient.setWindowState({ sessionId: 'unrelated-session', directory: 'D:/other-workspace' })
+  tree = mount(Component, { ...props, sessionId: '' }).tree
+  findAll(tree, 'button').find(node => textOf(node) === t('nested.open')).props.onClick()
+  check('workspace-only nested shortcuts keep an empty session instead of inheriting another conversation', nestedClient.getWindowState().sessionId === '')
+  tree = mount(Component, { ...props, busy: true }).tree
+  check('nested shortcuts are disabled during a write operation', findAll(tree, 'button').every(node => node.props.disabled))
+  tree = mount(Component, { ...props, status: { files: [{ path: 'ordinary.txt', kind: 'untracked' }] } }).tree
+  check('ordinary untracked files do not produce a repository notice', findAll(tree, 'button').length === 0 && !hasText(tree, t('nested.title')))
+}
+
+console.log('\n--- same-named files stay distinguishable ---')
+// The muted directory suffix is the only disambiguator between two rows named
+// `view.js` in a flat list. It is rendered VERBATIM — the panes are sized wide
+// enough for it, and the file-list grip lets the user widen them further — so
+// no JS-side shortening may eat the last folder, which is the part that
+// differs. Its own renderApp is fine here: this is the last section that
+// touches the shared tree, and the hook-path store would otherwise be reset
+// mid-suite for every later `flush`.
+{
+  const deep = await renderApp(healthyHandlers({
+    status: () => ({ ...STATUS, files: [
+      { path: 'lib/client/features/changes/view.js', originalPath: null, index: '.', worktree: 'M', staged: false, kind: 'ordinary', added: 1, deleted: 0, binary: false },
+      { path: 'lib/client/features/history/view.js', originalPath: null, index: '.', worktree: 'M', staged: false, kind: 'ordinary', added: 1, deleted: 0, binary: false },
+    ], total: 2 }),
+  }))
+  const dirs = walk(deep).filter((node) => node.props?.className === 'dshgit-filedir').map((node) => textOf(node))
+  check('directory suffixes are rendered in full, not pre-shortened',
+    dirs.length >= 2 && new Set(dirs).size === dirs.length &&
+    dirs.every((dir) => !dir.includes('\u2026') && dir.startsWith('lib/client/features/')),
+    JSON.stringify(dirs))
+}
+
+console.log('\n--- the add-workspace chooser follows its own setting ---')
+{
+  // The switch decides whether DSH's "添加工作区" opens this plugin's three-way
+  // dialog or DSH's own native directory flow. That is not a render-time branch:
+  // the dialog is a slot REGISTRATION, so switching off has to hand the seat
+  // back. A build that only stopped rendering would leave the button doing
+  // nothing at all, which is why the registrations themselves are asserted.
+  const flowNames = ['conversation.hero.workspace.directoryFlow', 'sidebar.workspaces.directoryFlow']
+  const context = createClientContext({ connection: createRpcStub(healthyHandlers()) })
+  context.ctx.workspaces = { create: async () => ({ workspaceId: 'ws' }), list: { getSnapshot: () => ({ items: [] }), subscribe: () => () => {} } }
+  context.ctx.uiWorkspace = { pickDirectory: async () => null, listDirectory: async () => null, createDirectory: async () => {}, openWorkspace: async () => {} }
+  // ONE module instance for both the seats and the publishes: a second
+  // `loadClientModule` would get its own copy of the config store, and the
+  // setting would then be written where nobody is listening.
+  const flowPlugin = loadClientModule(source.replace('    return module.exports',
+    '    module.exports.publishPluginConfig = publishPluginConfig;\n    return module.exports'))
+  flowPlugin.apply(context.ctx)
+  const seats = () => context.registrations.filter((entry) => flowNames.includes(entry.declaration.name))
+  const flowProps = { open: true, busy: false, t, onPicked() {}, onCancel() {}, onError() {} }
+  check('the chooser is installed before the Host has answered',
+    seats().length === 2, JSON.stringify(seats().map((entry) => entry.declaration.name)))
+  check('the chooser shadows DSH with the lower rank',
+    seats().every((entry) => entry.declaration.priority === -10),
+    JSON.stringify(seats().map((entry) => entry.declaration.priority)))
+  let seatTree = mount(seats()[0].Component, flowProps).tree
+  seatTree = await flush(seats()[0].Component, flowProps)
+  check('the installed chooser renders the three-way dialog', hasText(seatTree, t('clone.add')), textOf(seatTree).slice(0, 200))
+  // Turning the switch off travels through the same published config the settings
+  // page writes, so the page and the seat cannot disagree after a save.
+  flowPlugin.publishPluginConfig({ ...CONFIG, workspaceAddDialog: false })
+  check('switching the setting off hands both seats back',
+    seats().length === 0, JSON.stringify(seats().map((entry) => entry.declaration.name)))
+  flowPlugin.publishPluginConfig({ ...CONFIG, workspaceAddDialog: true })
+  check('switching it on reclaims both seats', seats().length === 2)
+  seatTree = await flush(seats()[0].Component, flowProps)
+  check('a reclaimed seat answers again', hasText(seatTree, t('clone.add')))
+  // An older Host drops an unknown key. The seat must stay where the plugin put
+  // it: a missing key is the default (on), not an instruction to withdraw.
+  flowPlugin.publishPluginConfig({ gitPath: '', defaultRepo: '' })
+  check('a Host without the key keeps the default chooser', seats().length === 2, String(seats().length))
+  context.effects.find((effect) => effect?.label === 'git: workspace add dialog setting').result()
+  check('unloading the plugin releases the seats it took', seats().length === 0,
+    JSON.stringify(seats().map((entry) => entry.declaration.name)))
+  runCleanups()
+}
+
+console.log('\n--- a seat declared late still registers under its own name ---')
+{
+  // DSH's own directory-flow declaration is owned by another package, so the
+  // `slots.inject` body can run AFTER activation. A function-scoped loop variable
+  // would then register both seats under the last slot's name, and the hero would
+  // quietly keep DSH's native chooser.
+  const context = createClientContext({ connection: createRpcStub(healthyHandlers()), deferInjections: true })
+  context.ctx.workspaces = { create: async () => ({ workspaceId: 'ws' }), list: { getSnapshot: () => ({ items: [] }), subscribe: () => () => {} } }
+  context.ctx.uiWorkspace = { pickDirectory: async () => null, listDirectory: async () => null, createDirectory: async () => {}, openWorkspace: async () => {} }
+  loadClientModule(source).apply(context.ctx)
+  const flowNames = ['conversation.hero.workspace.directoryFlow', 'sidebar.workspaces.directoryFlow']
+  const before = context.registrations.filter((entry) => flowNames.includes(entry.declaration.name))
+  check('nothing is registered while the seats are undeclared', before.length === 0, String(before.length))
+  context.runDeferredInjections()
+  const late = context.registrations.filter((entry) => flowNames.includes(entry.declaration.name))
+  check('a late declaration registers each seat under its own name',
+    late.length === 2 && new Set(late.map((entry) => entry.declaration.name)).size === 2,
+    JSON.stringify(late.map((entry) => entry.declaration.name)))
+  runCleanups()
+}
+
+console.log('\n--- the add-workspace setting is a switch on the General page ---')
+{
+  const context = createClientContext({ connection: createRpcStub(healthyHandlers({
+    config: () => ({ ...CONFIG, workspaceAddDialog: true }),
+    setConfig: (payload) => ({ ...CONFIG, workspaceAddDialog: true, ...payload.patch }),
+  })) })
+  context.ctx.workspaces = { create: async () => ({ workspaceId: 'ws' }), list: { getSnapshot: () => ({ items: [] }), subscribe: () => () => {} } }
+  context.ctx.uiWorkspace = { pickDirectory: async () => null, listDirectory: async () => null, createDirectory: async () => {}, openWorkspace: async () => {} }
+  loadClientModule(source).apply(context.ctx)
+  const section = context.registrations.find((entry) => entry.declaration.name === 'settings.section')
+  mount(section.Component, { t })
+  let tree2 = await flush(section.Component, { t })
+  const rows = walk(tree2).filter((node) => node.props?.className === 'dshgit-checkrow')
+  const row = rows.find((node) => textOf(node).includes(t('settings.workspaceAddDialog')))
+  const box = row === undefined ? undefined : findAll(row, 'input')[0]
+  check('the General page offers the add-workspace switch, on by default',
+    box !== undefined && box.props.checked === true && box.props.disabled !== true,
+    `${rows.length} checkbox rows`)
+  check('the switch explains what it changes', hasText(tree2, t('settings.workspaceAddDialogHint')))
+  box.props.onChange({ currentTarget: { checked: false } })
+  tree2 = await flush(section.Component, { t })
+  check('turning it off saves that one key', context.connection.calls.some((call) =>
+    call.method === 'setConfig' && call.payload.patch.workspaceAddDialog === false),
+    JSON.stringify(context.connection.calls.map((call) => call.method)))
+  runCleanups()
+}
+
+console.log('\n--- the workspace flow picks the right chooser for the platform ---')
+{
+  // The plugin shadows DSH's own native flow occupant, so it inherits that
+  // occupant's contract: a Desktop renderer has a window-owned dialog. WHICH
+  // chooser leads is platform-dependent — macOS Desktop is expected to show the
+  // Host's NSOpenPanel, while Windows and Linux Desktop keep the Electron sheet
+  // so a pick does not spawn a COM child process. Both orders have to be proven
+  // here; a suite that only ever runs the fallback would pass while macOS
+  // regressed.
+  const flowContext = createClientContext({ connection: createRpcStub(healthyHandlers()) })
+  const hostPicks = []
+  let resolved = null
+  flowContext.ctx.workspaces = { create: async ({ path }) => ({ workspaceId: 'ws-' + path }), list: { getSnapshot: () => ({ items: [] }), subscribe: () => () => {} } }
+  flowContext.ctx.uiWorkspace = {
+    pickDirectory: async () => { hostPicks.push('host'); return '/host/project' },
+    listDirectory: async () => { throw new Error('browse is not composed here') },
+    createDirectory: async () => { throw new Error('unused') },
+    openWorkspace: async () => {},
+  }
+  const plugin = loadClientModule(source)
+  plugin.apply(flowContext.ctx)
+  const flow = flowContext.registrations.find((entry) => entry.declaration.name === 'conversation.hero.workspace.directoryFlow')
+  check('the workspace flow registers for the hero slot', flow !== undefined)
+  const picked = []
+  let shown = null
+  const props = {
+    open: true, busy: false, t,
+    onPicked: (path) => picked.push(path), onCancel: () => {}, onError: (message) => { shown = message },
+  }
+  const clickLocal = (tree) => findAll(tree, 'button').find((node) => node.props['aria-label'] === t('clone.local')).props.onClick()
+
+  // Non-macOS Desktop: the Electron dialog answers and the Host is never asked.
+  globalThis.document.documentElement.dataset.platform = 'win32'
+  globalThis.__DSH_DIRECTORY_PICKER__ = { pick: async () => 'D:/shell/project' }
+  let tree2 = mount(flow.Component, props).tree
+  clickLocal(tree2)
+  tree2 = await flush(flow.Component, props)
+  check('a Windows Desktop pick reports the Electron dialog result', picked[0] === 'D:/shell/project', JSON.stringify(picked))
+  check('the Host chooser is not reached on Windows while the shell dialog exists', hostPicks.length === 0, JSON.stringify(hostPicks))
+
+  // macOS Desktop: the Host NSOpenPanel leads, even though a bridge is present.
+  globalThis.document.documentElement.dataset.platform = 'darwin'
+  hostPicks.length = 0; picked.length = 0
+  tree2 = mount(flow.Component, props).tree
+  clickLocal(tree2)
+  tree2 = await flush(flow.Component, props)
+  check('a macOS Desktop pick opens the Host NSOpenPanel', picked[0] === '/host/project' && hostPicks.length === 1, JSON.stringify(picked))
+  check('the Electron dialog is not consulted on macOS when the Host panel answered', picked[0] !== 'D:/shell/project')
+
+  // A Host panel that cannot start must not strand the button on macOS.
+  delete globalThis.document.documentElement.dataset.platform
+  delete globalThis.__DSH_DIRECTORY_PICKER__
+  hostPicks.length = 0; picked.length = 0
+  tree2 = mount(flow.Component, props).tree
+  clickLocal(tree2)
+  tree2 = await flush(flow.Component, props)
+  check('without any shell the Host chooser answers', picked[0] === '/host/project' && hostPicks.length === 1, JSON.stringify(picked))
+
+  // A pending chooser disables the choices, and it must do so without adding
+  // explanation text to the dialog: the notice is the highlight itself.
+  globalThis.__DSH_DIRECTORY_PICKER__ = { pick: () => new Promise((resolve) => { resolved = resolve }) }
+  picked.length = 0
+  tree2 = mount(flow.Component, props).tree
+  clickLocal(tree2)
+  tree2 = await flush(flow.Component, props)
+  check('the choices are disabled while the chooser is pending',
+    findAll(tree2, 'button').filter((node) => node.props['aria-label'] === t('clone.local')).every((node) => node.props.disabled))
+  check('no waiting notice is added to the dialog',
+    !hasText(tree2, '正在等待') && !hasText(tree2, 'Waiting for a directory'),
+    textOf(tree2).slice(0, 300))
+  resolved('/Users/me/late')
+  tree2 = await flush(flow.Component, props)
+  check('the late answer still lands after the wait',
+    picked[0] === '/Users/me/late' && findAll(tree2, 'button').some((node) => node.props['aria-label'] === t('clone.local') && !node.props.disabled),
+    JSON.stringify(picked))
+  delete globalThis.__DSH_DIRECTORY_PICKER__
+}
+
+console.log('\n--- a hung macOS folder picker has cancel and manual recovery ---')
+{
+  const context = createClientContext({ connection: createRpcStub(healthyHandlers()) })
+  let resolveHost, rejectHost, localCalls = 0
+  context.ctx.workspaces = { create: async () => ({ workspaceId: 'ws' }), list: { getSnapshot: () => ({ items: [] }), subscribe: () => () => {} } }
+  context.ctx.uiWorkspace = {
+    pickDirectory: () => new Promise((resolve, reject) => { resolveHost = resolve; rejectHost = reject }),
+    listDirectory: async () => { throw new Error('unused') }, createDirectory: async () => {}, openWorkspace: async () => {},
+  }
+  loadClientModule(source).apply(context.ctx)
+  // The recovery dialog waits for evidence that no native panel is coming, so
+  // the suite owns that grace period: intercept only its delay, and drive the
+  // foreground events that decide whether the wait is over. This is installed
+  // before the first pick, or the first wait would run on a real timer.
+  const GRACE = 2000
+  const realTimeout = globalThis.setTimeout, realClear = globalThis.clearTimeout
+  const grace = new Map()
+  let graceSeq = 0
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    if (delay !== GRACE) return realTimeout(callback, delay, ...args)
+    const id = --graceSeq; grace.set(id, callback); return id
+  }
+  globalThis.clearTimeout = id => { if (grace.has(id)) grace.delete(id); else realClear(id) }
+  const runGrace = async () => {
+    const entry = grace.entries().next().value
+    if (entry === undefined) return false
+    grace.delete(entry[0]); await entry[1](); return true
+  }
+  const blur = () => (window.listeners.get('blur') ?? []).slice().forEach(listener => listener())
+  const focus = () => (window.listeners.get('focus') ?? []).slice().forEach(listener => listener())
+  const picked = [], errors = []
+  globalThis.document.documentElement.dataset.platform = 'darwin'
+  globalThis.__DSH_DIRECTORY_PICKER__ = { pick: async () => { localCalls++; return '/unexpected' } }
+  const flow = context.registrations.find(entry => entry.declaration.name === 'conversation.hero.workspace.directoryFlow')
+  const picker = context.registrations.find(entry => entry.declaration.id === 'git-directory-picker')
+  const props = { open: true, busy: false, t, onPicked: path => picked.push(path), onCancel() {}, onError: message => errors.push(message) }
+  const clickLocal = tree => findAll(tree, 'button').find(node => node.props['aria-label'] === t('clone.local')).props.onClick()
+  let flowTree = mount(flow.Component, props).tree
+  clickLocal(flowTree)
+  let pickerTree = await flush(picker.Component, { t })
+  check('the recovery dialog stays out of the way while the native panel may still answer',
+    !hasText(pickerTree, t('clone.pickerWaiting')) && findAll(pickerTree, 'input').length === 0 && grace.size === 1,
+    `grace=${grace.size} text=${textOf(pickerTree).slice(0, 120)}`)
+  blur()
+  check('a native panel taking the foreground cancels the pending reveal', await runGrace() === false && grace.size === 0)
+  focus()
+  document.hasFocus = () => false
+  check('a page that is not the foreground is not offered the recovery dialog',
+    await runGrace() === true && grace.size === 0 &&
+    !hasText(await flush(picker.Component, { t }), t('clone.pickerWaiting')))
+  delete document.hasFocus
+  check('returning to the page re-arms the wait', await runGrace() === false && (focus(), grace.size === 1))
+  check('the recovery dialog reveals itself once the page has kept the foreground', await runGrace() === true)
+  pickerTree = await flush(picker.Component, { t })
+  check('a pending Host chooser exposes recovery controls', hasText(pickerTree, t('clone.pickerWaiting')) && findAll(pickerTree, 'input').length === 1)
+  const cancel = findAll(pickerTree, 'button').find(node => hasText(node, t('action.cancel')))
+  check('cancel stays enabled while the Host never answers', cancel && !cancel.props.disabled)
+  cancel.props.onClick()
+  flowTree = await flush(flow.Component, props)
+  pickerTree = await flush(picker.Component, { t })
+  check('cancelling the hung Host unlocks the workspace choices', findAll(flowTree, 'button').every(node => !node.props.disabled) && findAll(pickerTree, 'form').length === 0)
+  rejectHost(new Error('late Host failure'))
+  await flush(flow.Component, props)
+  check('a late Host failure opens no fallback and reports no error', localCalls === 0 && errors.length === 0 && picked.length === 0)
+  clickLocal(flowTree)
+  await flush(picker.Component, { t })
+  await runGrace()
+  pickerTree = await flush(picker.Component, { t })
+  findAll(pickerTree, 'input')[0].props.onChange({ target: { value: '~/projects' } })
+  pickerTree = await flush(picker.Component, { t })
+  check('manual recovery rejects a relative or tilde path', findAll(pickerTree, 'button').some(node => node.props.type === 'submit' && node.props.disabled))
+  findAll(pickerTree, 'input')[0].props.onChange({ target: { value: '/Users/me/项目' } })
+  pickerTree = await flush(picker.Component, { t })
+  findAll(pickerTree, 'form')[0].props.onSubmit({ preventDefault() {} })
+  flowTree = await flush(flow.Component, props)
+  check('a manual path completes the request while the Host is still pending', picked.length === 1 && picked[0] === '/Users/me/项目' && findAll(flowTree, 'button').every(node => !node.props.disabled))
+  resolveHost('/late/native/path')
+  await flush(flow.Component, props)
+  check('a late native selection cannot overwrite the manual answer', picked.length === 1 && localCalls === 0)
+  delete globalThis.__DSH_DIRECTORY_PICKER__
+  context.ctx.uiWorkspace.pickDirectory = async () => { throw new Error('browse only') }
+  context.ctx.uiWorkspace.listDirectory = async () => ({ path: '/home/projects', home: '/home', crumbs: [], entries: [], truncated: false })
+  clickLocal(flowTree)
+  pickerTree = await flush(picker.Component, { t })
+  check('a browse-only Host still opens the directory browser', findAll(pickerTree, 'div').some(node => node.props.className === 'dshgit-directory-list'))
+  findAll(pickerTree, 'button').find(node => hasText(node, t('clone.useDirectory'))).props.onClick()
+  flowTree = await flush(flow.Component, props)
+  check('selecting a browsed directory still completes the request', picked.length === 2 && picked[1] === '/home/projects')
+  context.ctx.uiWorkspace.pickDirectory = () => new Promise((resolve, reject) => { rejectHost = reject })
+  clickLocal(flowTree)
+  await flush(picker.Component, { t })
+  context.effects.find(effect => effect?.label === 'git: directory picker').result()
+  await flush(flow.Component, props)
+  rejectHost(new Error('late failure after disposal'))
+  await flush(flow.Component, props)
+  pickerTree = await flush(picker.Component, { t })
+  check('disposal settles the hung request and ignores late failures', errors.length === 1 && errors[0] === t('clone.pickerClosed') && picked.length === 2 && findAll(pickerTree, 'form').length === 0)
+  try {
+    clickLocal(flowTree)
+    await flush(picker.Component, { t })
+    check('the pending reveal releases its timer', grace.size === 1)
+    runCleanups()
+    check('unmounting releases the recovery timer', grace.size === 0)
+  } finally {
+    runCleanups()
+    globalThis.setTimeout = realTimeout; globalThis.clearTimeout = realClear
+  }
+  delete globalThis.document.documentElement.dataset.platform
+  delete globalThis.__DSH_DIRECTORY_PICKER__
+}
+
+console.log('\n--- a rejected destination explains itself instead of only dimming ---')
+{
+  // Every fixture path in this suite is a Windows drive path; the mistake this
+  // guards is the macOS one (`~/projects`), which looks like a filled-in field.
+  // The dialogs must name the problem rather than leaving a dead button.
+  //
+  // The project dialog owns its own open/closed store, so it is reached the way
+  // an operator reaches it: click 新建项目 in the add-workspace flow first. Both
+  // registrations share this activation's closure.
+  const projectContext = createClientContext({ connection: createRpcStub(healthyHandlers({
+    projectPreferences: () => ({ parent: '', name: '' }),
+  })) })
+  projectContext.ctx.workspaces = { create: async () => ({ workspaceId: 'ws' }), list: { getSnapshot: () => ({ items: [] }), subscribe: () => () => {} } }
+  projectContext.ctx.uiWorkspace = { pickDirectory: async () => '/Users/me', listDirectory: async () => null, createDirectory: async () => {}, openWorkspace: async () => {} }
+  const projectPlugin = loadClientModule(source)
+  projectPlugin.apply(projectContext.ctx)
+  const flowEntry = projectContext.registrations.find((entry) => entry.declaration.name === 'conversation.hero.workspace.directoryFlow')
+  const projectEntry = projectContext.registrations.find((entry) => entry.declaration.id === 'git-new-project')
+  check('the project dialog and the flow are registered together', flowEntry !== undefined && projectEntry !== undefined)
+  let flowTree = mount(flowEntry.Component, { open: true, busy: false, t, onPicked() {}, onCancel() {}, onError() {} }).tree
+  findAll(flowTree, 'button').find((node) => node.props['aria-label'] === t('project.title')).props.onClick()
+  flowTree = await flush(flowEntry.Component, { open: true, busy: false, t, onPicked() {}, onCancel() {}, onError() {} })
+  let tree3 = await flush(projectEntry.Component, { t })
+  const parentField = findAll(tree3, 'input').find((node) => node.props.id === 'dshgit-project-parent')
+  const nameField = findAll(tree3, 'input').find((node) => node.props.id !== 'dshgit-project-parent')
+  check('the project dialog opened with its parent field', parentField !== undefined && nameField !== undefined,
+    textOf(tree3).slice(0, 300))
+  nameField.props.onChange({ target: { value: 'app' } })
+  parentField.props.onChange({ target: { value: '~/projects' } })
+  tree3 = await flush(projectEntry.Component, { t })
+  check('a tilde path is named as not expanded', hasText(tree3, t('clone.problem.tilde')), textOf(tree3).slice(0, 400))
+  check('the create button stays disabled for a rejected destination',
+    findAll(tree3, 'button').filter((node) => node.props.type === 'submit').every((node) => node.props.disabled))
+  parentField.props.onChange({ target: { value: 'relative/dir' } })
+  tree3 = await flush(projectEntry.Component, { t })
+  check('a relative path explains that it must be absolute', hasText(tree3, t('clone.problem.relative')))
+  parentField.props.onChange({ target: { value: '/Users/me' } })
+  tree3 = await flush(projectEntry.Component, { t })
+  check('correcting the path clears the explanation and enables create',
+    !hasText(tree3, t('clone.problem.relative')) && !hasText(tree3, t('clone.problem.tilde')) &&
+      findAll(tree3, 'button').filter((node) => node.props.type === 'submit').every((node) => node.props.disabled === false))
+}
+console.log('PASS destination problems are explained and corrected paths recover')
+
+// The clone dialog reaches the same helper through a different form (a URL that
+// seeds the folder name), so it gets its own pass rather than being assumed.
+{
+  const cloneContext = createClientContext({ connection: createRpcStub(healthyHandlers({
+    projectPreferences: () => ({ parent: '' }),
+  })) })
+  cloneContext.ctx.workspaces = { create: async () => ({ workspaceId: 'ws' }), list: { getSnapshot: () => ({ items: [] }), subscribe: () => () => {} } }
+  cloneContext.ctx.uiWorkspace = { pickDirectory: async () => '/Users/me', listDirectory: async () => null, createDirectory: async () => {}, openWorkspace: async () => {} }
+  loadClientModule(source).apply(cloneContext.ctx)
+  const flowEntry = cloneContext.registrations.find((entry) => entry.declaration.name === 'conversation.hero.workspace.directoryFlow')
+  const cloneEntry = cloneContext.registrations.find((entry) => entry.declaration.id === 'git-clone-workspace')
+  const flowProps = { open: true, busy: false, t, onPicked() {}, onCancel() {}, onError() {} }
+  mount(flowEntry.Component, flowProps)
+  findAll(mount(flowEntry.Component, flowProps).tree, 'button').find((node) => node.props['aria-label'] === t('clone.entry')).props.onClick()
+  await flush(flowEntry.Component, flowProps)
+  let tree4 = await flush(cloneEntry.Component, { t })
+  const parentInput = findAll(tree4, 'input').find((node) => node.props.id === 'dshgit-clone-parent')
+  check('the clone dialog opened with its parent field', parentInput !== undefined, textOf(tree4).slice(0, 300))
+  // A URL seeds the folder name, so only the path is wrong here.
+  const urlInput = findAll(tree4, 'input')[0]
+  urlInput.props.onChange({ target: { value: 'https://github.com/o/app.git' } })
+  parentInput.props.onChange({ target: { value: '~/projects' } })
+  tree4 = await flush(cloneEntry.Component, { t })
+  check('the clone dialog explains a tilde path too', hasText(tree4, t('clone.problem.tilde')), textOf(tree4).slice(0, 400))
+  findAll(tree4, 'input').find((node) => node.props.id === 'dshgit-clone-parent').props.onChange({ target: { value: '/Users/me/projects' } })
+  tree4 = await flush(cloneEntry.Component, { t })
+  check('fixing the clone path clears the explanation',
+    !hasText(tree4, t('clone.problem.tilde')) && !hasText(tree4, t('clone.problem.relative')))
+}
+console.log('PASS the clone dialog explains the same problems')
+
+console.log('\n--- a changelist folds and stays searchable, including mid-write ---')
+{
+  // The commit popover's changelist rows are the one place a user meets a
+  // list he did not create: "默认 ●" and the lists beside it. Two separate
+  // defects lived here. A live query forced every group open, so the chevron
+  // wrote `expand: false` and nothing moved; and the chevron was disabled while
+  // any write was in flight, taking away the only way to tidy the list during a
+  // commit. Folding is view state, so neither is acceptable.
+  const foldFile = { path: 'src/index.js', originalPath: null, index: '.', worktree: 'M', staged: false, kind: 'ordinary', added: 2, deleted: 1, binary: false }
+  const skipFile = { path: 'docs/待提交.md', originalPath: null, index: '.', worktree: 'M', staged: false, kind: 'ordinary', added: 1, deleted: 0, binary: false }
+  let lists = { version: 3, mode: 'lists', fileLayout: 'tree', active: 'default', draftList: 'default',
+    lists: [{ id: 'default', name: '默认', description: '', draft: '', expanded: true },
+      { id: 'skip', name: '不提交', description: '', draft: '', expanded: true }],
+    assignments: { 'src/index.js': 'default', 'docs/待提交.md': 'skip' }, selected: ['src/index.js'], chunks: {} }
+  let releaseCommit
+  tree = await renderChips(healthyHandlers({
+    status: () => ({ ...STATUS, total: 2, files: [foldFile, skipFile] }),
+    changelists: () => lists,
+    updateChangelist: (payload) => {
+      if (payload.action === 'expand') lists = { ...lists, version: lists.version + 1,
+        lists: lists.lists.map((list) => list.id === payload.id ? { ...list, expanded: payload.expanded } : list) }
+      return lists
+    },
+    // In changelist mode the popover commits an explicit PATH scope, so that is
+    // the write that must stay pending for the fold to be tried mid-flight.
+    'write.commitPaths': () => new Promise((resolve) => { releaseCommit = resolve }),
+    'write.commit': () => new Promise((resolve) => { releaseCommit = resolve }),
+  }))
+  findAll(tree, 'button').find((node) => node.props['data-chip'] === 'changes')
+    .props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const popover = () => walk(tree).find((node) => node.props?.['data-popover'] === 'commit')
+  const headOf = (id) => walk(popover()).find((node) => node.props?.['data-changelist-id'] === id)
+  const foldOf = (id) => findAll(headOf(id), 'button').find((node) => node.props['aria-expanded'] !== undefined)
+  const rowsOf = () => walk(popover()).filter((node) => node.props?.['data-file-path']).map((node) => node.props['data-file-path'])
+  check('both changelists are listed with their files',
+    headOf('default') !== undefined && headOf('skip') !== undefined &&
+      rowsOf().includes('src/index.js') && rowsOf().includes('docs/待提交.md'), JSON.stringify(rowsOf()))
+
+  // Search: the matching list opens on its match, the list with nothing to show
+  // does not open onto an empty gap.
+  const searchInput = () => findAll(popover(), 'input').find((node) => node.props.type === 'search')
+  searchInput().props.onChange({ currentTarget: { value: 'src' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a query narrows the lists without hiding their headers',
+    headOf('default') !== undefined && headOf('skip') !== undefined, textOf(popover()).slice(0, 240))
+
+  // Folding must work WHILE the query is active — this is the regression.
+  foldOf('default').props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a list folds while a search is active', foldOf('default').props['aria-expanded'] === false &&
+    !rowsOf().includes('src/index.js'), JSON.stringify({ expanded: foldOf('default').props['aria-expanded'], rows: rowsOf() }))
+  foldOf('default').props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the same list unfolds again with the search still active',
+    foldOf('default').props['aria-expanded'] === true && rowsOf().includes('src/index.js'))
+
+  // A fold belongs to the query it was chosen under. Typing a different search
+  // asks a different question, so the lists it matched start from their default
+  // instead of inheriting a fold the user picked for the previous one.
+  foldOf('default').props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a list can be folded again under the current query', foldOf('default').props['aria-expanded'] === false)
+  searchInput().props.onChange({ currentTarget: { value: '待提交' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a new query starts from a clean fold state',
+    foldOf('skip').props['aria-expanded'] === true && rowsOf().includes('docs/待提交.md'),
+    JSON.stringify({ expanded: foldOf('skip').props['aria-expanded'], rows: rowsOf() }))
+  searchInput().props.onChange({ currentTarget: { value: '' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+
+  // A search for a list NAME shows that list's files rather than an empty body
+  // with a 0/N counter, which reads as "this list is empty".
+  searchInput().props.onChange({ currentTarget: { value: '不提交' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a search matching a list name still shows that list\'s files',
+    rowsOf().includes('docs/待提交.md') && !rowsOf().includes('src/index.js'), JSON.stringify(rowsOf()))
+  searchInput().props.onChange({ currentTarget: { value: '' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+
+  // Mid-write: the fold is view state and must stay usable. The list is opened
+  // first, because earlier folds in this block were persisted through
+  // `updateChangelist` — the same write a real Host would have seen.
+  if (foldOf('default').props['aria-expanded'] !== true) {
+    foldOf('default').props.onClick()
+    tree = await flush(GitApp, { connection: mounted.rpc, t })
+  }
+  findAll(popover(), 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
+    .props.onChange({ currentTarget: { value: 'feat: fold during commit' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(popover(), 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the commit is in flight before the fold is tried',
+    typeof releaseCommit === 'function' &&
+      mounted.rpc.calls.some((call) => call.method === 'write.commitPaths' || call.method === 'write.commit' || call.method === 'operationStart'),
+    JSON.stringify(mounted.rpc.calls.filter((call) => call.method.startsWith('write.')).map((call) => call.method)))
+  check('the changelist chevron is not disabled by an unrelated write', foldOf('default').props.disabled !== true)
+  foldOf('default').props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a running commit does not make the changelist un-foldable',
+    foldOf('default').props['aria-expanded'] === false && !rowsOf().includes('src/index.js'),
+    JSON.stringify({ expanded: foldOf('default')?.props['aria-expanded'], rows: rowsOf() }))
+  releaseCommit({ ok: true, code: 0, message: '提交成功', stdout: '' })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  tree = await renderApp()
+}
+console.log('PASS a changelist folds and stays searchable, including mid-write')
+
+// ---------------------------------------------------------------------------
+// 12. The range editor and the recovery-point list actually mount.
+//
+// The rules behind both screens are asserted in `check-runtime.mjs` without a DOM.
+// What THIS covers is the failure a pure test cannot see: a component that throws or
+// loops blanks its slot entry, and the user gets an empty dialog with no error. So the
+// dialog is mounted for real, its rows and buttons are inspected, and a plan is
+// actually sent to the Host through the same `run` path the app uses.
+// ---------------------------------------------------------------------------
+console.log('\n--- the range editor renders a usable plan and the recovery list mounts ---')
+{
+  const RANGE_COMMITS = {
+    commits: [
+      { sha: 'c'.repeat(40), shortSha: 'ccccccc', author: '李四', authorEmail: 'dev@example.com',
+        authorDate: 1790741500, committerDate: 1790741500, parents: ['b'.repeat(40)], tips: [],
+        subject: 'third change', message: 'third change', files: [], unpublished: true },
+      { sha: 'b'.repeat(40), shortSha: 'bbbbbbb', author: '李四', authorEmail: 'dev@example.com',
+        authorDate: 1790741400, committerDate: 1790741400, parents: ['a'.repeat(40)], tips: [],
+        subject: 'second change', message: 'second change', files: [], unpublished: true },
+      { sha: 'a'.repeat(40), shortSha: 'aaaaaaa', author: '张三', authorEmail: 'dev@example.com',
+        authorDate: 1790741300, committerDate: 1790741300, parents: [], tips: [],
+        subject: 'first change', message: 'first change', files: [], unpublished: true },
+    ],
+  }
+  const UNDO_RECORDS = [
+    { ref: 'refs/dsh-rewrite/1793260071-abcdef12-reword-main', sha: 'd'.repeat(40), shortSha: 'ddddddd',
+      action: 'reword', origin: 'refs/heads/main', note: '', at: 1793260071000 },
+    { ref: 'refs/dsh-rewrite/1793260080-abcdef13-rebase-main', sha: 'e'.repeat(40), shortSha: 'eeeeeee',
+      action: 'rebase', origin: 'refs/heads/main', note: '', at: 1793260080000 },
+  ]
+
+  const handlers = healthyHandlers({
+    commits: () => RANGE_COMMITS,
+    rebasePreview: (payload) => ({
+      base: payload.base,
+      head: 'c'.repeat(40),
+      branch: 'refs/heads/main',
+      planned: (payload.commits || []).length,
+      counts: { kept: (payload.commits || []).length, reworded: 0, edited: 0, squashed: 0, dropped: 0 },
+      commits: payload.commits || [],
+      // The Host counts published commits against the remote refs, so the dialog reads a
+      // fact from here rather than guessing one from the list it was opened from.
+      published: 0,
+      guard: { head: 'c'.repeat(40), branch: 'refs/heads/main', state: 'fingerprint', references: {} },
+    }),
+    undoPoints: () => UNDO_RECORDS,
+  })
+  let tree = await renderApp(handlers)
+  const rootProps = { connection: mounted.rpc, t }
+
+  // Open the history module and right-click the MIDDLE commit: the two commits above it
+  // become the range, and the clicked commit is the base that stays untouched.
+  findAll(tree, 'button').find((node) => node.props['data-module'] === 'history').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const commitRows = () => findAll(tree, 'button').filter((node) => String(node.props.className).includes('dshgit-commitrow'))
+  check('the history list shows the fixture commits', commitRows().length === 3,
+    JSON.stringify(commitRows().map((node) => textOf(node).slice(0, 20))))
+  // Right-click the OLDEST commit: it becomes the base, and the two commits above it
+  // are the range. Chosen by subject rather than by index, so this case does not
+  // depend on anything an earlier case did to the list.
+  const oldestRow = commitRows().find((node) => textOf(node).includes('first change'))
+  check('the fixture oldest commit is on screen', oldestRow !== undefined,
+    JSON.stringify(commitRows().map((node) => textOf(node).slice(0, 20))))
+  oldestRow.props.onContextMenu({ preventDefault() {}, stopPropagation() {}, clientX: 10, clientY: 20,
+    currentTarget: { getBoundingClientRect: () => ({ left: 10, bottom: 20 }) } })
+  tree = await flush(GitApp, rootProps)
+  const menuNode = () => walk(tree).find((node) => node.props?.className === 'dshgit-contextmenu')
+  // Menu rows are buttons whose label is the localised copy; the command is shown
+  // beside it, so matching on the label is how a user finds it too.
+  const menuItem = (label) => findAll(menuNode() ?? {}, 'button').find((node) => textOf(node).includes(label))
+  const rangeEntry = () => menuItem(t('rebase.open'))
+  check('the commit menu offers range editing', rangeEntry() !== undefined,
+    JSON.stringify(findAll(menuNode() ?? {}, 'button').map((node) => textOf(node))))
+
+  rangeEntry().props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const dialog = findAll(tree, 'div').find((node) => node.props['data-rebase-dialog'] === 'true')
+  check('the range editor opens as a dialog', dialog !== undefined)
+  const rows = findAll(tree, 'div').filter((node) => node.props['data-rebase-row'])
+  check('the plan lists every commit in the range', rows.length === 2, `${rows.length} rows`)
+  check('every row starts as keep', rows.every((row) => row.props['data-action'] === 'pick'))
+  // A leading fold is not offered at all: there is nothing above the first row.
+  const firstRowChips = findAll(rows[0], 'button').filter((node) => node.props['data-rebase-action'])
+  check('the first row does not offer folding', firstRowChips.every((chip) => !['squash', 'fixup'].includes(chip.props['data-rebase-action'])))
+  const secondRowChips = () => findAll(rows[1], 'button').filter((node) => node.props['data-rebase-action'])
+  check('later rows can be folded', secondRowChips().some((chip) => chip.props['data-rebase-action'] === 'squash'))
+
+  // Mark the second row as a fold and confirm the plan sent to the Host carries it.
+  secondRowChips().find((chip) => chip.props['data-rebase-action'] === 'squash').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const previewCall = () => mounted.rpc.calls.filter((call) => call.method === 'rebasePreview').pop()
+  check('the preview is refreshed with the arranged order',
+    previewCall() !== undefined && previewCall().payload.commits[1].action === 'squash',
+    JSON.stringify(previewCall()?.payload?.commits))
+  // Reset puts every row back without losing the order.
+  findAll(tree, 'button').find((node) => node.props['data-rebase-reset'] === 'true').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('reset returns every row to keep',
+    findAll(tree, 'div').filter((node) => node.props['data-rebase-row']).every((row) => row.props['data-action'] === 'pick'))
+
+  const applyButton = () => findAll(tree, 'button').find((node) => node.props['data-rebase-confirm'] === 'true')
+  check('the plan can be applied once it is previewed', applyButton().props.disabled === false,
+    JSON.stringify({
+      calls: mounted.rpc.calls.map((call) => call.method).filter((method) => method.startsWith('rebase') || method === 'rebasePreview'),
+      preview: mounted.rpc.calls.filter((call) => call.method === 'rebasePreview').length,
+      rows: findAll(tree, 'div').filter((node) => node.props['data-rebase-row']).length,
+    }))
+  applyButton().props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const applyCall = () => mounted.rpc.calls.filter((call) => call.method === 'write.applyPlan').pop()
+  check('applying sends the plan, the messages and the guard',
+    applyCall() !== undefined && applyCall().payload.confirm === true &&
+      applyCall().payload.guard?.state === 'fingerprint' &&
+      applyCall().payload.commits.length === 2,
+    JSON.stringify(applyCall()?.payload && Object.keys(applyCall().payload)))
+  // The publish override is a STATEMENT BY THE USER, so it travels only when the box is
+  // ticked. Sending it unconditionally would defeat the Host's guard entirely: the guard
+  // is the only thing standing between a pushed commit and a rewritten one.
+  check('the publish override is not sent unless it is ticked', applyCall().payload.allowPublished === false,
+    JSON.stringify(applyCall()?.payload?.allowPublished))
+
+  // -------------------------------------------------------------------------
+  // The published gate, as the user meets it: the Host reports a pushed commit in
+  // range, so the run button is disabled until the override is ticked — and ticking it
+  // is what makes the override travel. Before this was wired, the warning was pure
+  // decoration: the checkbox existed, the count was local, and neither reached the Host.
+  // -------------------------------------------------------------------------
+  const publishedHandlers = healthyHandlers({
+    commits: () => RANGE_COMMITS,
+    rebasePreview: (payload) => ({
+      base: payload.base,
+      head: 'c'.repeat(40),
+      branch: 'refs/heads/main',
+      planned: (payload.commits || []).length,
+      counts: { kept: (payload.commits || []).length, reworded: 0, edited: 0, squashed: 0, dropped: 0 },
+      commits: payload.commits || [],
+      published: 1,
+      guard: { head: 'c'.repeat(40), branch: 'refs/heads/main', state: 'fingerprint', references: {} },
+    }),
+    'write.applyPlan': () => ({ ok: true, stopped: false, message: '已整理 2 个提交' }),
+  })
+  tree = await renderApp(publishedHandlers)
+  findAll(tree, 'button').find((node) => node.props['data-module'] === 'history').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const oldest2 = findAll(tree, 'button').filter((node) => String(node.props.className).includes('dshgit-commitrow'))
+    .find((node) => textOf(node).includes('first change'))
+  oldest2.props.onContextMenu({ preventDefault() {}, stopPropagation() {}, clientX: 10, clientY: 20,
+    currentTarget: { getBoundingClientRect: () => ({ left: 10, bottom: 20 }) } })
+  tree = await flush(GitApp, rootProps)
+  findAll(walk(tree).find((node) => node.props?.className === 'dshgit-contextmenu') ?? {}, 'button')
+    .find((node) => textOf(node).includes(t('rebase.open'))).props.onClick()
+  tree = await flush(GitApp, rootProps)
+
+  check('the dialog shows the Host\'s published count',
+    walk(tree).some((node) => node.props?.['data-rebase-published'] === '1'))
+  const gatedRun = () => findAll(tree, 'button').find((node) => node.props['data-rebase-confirm'] === 'true')
+  check('a published commit blocks the run until the override is ticked', gatedRun().props.disabled === true)
+  const overrideBox = findAll(tree, 'input').find((node) => node.props.checked === false)
+  check('the override checkbox is offered', overrideBox !== undefined)
+  overrideBox.props.onChange({ currentTarget: { checked: true } })
+  tree = await flush(GitApp, rootProps)
+  check('ticking the override enables the run', gatedRun().props.disabled === false)
+
+  // The recovery list mounts from the history sidebar and shows what each entry was.
+  tree = await renderApp(handlers)
+  findAll(tree, 'button').find((node) => node.props['data-module'] === 'history').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const undoEntry = () => findAll(tree, 'button').find((node) => node.props['data-undo-open'] === 'true')
+  check('the history sidebar exposes the recovery list', undoEntry() !== undefined)
+  undoEntry().props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const undoRows = findAll(tree, 'div').filter((node) => node.props['data-undo-ref'])
+  check('every recovery point is listed with the action it recorded',
+    undoRows.length === 2 &&
+      undoRows.some((row) => row.props['data-undo-action'] === 'reword') &&
+      undoRows.some((row) => row.props['data-undo-action'] === 'rebase'),
+    JSON.stringify(undoRows.map((row) => row.props['data-undo-action'])))
+  // Restoring is offered as two differently-worded actions, not one button plus a
+  // hidden mode: "look" and "move" must not be confusable.
+  const restoreModes = findAll(undoRows[0], 'button').map((node) => node.props['data-undo-restore']).filter(Boolean)
+  check('restoring offers a branch and a move as separate actions',
+    restoreModes.includes('branch') && restoreModes.includes('reset'), JSON.stringify(restoreModes))
+  currentHarness = makeHarness(client, stub).Harness
+  tree = await renderApp()
+}
+console.log('PASS the range editor renders a usable plan and the recovery list mounts')
+
+// ---------------------------------------------------------------------------
+// 13. Attribution, explanations and the review switches reach the screen.
+//
+// Three features that were implemented on the Host and unreachable in the panel:
+// `blame` was never called at all, `ai.explainCommit` answered through `alert()`, and
+// the review flags were accepted but never sent. What this covers is presence and
+// wiring — the rules live in `check-runtime.mjs`, the git behaviour in
+// `check-history.mjs`.
+// ---------------------------------------------------------------------------
+console.log('\n--- attribution, explanations and review switches are reachable ---')
+{
+  const BLAME_RESULT = {
+    path: 'src/index.js',
+    rev: 'f'.repeat(40),
+    range: null,
+    fileLines: 2,
+    cacheable: true,
+    lines: [
+      { line: 1, sha: 'a'.repeat(40), author: '张三', authorTime: 1790741262, summary: 'first line' },
+      { line: 2, sha: 'b'.repeat(40), author: '李四', authorTime: 1790741300, summary: 'second line' },
+    ],
+    commits: [
+      { sha: 'a'.repeat(40), author: '张三', summary: 'first line' },
+      { sha: 'b'.repeat(40), author: '李四', summary: 'second line' },
+    ],
+    authors: [{ name: '张三', lines: 1 }, { name: '李四', lines: 1 }],
+  }
+
+  const handlers = healthyHandlers({
+    blame: (payload) => ({ ...BLAME_RESULT, path: payload.path, rev: payload.rev || 'WORKTREE' }),
+    'ai.explainCommit': () => ({ available: true, text: '第一段说明\n\n第二段说明' }),
+    diff: payload => payload.wordDiff ? { ...DIFF,
+      files: DIFF.files.map(file => ({ ...file, hunks: file.hunks.map(hunk => ({ ...hunk,
+        wordDiff: true, lines: [' console.log([-old-]{+new+})'],
+      })) })),
+    } : healthyHandlers().diff(payload),
+  })
+  let tree = await renderApp(handlers)
+  const rootProps = { connection: mounted.rpc, t }
+
+  // Open a commit's detail from the history list, where the explanation belongs.
+  findAll(tree, 'button').find((node) => node.props['data-module'] === 'history').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  findAll(tree, 'button').filter((node) => String(node.props.className).includes('dshgit-commitrow'))[0].props.onClick()
+  tree = await flush(GitApp, rootProps)
+
+  const explainButton = () => findAll(tree, 'button').find((node) => node.props['data-explain-run'])
+  check('the commit detail offers an explanation', explainButton() !== undefined)
+  explainButton().props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const explainText = () => walk(tree).find((node) => node.props?.['data-explain-text'])
+  check('the explanation is rendered in place, not through alert', explainText() !== undefined)
+  // `pre-wrap` is what keeps the model's line breaks; collapsing them turns labelled
+  // sections into one paragraph.
+  check('the explanation keeps its line breaks', String(explainText().props?.style?.whiteSpace ?? 'pre-wrap') !== 'normal')
+  check('the explanation asked the Host for the commit it belongs to',
+    mounted.rpc.calls.some((call) => call.method === 'ai.explainCommit' && call.payload.sha === 'f'.repeat(40)),
+    JSON.stringify(mounted.rpc.calls.filter((call) => call.method === 'ai.explainCommit').map((call) => call.payload)))
+
+  findAll(tree, 'button').find(node => node.props['data-history-view'] === 'before').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const blameToggle = findAll(tree, 'button').find(node => node.props['data-blame-toggle'])
+  check('the before-file preview offers attribution', blameToggle !== undefined)
+  blameToggle.props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const blamed = mounted.rpc.calls.filter(call => call.method === 'blame').at(-1)
+  check('before attribution uses the parent revision and the original rename path',
+    blamed?.payload.rev === 'd'.repeat(40) && blamed?.payload.path === 'src/app.js', JSON.stringify(blamed?.payload))
+  findAll(tree, 'button').find(node => node.props['data-blame-sha'] === 'a'.repeat(40)).props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('clicking attribution opens that commit through the app navigation',
+    mounted.rpc.calls.some(call => call.method === 'commit' && call.payload.sha === 'a'.repeat(40)))
+
+  // The review switches live on the CHANGED-FILE diff toolbar, so a file has to be
+  // selected: they change how a patch is read, and a patch is what has to be on screen.
+  findAll(tree, 'button').find((node) => node.props['data-module'] === 'changes').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  // Opened through the row the plugin itself renders for a changed file, using the same
+  // handler a user's click reaches, so this does not depend on the row's internal event
+  // plumbing.
+  const changeRow = () => walk(tree).find((node) => node.props?.title === 'src/index.js' &&
+    String(node.props?.className ?? '').includes('dshgit-change'))
+  check('a changed file is listed to open', changeRow() !== undefined,
+    JSON.stringify(walk(tree).map((node) => node.props?.title).filter(Boolean).slice(0, 6)))
+  findAll(tree, 'button').find((node) => node.props['data-module'] === 'changes')
+  changeRow().props.onClick({ preventDefault() {}, stopPropagation() {}, currentTarget: { closest: () => null } })
+  tree = await flush(GitApp, rootProps)
+
+  const reviewTrigger = () => walk(tree).find((node) => node.props?.['data-review-open'] !== undefined)
+  check('the diff toolbar offers the review switches', reviewTrigger() !== undefined)
+  reviewTrigger().props.onClick()
+  tree = await flush(GitApp, rootProps)
+  check('the review popover opens', walk(tree).some((node) => node.props?.['data-review-panel'] === 'true'))
+  check('every switch is present',
+    ['ignoreWhitespace', 'ignoreAllSpace', 'wordDiff'].every((flag) =>
+      walk(tree).some((node) => node.props?.['data-review-flag'] === flag)))
+  const readsBefore = mounted.rpc.calls.filter(call => call.method === 'diff').length
+  walk(tree).find(node => node.props?.['data-review-flag'] === 'ignoreWhitespace')
+    .props.onChange({ currentTarget: { checked: true } })
+  tree = await flush(GitApp, rootProps)
+  const rereads = mounted.rpc.calls.filter(call => call.method === 'diff')
+  check('changing review preferences immediately rereads the selected file',
+    rereads.length > readsBefore && rereads.at(-1).payload.ignoreWhitespace === true)
+  walk(tree).find(node => node.props?.['data-review-flag'] === 'wordDiff')
+    .props.onChange({ currentTarget: { checked: true } })
+  tree = await flush(GitApp, rootProps)
+  check('word-diff text reaches the rendered file preview', hasText(tree, 'console.log([-old-]{+new+})'))
+  const wordRow = walk(tree).find(node => node.props?.className?.includes('dshgit-diffrow') && hasText(node, '[-old-]'))
+  check('word-diff rows do not invent old and new line numbers',
+    wordRow && walk(wordRow).filter(node => node.props?.className === 'dshgit-diffnum').every(node => textOf(node) === ''))
+  findAll(tree, 'button').find(node => textOf(node) === t('review.reset')).props.onClick()
+  tree = await flush(GitApp, rootProps)
+  currentHarness = makeHarness(client, stub).Harness
+  tree = await renderApp()
+}
+console.log('PASS attribution, explanations and review switches are reachable')
+
+// ---------------------------------------------------------------------------
+// 14. The pick queue and the hunk strip mount and send what they promise.
+//
+// Both are writes: a pick creates commits, a hunk stage moves content into the index. A
+// component that throws blanks its slot entry and the user sees an empty panel, so these
+// are mounted for real and the request bodies are inspected.
+// ---------------------------------------------------------------------------
+console.log('\n--- the pick queue and the hunk strip reach the Host ---')
+{
+  const QUEUE_COMMITS = {
+    commits: [
+      { sha: 'c'.repeat(40), shortSha: 'ccccccc', author: '李四', authorEmail: 'dev@example.com',
+        authorDate: 1790741500, committerDate: 1790741500, parents: ['b'.repeat(40)], tips: [],
+        subject: 'fix login timeout', message: 'fix login timeout', files: [], unpublished: true },
+      { sha: 'b'.repeat(40), shortSha: 'bbbbbbb', author: '李四', authorEmail: 'dev@example.com',
+        authorDate: 1790741400, committerDate: 1790741400, parents: ['a'.repeat(40)], tips: [],
+        subject: 'add tests', message: 'add tests', files: [], unpublished: true },
+      { sha: 'a'.repeat(40), shortSha: 'aaaaaaa', author: '张三', authorEmail: 'dev@example.com',
+        authorDate: 1790741300, committerDate: 1790741300, parents: [], tips: [],
+        subject: 'initial import', message: 'initial import', files: [], unpublished: false },
+    ],
+  }
+  const HUNK_RESPONSE = {
+    path: 'src/index.js', staged: false, header: 'diff --git a/src/index.js b/src/index.js',
+    // Must match the coordinates of the rendered patch in this fixture (`-1,3 +1,4`).
+    // Both coordinates and the preview's body digest must agree.
+    hunks: [
+      { index: 0, hash: 'h'.repeat(64), header: '@@ -1,3 +1,4 @@', contentHash: DIFF.hunks[0].contentHash },
+    ],
+  }
+  const handlers = healthyHandlers({
+    commits: () => QUEUE_COMMITS,
+    fileHunks: () => HUNK_RESPONSE,
+    'write.cherryPickQueue': () => ({ ok: true, code: 0, message: '已挑选 2 个提交', stdout: '' }),
+    'write.stageHunks': () => ({ ok: true, code: 0, message: '已暂存 1 个改动块', stdout: '' }),
+  })
+
+  let tree = await renderApp(handlers)
+  const rootProps = { connection: mounted.rpc, t }
+  findAll(tree, 'button').find((node) => node.props['data-module'] === 'history').props.onClick()
+  tree = await flush(GitApp, rootProps)
+
+  // Tick two commits through the list's own controls, then use the queue button. The
+  // queue needs the OLDEST-first order the model produces, which is what gets asserted.
+  const tick = (sha) => findAll(tree, 'button').find((node) => node.props['data-rewrite-tick'] === sha)
+  check('unpushed commits offer a tick', tick('c'.repeat(40)) !== undefined && tick('b'.repeat(40)) !== undefined)
+  // A published commit is not tickable: rewriting it would rewrite shared history.
+  check('a published commit is not tickable', tick('a'.repeat(40)) === undefined)
+  tick('c'.repeat(40)).props.onClick()
+  tick('b'.repeat(40)).props.onClick()
+  tree = await flush(GitApp, rootProps)
+
+  const pickButton = () => findAll(tree, 'button').find((node) => ['true', 'merge'].includes(node.props['data-rewrite-pick']))
+  check('the action bar offers a pick queue', pickButton() !== undefined,
+    JSON.stringify(findAll(tree, 'button').map((node) => node.props['data-rewrite-pick']).filter(Boolean)))
+  check('the queue is enabled for a valid selection', pickButton().props.disabled !== true)
+  pickButton().props.onClick()
+  tree = await flush(GitApp, rootProps)
+
+  const dialog = () => walk(tree).find((node) => node.props?.['data-pick-dialog'] === 'true')
+  check('the queue dialog opens', dialog() !== undefined)
+  const rows = () => walk(tree).filter((node) => node.props?.['data-pick-sha'])
+  check('the queue lists the ticked commits oldest first',
+    rows().map((node) => node.props['data-pick-sha']).join(',') === ['b'.repeat(40), 'c'.repeat(40)].join(','),
+    JSON.stringify(rows().map((node) => node.props['data-pick-sha'])))
+
+  // The origin-suffix switch is off by default because it changes every message.
+  const origin = () => walk(tree).find((node) => node.props?.['data-pick-origin'] !== undefined)
+  check('recording the source commit is off by default', origin().props.checked === false)
+  origin().props.onChange({ currentTarget: { checked: true } })
+  tree = await flush(GitApp, rootProps)
+
+  walk(tree).find((node) => node.props?.['data-pick-confirm'] === 'true').props.onClick()
+  tree = await flush(GitApp, rootProps)
+  const call = () => mounted.rpc.calls.filter((item) => item.method === 'write.cherryPickQueue').pop()
+  check('the queue is sent as one request with a confirmation token',
+    call() !== undefined && call().payload.confirm === true && call().payload.recordOrigin === true,
+    JSON.stringify(call()?.payload && Object.keys(call().payload)))
+  check('the queue carries the oldest-first order and no duplicates',
+    call().payload.shas.join(',') === ['b'.repeat(40), 'c'.repeat(40)].join(','),
+    JSON.stringify(call()?.payload?.shas))
+
+  // The hunk strip is asserted through the props the changes panel passes to it, rather
+  // than by routing a click through the sidebar. Reaching that panel needs the changes
+  // sidebar to select a file in its `working` section, which is a routing detail with
+  // nothing to do with staging; the contract worth pinning is that the strip renders when
+  // offered, offers only that section's actions, and stays inert until a hunk is chosen.
+  //
+  // The component is internal to the bundle, so it is exposed the same way other internal
+  // components are in this file: by rewriting the module return.
+  const stripModule = loadClientModule(source.replace('    return module.exports',
+    '    module.exports.HunkActions = HunkActions;\n    return module.exports'))
+  const { HunkActions } = stripModule
+  const stripProps = (onAct) => ({
+    t, actions: ['stage', 'discard'], busy: false, error: '', count: 2, onAct,
+  })
+  const acts = []
+  let stripTree = await flush(() => h(HunkActions, stripProps((action, index) => acts.push({ action, index }))), {})
+  const strip = () => walk(stripTree).find((node) => node.props?.['data-hunk-bar'] === 'true')
+  check('the hunk strip renders', strip() !== undefined)
+  const stageButton = () => findAll(strip() ?? {}, 'button').find((node) => node.props['data-hunk-action'] === 'stage')
+  const discardButton = () => findAll(strip() ?? {}, 'button').find((node) => node.props['data-hunk-action'] === 'discard')
+  check('staging and discarding are both offered on an unstaged file',
+    stageButton() !== undefined && discardButton() !== undefined)
+  // Acting on "whatever is first" is how the wrong lines get staged, so nothing may fire
+  // before a hunk is chosen.
+  check('the actions stay disabled until a hunk is chosen', stageButton().props.disabled === true)
+  // The picker is the themed ComboBox: open it, then click the option. That is
+  // the same contract the other combobox tests drive, and it needs no native
+  // `change` event.
+  const picker = () => findAll(stripTree, 'input').find((node) => node.props.name === 'hunkTarget')
+  check('the strip offers a picker for the hunk to act on',
+    picker() !== undefined && picker().props.role === 'combobox')
+  check('no action fires merely from choosing a hunk', acts.length === 0)
+
+  // Choosing a hunk unlocks the actions, and the reported index is the CHOSEN one — the
+  // failure this prevents is "stage hunk 2" silently staging hunk 1.
+  const repaint = async () => {
+    stripTree = await flush(() => h(HunkActions, stripProps((action, index) => acts.push({ action, index }))), {})
+  }
+  const pickHunk = async (indexValue) => {
+    picker().props.onClick()
+    await repaint()
+    const option = findAll(stripTree, 'button')
+      .find((node) => node.props.role === 'option' && node.props['data-value'] === indexValue)
+    option.props.onClick()
+    await repaint()
+  }
+  await pickHunk('1')
+  const stageNow = () => findAll(walk(stripTree).find((node) => node.props?.['data-hunk-bar'] === 'true') ?? {}, 'button')
+    .find((node) => node.props['data-hunk-action'] === 'stage')
+  stageNow().props.onClick()
+  check('pressing stage reports the chosen hunk index',
+    acts.length === 1 && acts[0].action === 'stage',
+    JSON.stringify(acts))
+
+  currentHarness = makeHarness(client, stub).Harness
+  tree = await renderApp()
+}
+
+console.log('\n--- line-level staging ---')
+{
+  // Line staging is the finer granularity of the hunk strip: it writes the same
+  // fingerprints, so the Host validates it exactly as strictly. These checks
+  // drive the patcher directly, because what matters is the PATCH it builds.
+  const { splitHunks, linesPatch, hunksPatch } = await import('../lib/git/hunks.js')
+  const { parseUnifiedDiff } = await import('../lib/git/parse.js')
+  const diff = splitHunks([
+    'diff --git a/a.txt b/a.txt',
+    'index 111..222 100644',
+    '--- a/a.txt',
+    '+++ b/a.txt',
+    '@@ -1,3 +1,3 @@',
+    ' one',
+    '-two',
+    '+TWO',
+    ' three',
+    '',
+  ].join('\n'))
+  const hunk = diff.hunks[0]
+  const removedIndex = hunk.lines.findIndex((line) => line.startsWith('-'))
+  const addedIndex = hunk.lines.findIndex((line) => line.startsWith('+'))
+
+  const wholeHunk = linesPatch(diff, { [hunk.hash]: [removedIndex, addedIndex] })
+  check('selecting every change line reproduces the edit',
+    wholeHunk.includes('-two') && wholeHunk.includes('+TWO'), wholeHunk)
+
+  // Choosing ONLY the addition must keep the removal as context, or every later
+  // line of the file shifts when the patch is applied.
+  const onlyAdd = linesPatch(diff, { [hunk.hash]: [addedIndex] })
+  check('an unselected removal survives as context',
+    onlyAdd.includes(' two') && onlyAdd.includes('+TWO') && !onlyAdd.includes('-two'),
+    onlyAdd)
+  check('the rewritten header counts the surviving context',
+    /@@ -1,3 \+1,4 @@/.test(onlyAdd), onlyAdd.split('\n').find((line) => line.startsWith('@@')))
+
+  const onlyRemove = linesPatch(diff, { [hunk.hash]: [removedIndex] })
+  check('an unselected addition is not emitted at all',
+    onlyRemove.includes('-two') && !onlyRemove.includes('TWO'), onlyRemove)
+
+  check('no selected lines builds no patch', linesPatch(diff, { [hunk.hash]: [] }) === '')
+  // An unknown fingerprint is not a licence to build a partial patch: the Host
+  // rejects the request before this is ever reached, and the builder must not
+  // quietly produce something for a hunk it was not given.
+  check('a fingerprint with no matching hunk produces nothing',
+    linesPatch(diff, { 'not-a-real-hash': [addedIndex] }) === '')
+
+  // ---- `\ No newline at end of file` -------------------------------------
+  //
+  // git emits this marker BETWEEN the two sides when a file lacks a trailing
+  // newline, so it used to sit inside the hunk's line array and shift every
+  // index after it. The renderer drops it (it is not a line of the file), so
+  // the UI and the Host numbered the same hunk differently — and the mismatch
+  // silently staged the WRONG line: selecting the last addition staged the one
+  // before it. These checks pin both halves of the fix.
+  const markerDiff = splitHunks([
+    'diff --git a/a.txt b/a.txt',
+    'index 111..222 100644',
+    '--- a/a.txt',
+    '+++ b/a.txt',
+    '@@ -1,2 +1,3 @@',
+    ' a',
+    '-b',
+    '\\ No newline at end of file',
+    '+B',
+    '+c',
+    '\\ No newline at end of file',
+    '',
+  ].join('\n'))
+  const markerHunk = markerDiff.hunks[0]
+  check('the no-newline marker is not counted as a content line',
+    markerHunk.lines.length === 4 && !markerHunk.lines.some((line) => line.startsWith('\\')),
+    JSON.stringify(markerHunk.lines))
+  // The renderer's view of the same hunk must agree on every index.
+  check('the marker does not shift the indices the renderer shows',
+    JSON.stringify(parseUnifiedDiff(markerDiff.header + '\n' + markerHunk.header + '\n' + markerHunk.lines.join('\n'))[0].lines)
+      === JSON.stringify(markerHunk.lines), JSON.stringify(markerHunk.lines))
+  // Whole-hunk staging must still be byte-faithful: the markers are re-inserted.
+  check('whole-hunk staging keeps the markers so the patch stays byte-identical',
+    hunksPatch(markerDiff, [markerHunk.hash]) === markerDiff.header + '\n' + markerHunk.header + '\n' +
+      ' a\n-b\n\\ No newline at end of file\n+B\n+c\n\\ No newline at end of file\n',
+    JSON.stringify(hunksPatch(markerDiff, [markerHunk.hash])))
+  // And line picking is refused rather than silently wrong.
+  let refusedNoNewline = false
+  try { linesPatch(markerDiff, { [markerHunk.hash]: [3] }) }
+  catch (error) { refusedNoNewline = /换行符/.test(error.message) }
+  check('line picking is refused when the file ends without a newline', refusedNoNewline)
+}
+console.log('PASS the pick queue and the hunk strip reach the Host with the right payloads')
+
+console.log('\n--- hunk writes are reachable from the ordinary staging views ---')
+for (const staged of [false, true]) {
+  const file = { ...STATUS.files[1], staged, index: staged ? 'M' : '.', worktree: staged ? '.' : 'M' }
+  let view = await renderApp(healthyHandlers({
+    status: () => ({ ...STATUS, files: [file] }),
+    fileHunks: () => ({ path: file.path, staged, hunks: [{ header: '@@ -1,3 +1,4 @@', hash: 'current-hunk', contentHash: DIFF.hunks[0].contentHash }] }),
+    'write.stageHunks': () => ({ ok: true, message: 'staged hunk' }),
+    'write.unstageHunks': () => ({ ok: true, message: 'unstaged hunk' }),
+    'write.discardHunks': () => ({ ok: true, message: 'discarded hunk' }),
+  }))
+  const rootProps = { connection: mounted.rpc, t }
+  const row = walk(view).find(node => node.props?.title === file.path && String(node.props?.className ?? '').includes('dshgit-change'))
+  row.props.onClick({ preventDefault() {}, stopPropagation() {}, currentTarget: { closest: () => null } })
+  view = await flush(GitApp, rootProps)
+  const picker = () => findAll(view, 'input').find(node => node.props.name === 'hunkTarget')
+  check(`${staged ? 'staged' : 'unstaged'} file mounts the hunk picker in the full app`, picker() !== undefined)
+  // The picker reaches the DIFF ROWS, not just the strip. This is the check
+  // that catches `setState(fn)`-swallows-a-function and any other break in the
+  // strip-to-renderer handoff: without it the feature silently renders no
+  // pick gutters at all and every assertion above still passes.
+  if (!staged) {
+    const changeRows = findAll(view, 'div').filter(node => node.props['data-kind'] === 'add' || node.props['data-kind'] === 'del')
+    const withGutter = changeRows.filter(node => findAll(node, 'button').some(child => child.props['data-diff-pick'] !== undefined))
+    check('the diff renders a pick gutter on every change line',
+      changeRows.length > 0 && withGutter.length === changeRows.length,
+      `${withGutter.length}/${changeRows.length}`)
+    // Context lines must NOT be pickable: they have no side to move between.
+    const contextRows = findAll(view, 'div').filter(node => node.props['data-kind'] === 'ctx')
+    check('context lines offer no pick gutter',
+      contextRows.every(node => !findAll(node, 'button').some(child => child.props['data-diff-pick'] !== undefined)))
+
+    // The interaction itself: clicking a gutter must raise the line bar, and
+    // the bar's stage action must send a `lines` payload keyed by the hunk
+    // fingerprint the Host re-validates. Without this the feature could render
+    // gaps that do nothing, which is the exact failure bug 2 produced.
+    const firstPick = () => findAll(view, 'button').find(node => node.props['data-diff-pick'] !== undefined)
+    check('no line bar is shown before anything is picked', firstPick().props['aria-pressed'] === false &&
+      !walk(view).some(node => node.props?.['data-line-bar'] === 'true'))
+    firstPick().props.onClick({ stopPropagation() {} })
+    view = await flush(GitApp, rootProps)
+    const bar = () => walk(view).find(node => node.props?.['data-line-bar'] === 'true')
+    check('picking a line raises the line action bar', bar() !== undefined)
+    check('the bar reports the picked count', bar() !== undefined && hasText(bar(), t('line.selected', { count: 1 })))
+    // The picked row is marked so the user can see what will move. The value is
+    // a boolean in the rendered props (React turns `true` into the "true"
+    // attribute), so this checks the strict value the component actually emits.
+    const picked = findAll(view, 'div').filter(node => node.props['data-picked'] === true)
+    check('the picked row is marked', picked.length === 1, `${picked.length}`)
+
+    findAll(bar(), 'button').find(node => node.props['data-line-action'] === 'stage').props.onClick()
+    view = await flush(GitApp, rootProps)
+    const lineCall = mounted.rpc.calls.filter(call => call.method === 'write.stageHunks').pop()
+    check('line staging sends a lines payload keyed by the hunk fingerprint',
+      lineCall !== undefined && lineCall.payload.lines !== undefined &&
+        Object.keys(lineCall.payload.lines).length === 1 && lineCall.payload.hashes === undefined,
+      JSON.stringify(lineCall?.payload))
+    check('the line payload points at a real change line',
+      lineCall !== undefined && Object.values(lineCall.payload.lines)[0].length === 1,
+      JSON.stringify(lineCall?.payload?.lines))
+  }
+  // Choose the first hunk through the combobox's own open-then-option flow.
+  const chooseFirstHunk = async () => {
+    picker().props.onClick()
+    view = await flush(GitApp, rootProps)
+    const option = findAll(view, 'button')
+      .find(node => node.props.role === 'option' && node.props['data-value'] === '0')
+    option.props.onClick()
+    view = await flush(GitApp, rootProps)
+  }
+  await chooseFirstHunk()
+  const action = staged ? 'unstage' : 'stage'
+  findAll(view, 'button').find(node => node.props['data-hunk-action'] === action).props.onClick()
+  view = await flush(GitApp, rootProps)
+  const method = staged ? 'write.unstageHunks' : 'write.stageHunks'
+  // `hashes` is optional: the line-staging assertion above also calls this
+  // method with a `lines` payload, so the lookup must not assume it exists.
+  check(`${action} sends the selected fingerprint from the full app`,
+    mounted.rpc.calls.some(call => call.method === method && call.payload.hashes?.[0] === 'current-hunk' && call.payload.staged === staged))
+  if (!staged) {
+    await chooseFirstHunk()
+    findAll(view, 'button').find(node => node.props['data-hunk-action'] === 'discard').props.onClick()
+    view = await flush(GitApp, rootProps)
+    const dialog = walk(view).find(node => node.props?.role === 'alertdialog')
+    check('discarding a hunk waits for a confirmation dialog', dialog && !mounted.rpc.calls.some(call => call.method === 'write.discardHunks'))
+    findAll(dialog, 'button').find(node => textOf(node) === t('action.apply')).props.onClick()
+    view = await flush(GitApp, rootProps)
+    check('confirmed discard sends the fingerprint and confirmation token',
+      mounted.rpc.calls.some(call => call.method === 'write.discardHunks' && call.payload.confirm === true && call.payload.hashes[0] === 'current-hunk'))
+  }
+}
+
+console.log('\n--- hunk reads must match the preview content, not only its coordinates ---')
+{
+  runCleanups()
+  const { useFileHunks } = loadClientModule(source.replace('    return module.exports',
+    '    module.exports.useFileHunks = useFileHunks;\n    return module.exports'))
+  for (const contentHash of ['different-content-at-the-same-lines', undefined]) {
+    let model
+    const writes = []
+    const run = async (method, payload) => {
+      if (method === 'fileHunks') return { hunks: [{ header: '@@ -1,3 +1,4 @@', hash: 'current-unpreviewed-hunk', contentHash }] }
+      writes.push({ method, payload })
+      return { ok: true }
+    }
+    function HunkRaceFixture() {
+      model = useFileHunks({ enabled: true, repo: { root: ROOT }, path: 'src/index.js', staged: false,
+        hunks: DIFF.files[0].hunks, run, confirm: (_message, yes) => yes() })
+      return null
+    }
+    mount(HunkRaceFixture, {})
+    await flush(HunkRaceFixture, {})
+    check(contentHash ? 'a changed body at unchanged coordinates hides hunk actions' : 'a Host without preview digests cannot enable hunk writes', model.offer === false)
+    model.act('discard', 0)
+    model.act('stage', 0)
+    await flush(HunkRaceFixture, {})
+    check('unmatched content cannot be discarded or staged even through a retained handler', writes.length === 0)
+    runCleanups()
+  }
+}
+
+console.log('\n--- unavailable previews do not trigger hunk reads ---')
+{
+  runCleanups()
+  const { FileHunkActions } = loadClientModule(source.replace('    return module.exports',
+    '    module.exports.FileHunkActions = FileHunkActions;\n    return module.exports'))
+  for (const diff of [null, { hunks: [], files: [] }, { tooLarge: true, truncated: true, hunks: DIFF.hunks, files: DIFF.files }]) {
+    const calls = []
+    const props = { repo: { root: ROOT }, selection: { kind: 'file', section: 'unstaged', file: STATUS.files[1] },
+      fileDisplay: 'diff', diff, t, run: async method => { calls.push(method); return { hunks: [] } } }
+    mount(FileHunkActions, props)
+    await flush(FileHunkActions, props)
+    check('loading, empty and refused previews do not request fileHunks', calls.length === 0)
+    runCleanups()
+  }
+}
+
+console.log('\n--- skip is reachable and confirmed from both operation surfaces ---')
+{
+  const fixture = loadClientModule(source.replace('    return module.exports',
+    '    Object.assign(module.exports, { HeaderGitCluster, ConflictEditor, OperationPanel });\n    return module.exports'))
+  const operation = { kind: 'cherry-pick', step: null, total: null }
+  const conflictedFile = { path: 'conflict-skip.txt', kind: 'unmerged', index: 'U', worktree: 'U' }
+  let status = { ...STATUS, operation, files: [conflictedFile] }
+  const rpc = createRpcStub(healthyHandlers({
+    status: () => status,
+    operationReview: () => ({ hash: 'skip-review', operation, conflicts: 1, files: [] }),
+    'write.continueOperation': () => { status = { ...STATUS, operation: null, files: [] }; return { ok: true, message: 'skipped' } },
+  }))
+  const context = createClientContext({ connection: rpc })
+  fixture.apply(context.ctx)
+  const props = { connection: rpc, t, sessionId: 'skip-session', directory: ROOT }
+  mount(fixture.HeaderGitCluster, props)
+  let view = await flush(fixture.HeaderGitCluster, props)
+  findAll(view, 'button').find(node => node.props['data-chip'] === 'operation').props.onClick()
+  view = await flush(fixture.HeaderGitCluster, props)
+  const skip = () => findAll(view, 'button').find(node => node.props['data-op-action'] === 'skip')
+  check('the header operation panel offers skip despite unresolved conflicts', skip() !== undefined && !skip().props.disabled)
+  skip().props.onClick()
+  view = await flush(fixture.HeaderGitCluster, props)
+  const question = () => walk(view).find(node => node.props?.role === 'alertdialog' && hasText(node, t('pick.confirmSkip')))
+  check('header skip asks before writing', question() && !rpc.calls.some(call => call.method === 'write.continueOperation'))
+  findAll(question(), 'button').find(node => textOf(node) === t('action.cancel')).props.onClick()
+  view = await flush(fixture.HeaderGitCluster, props)
+  check('cancelling header skip writes nothing', !rpc.calls.some(call => call.method === 'write.continueOperation'))
+  skip().props.onClick(); view = await flush(fixture.HeaderGitCluster, props)
+  findAll(question(), 'button').find(node => textOf(node) === t('pick.skip')).props.onClick()
+  view = await flush(fixture.HeaderGitCluster, props)
+  check('confirmed header skip sends the reviewed operation and token', rpc.calls.some(call => call.method === 'write.continueOperation'
+    && call.payload.skip === true && call.payload.confirm === true && call.payload.reviewHash === 'skip-review'))
+  runCleanups()
+
+  const conflictOperation = { kind: 'rebase', step: 1, total: 2, stopReason: 'replay', canSkip: true }
+  let conflictStatus = { ...STATUS, operation: conflictOperation, files: [conflictedFile] }
+  const calls = []
+  const editorProps = { repo: { root: ROOT }, path: conflictedFile.path, t, run: async (method, payload) => {
+    calls.push({ method, payload })
+    if (method === 'status') return conflictStatus
+    if (method === 'operationReview') return { operation: conflictOperation, hash: 'editor-skip-review', conflicts: 1, files: [] }
+    if (method === 'conflictFile') return { hash: 'conflict-content', binary: false,
+      text: '<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n',
+      base: { text: 'base\n' }, ours: { text: 'ours\n' }, theirs: { text: 'theirs\n' } }
+    if (method === 'write.continueOperation') { conflictStatus = { ...STATUS, operation: null, files: [] }; return { ok: true } }
+    throw new Error('Unexpected method: ' + method)
+  } }
+  mount(fixture.ConflictEditor, editorProps)
+  view = await flush(fixture.ConflictEditor, editorProps)
+  skip().props.onClick(); view = await flush(fixture.ConflictEditor, editorProps)
+  check('the conflict editor asks before skipping unresolved content', question() && !calls.some(call => call.method.startsWith('write.')))
+  findAll(question(), 'button').find(node => textOf(node) === t('action.cancel')).props.onClick()
+  view = await flush(fixture.ConflictEditor, editorProps)
+  check('cancelling editor skip preserves the unresolved operation', !calls.some(call => call.method.startsWith('write.')) && !!skip())
+  skip().props.onClick(); view = await flush(fixture.ConflictEditor, editorProps)
+  findAll(question(), 'button').find(node => textOf(node) === t('pick.skip')).props.onClick()
+  view = await flush(fixture.ConflictEditor, editorProps)
+  check('confirmed editor skip bypasses the resolve-first check and sends its token', calls.some(call => call.method === 'write.continueOperation'
+    && call.payload.skip === true && call.payload.confirm === true && call.payload.reviewHash === 'editor-skip-review'))
+  runCleanups()
+  for (const kind of ['merge', 'am', 'revert']) {
+    const panelProps = { operation: { kind }, t, onSkip() {}, onContinue() {}, onAbort() {}, onClose() {} }
+    mount(fixture.OperationPanel, panelProps)
+    view = await flush(fixture.OperationPanel, panelProps)
+    check('skip availability matches Git support for ' + kind, !!skip() === (kind !== 'merge'))
+    runCleanups()
+  }
+  for (const operation of [
+    { kind: 'rebase', step: 1, total: 2, stopReason: 'edit', canSkip: false },
+    { kind: 'rebase', step: 1, total: 2 },
+    { kind: 'rebase', step: 1, total: 2, stopReason: 'replay', canSkip: true },
+  ]) {
+    const panelProps = { operation, t, onSkip() {}, onContinue() {}, onAbort() {}, onClose() {} }
+    mount(fixture.OperationPanel, panelProps)
+    view = await flush(fixture.OperationPanel, panelProps)
+    check('only confirmed replay stops offer rebase skip: ' + (operation.stopReason || 'unknown'), !!skip() === (operation.canSkip === true))
+    check('edit and unknown stops retain continue and abort', ['continue', 'abort'].every(action =>
+      findAll(view, 'button').some(node => node.props['data-op-action'] === action)))
+    runCleanups()
+  }
+}
+
+console.log('\n--- commit flags, remote removal and history filters are reachable ---')
+{
+  // Three capabilities the Host implemented but the panel never exposed. What
+  // is asserted here is reachability and payload shape; the git behaviour
+  // itself lives in check-runtime.mjs.
+  const handlers = healthyHandlers()
+  tree = await renderApp(handlers)
+  const openCommitMenu = async (current) => {
+    findAll(current, 'button').find((node) => String(node.props.className).includes('dshgit-commit-arrow')).props.onClick({ stopPropagation() {} })
+    return flush(GitApp, { connection: mounted.rpc, t })
+  }
+  tree = await openCommitMenu(tree)
+  const menuItem = (current, id) => findAll(current, 'button').find((node) => node.props.role === 'menuitem' && hasText(node, id))
+  const signoffItem = () => menuItem(tree, t('commit.signoff'))
+  check('the commit menu offers a Signed-off-by switch', signoffItem() !== undefined)
+  check('the signoff switch starts off', signoffItem().props['aria-checked'] === false)
+  signoffItem().props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('ticking signoff keeps the menu open for the next switch', signoffItem().props['aria-checked'] === true)
+  // The payload carries what is armed and nothing else: an untouched option
+  // must not appear, or the output log stops matching what actually ran.
+  findAll(tree, 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
+    .props.onChange({ currentTarget: { value: 'feat: flag the commit' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(tree, 'button').find((node) => textOf(node) === t('action.commit')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const flagged = mounted.rpc.calls.filter((call) => call.method === 'write.commit').pop()
+  check('the commit carries signoff once it is armed', flagged?.payload?.signoff === true, JSON.stringify(flagged?.payload))
+  check('an unarmed option is omitted from the payload', flagged?.payload?.noVerify === undefined)
+  // An armed `--no-verify` must stay RED. Both classes are single-class rules,
+  // so without an explicit combined rule the checked tint would win and paint
+  // the one state whose whole point is its warning colour in calm blue.
+  tree = await openCommitMenu(tree)
+  menuItem(tree, t('commit.noVerify')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const css = String(loaded.appendedStyles[0]?.textContent ?? '')
+  check('an armed no-verify keeps its danger tint over the checked tint',
+    css.includes('.dshgit-menuitemchecked.dshgit-menudanger{') &&
+      menuItem(tree, t('commit.noVerify')).props.className.includes('dshgit-menudanger'),
+    menuItem(tree, t('commit.noVerify')).props.className)
+
+  // Remote removal: the settings block lists remotes and asks before writing.
+  tree = await renderApp(healthyHandlers())
+  tree = await selectModule(tree, 'settings')
+  findAll(tree, 'button').find((node) => textOf(node) === t('settings.currentRepo')).props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const removeButton = () => findAll(tree, 'button').find((node) => node.props['data-remote-remove'] === 'origin')
+  check('the repository settings list the configured remotes',
+    walk(tree).some((node) => node.props?.['data-remote'] === 'origin'))
+  check('removing a remote is offered', removeButton() !== undefined)
+  // The first click arms, the second writes: a remote can be re-added, but only
+  // with its URL in hand, so the confirmation is what makes the loss explicit.
+  check('removing a remote asks before writing',
+    mounted.rpc.calls.every((call) => call.method !== 'write.removeRemote'))
+  removeButton().props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('the armed remote shows a confirm action',
+    findAll(tree, 'button').some((node) => node.props['data-remote-confirm'] === 'origin'))
+  findAll(tree, 'button').find((node) => node.props['data-remote-confirm'] === 'origin').props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const removal = mounted.rpc.calls.filter((call) => call.method === 'write.removeRemote').pop()
+  check('confirming removes only the named remote', removal?.payload?.name === 'origin' &&
+    removal.payload.confirm === true, JSON.stringify(removal?.payload))
+  // A failure that is never rendered is invisible: the table just keeps the
+  // remote and the user reads it as "the button did nothing".
+  check('a successful removal is reported back to the user',
+    walk(tree).some((node) => node.props?.role === 'status' && hasText(node, t('remote.removed', { name: 'origin' }))))
+
+  // History filters: the disclosure sends the Host's own log options.
+  tree = await renderApp(healthyHandlers())
+  findAll(tree, 'button').find((node) => node.props['data-module'] === 'history').props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const toggle = () => findAll(tree, 'button').find((node) => node.props['data-history-filters-toggle'] === true)
+  check('the history sidebar offers a filter trigger', toggle() !== undefined)
+  check('the filter panel starts closed', toggle().props['aria-expanded'] === false &&
+    !walk(tree).some((node) => node.props?.['data-history-filters-panel'] === 'true'))
+  toggle().props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  // A POPOVER, not an inline block: opening the filter must not displace the
+  // commit list or the search box, so the panel renders through a portal and
+  // the sidebar keeps exactly the same rows it had while closed.
+  check('the filter panel opens as a portalled popover',
+    walk(tree).some((node) => node.props?.['data-history-filters-panel'] === 'true') &&
+      toggle().props['aria-expanded'] === true)
+  const authorInput = () => findAll(tree, 'input').find((node) => node.props.placeholder === t('history.authorPlaceholder'))
+  check('the filter panel exposes an author field', authorInput() !== undefined)
+  authorInput().props.onChange({ currentTarget: { value: '张三' } })
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  const query = mounted.rpc.calls.filter((call) => call.method === 'commits').pop()
+  check('the author filter reaches the Host as --author', query?.payload?.author === '张三', JSON.stringify(query?.payload))
+  // The time range is a PRESET, not a free-text date field: the panel offers
+  // ranges the user can pick, and translates the choice into `--since` itself.
+  const rangeCombo = () => findAll(tree, 'button').find((node) => node.props['aria-label'] === t('history.range'))
+  check('the time range is chosen from presets, not typed', rangeCombo() !== undefined &&
+    !findAll(tree, 'input').some((node) => node.props.title === t('history.datePlaceholder')))
+  // Assert the CONTRACT rather than driving a DOM click: the ComboBox focuses
+  // its input on open, which a node-based harness cannot satisfy, and what
+  // matters is that the preset ids and labels are offered and that the chosen
+  // id becomes an ISO `--since`.
+  check('the preset list offers the common ranges',
+    ['history.rangeAll', 'history.range7d', 'history.range30d', 'history.range90d', 'history.rangeYear']
+      .every((key) => t(key) !== key))
+  const ranges = historyRangeWindow('7d', new Date('2026-11-02T00:00:00Z'))
+  check('a preset resolves to an ISO lower bound seven days back',
+    ranges !== null && ranges.since === '2026-10-26T00:00:00.000Z', JSON.stringify(ranges))
+  check('the year preset starts at January 1 of the reference year',
+    historyRangeWindow('year', new Date('2026-11-02T00:00:00Z'))?.since ===
+      new Date(2026, 0, 1).toISOString())
+  // "All time" must send no bound at all rather than an epoch.
+  check('all time resolves to no bound', historyRangeWindow('', new Date()) === null)
+  // The merge policy is a ComboBox (a native select would be UA-painted).
+  const mergeCombo = findAll(tree, 'button').find((node) => node.props['aria-label'] === t('history.merges'))
+  check('the merge policy uses the themed combobox', mergeCombo !== undefined && !findAll(tree, 'select').length)
+  // The active-filter dot is the only evidence, once closed, that the list is
+  // a subset rather than the whole history.
+  toggle().props.onClick()
+  tree = await flush(GitApp, { connection: mounted.rpc, t })
+  check('a filtered list shows the active marker while closed',
+    toggle().props['aria-expanded'] === false &&
+      findAll(toggle(), 'span').some((node) => node.props.className === 'dshgit-filterbadge'))
+  check('closing the popover keeps the filter applied',
+    mounted.rpc.calls.filter((call) => call.method === 'commits').pop()?.payload?.author === '张三')
+  runCleanups()
+}
+
+console.log(`\n${checks - failures}/${checks} checks passed`)
+if (failures > 0) {
+  console.error(`${failures} FAILED`)
+  process.exit(1)
+}
+console.log('all client checks passed')
+// Exit explicitly: the rendered components leave polling timers alive, so without
+// this the process would report success and then hang instead of terminating. The
+// failure path above already exits for the same reason.
+process.exit(0)

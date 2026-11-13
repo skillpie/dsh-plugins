@@ -1,0 +1,76 @@
+{
+  "name": "dsh-gitx",
+  "version": "0.1.34",
+  "description": "Git workbench for deepseek-harness: changelists, staging, history, branches, stashes and optional AI assistance",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "dist/client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "docs",
+    "!docs/internal"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "git",
+    "blame",
+    "diff"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  },
+  "scripts": {
+    "release": "node scripts/release.mjs",
+    "check": "npm run build && node scripts/check-package.mjs",
+    "check:commit": "node scripts/check-commit.mjs",
+    "check:ai": "node scripts/check-ai-context.mjs",
+    "check:history": "node scripts/check-history.mjs",
+    "check:hunks": "node scripts/check-hunks.mjs",
+    "test": "npm run build && node scripts/check-runtime.mjs && node scripts/check-write-safety.mjs && node scripts/check-history.mjs && node scripts/check-hunks.mjs && node scripts/check-worktrees.mjs && node scripts/verify-client.mjs",
+    "prepack": "npm run check",
+    "build": "node scripts/build-client.mjs"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skillpie/dsh-plugins.git",
+    "directory": "dsh-gitx"
+  },
+  "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-gitx#readme",
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  },
+  "bugs": "https://github.com/skillpie/dsh-plugins/issues"
+}
