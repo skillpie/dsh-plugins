@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     // ── copy ────────────────────────────────────────────────────────────
     var zh = {
       title: "数据源",
-      sidebarLabel: "数据源",
+      sidebarLabel: "数据库",
       subtitle: "连接、浏览和查询数据库，也可以直接在对话里让助手操作数据",
       connections: "连接",
       newConnection: "新建连接",
