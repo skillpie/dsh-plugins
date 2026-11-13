@@ -1,4 +1,4 @@
-import { React, h } from './runtime.js'
+import { Fragment, React, ReactDOM, h } from './runtime.js'
 import { HeaderGitCluster } from '../shell/window.js'
 import { getWorkspaceNavigation, subscribeWorkspaceNavigation, acknowledgeWorkspaceNavigation } from './workspace-navigation.js'
 import { Spinner } from '../ui/spinner.js'
@@ -11,22 +11,81 @@ export function workspaceDirectory(workspaces, sessions, sessionId) {
   return workspace?.path || sessions?.byId?.[sessionId]?.cwd || ''
 }
 
+var CORNER_CHIPS_MARK = 'data-dshgit-corner-chips'
+
 /**
- * Invisible navigation consumer for surfaces without the session header (the
- * new-chat composer). Resolved workspace switches only settle once the target
- * session's surface acknowledges them — without this, the next header that
- * mounts would wait on a navigation that already finished.
+ * The blank session header hides its utilities row entirely (the platform
+ * renders only the corner seat there), so the New Session page carries the
+ * chips through this bridge: it portals the cluster into the header corner
+ * until the utilities row takes over on the first message.
  */
-export function WorkspaceNavigationAck(props) {
-  var directory = workspaceDirectory(
-    props.useWorkspaces ? props.useWorkspaces(function (value) { return value }) : null,
-    props.useSessions ? props.useSessions(function (value) { return value }) : null,
-    props.sessionId,
-  )
+function findBlankHeaderCorner() {
+  var corners = document.querySelectorAll('[data-conversation-header-corner]')
+  for (var i = 0; i < corners.length; i++) {
+    var corner = corners[i]
+    var header = corner.closest('[data-window-drag]') || corner.parentElement
+    if (!header) continue
+    // Real sessions render the utilities seat — duplicates would fight over
+    // one navigation store, so the bridge only claims headerless rows.
+    if (header.querySelector('[class*="headerUtilities"]')) continue
+    if (header.querySelector('[' + CORNER_CHIPS_MARK + ']')) continue
+    return corner
+  }
+  return null
+}
+
+/**
+ * Mounted on every composer surface. Besides settling resolved workspace
+ * switches (see the acknowledge effect — without it the next header to mount
+ * would wait on a navigation that already finished), it draws the chips in the
+ * blank session header's corner so the New Session page matches every other
+ * header's top-right placement.
+ */
+export function WorkspaceBlankBridge(props) {
+  var workspaces = props.useWorkspaces ? props.useWorkspaces(function (value) { return value }) : null
+  var sessions = props.useSessions ? props.useSessions(function (value) { return value }) : null
+  var directory = workspaceDirectory(workspaces, sessions, props.sessionId)
+  React.useEffect(function () { if (workspaces || sessions) publishWorktreeContext(workspaces, sessions) }, [workspaces, sessions])
+  var navigation = React.useSyncExternalStore(subscribeWorkspaceNavigation, getWorkspaceNavigation)
   React.useEffect(function () {
     if (directory) acknowledgeWorkspaceNavigation(props.sessionId)
-  }, [props.sessionId, directory])
-  return null
+  }, [navigation, props.sessionId, directory])
+  var anchor = React.useRef(null), containerState = React.useState(null)
+  React.useLayoutEffect(function () {
+    var container = null
+    var detach = function () {
+      container?.remove()
+      container = null
+      containerState[1](null)
+    }
+    var place = function () {
+      var corner = directory ? findBlankHeaderCorner() : null
+      if (corner && container?.parentElement === corner) return
+      detach()
+      if (corner) {
+        container = document.createElement('div')
+        container.className = 'dshgit-headercorner'
+        container.setAttribute(CORNER_CHIPS_MARK, '')
+        corner.insertBefore(container, corner.firstChild)
+        containerState[1](container)
+      }
+    }
+    place()
+    // The header row is replaced as sessions switch and the blank flag flips.
+    var observer = typeof MutationObserver === 'function' ? new MutationObserver(place) : null
+    observer?.observe(document.body, { childList: true, subtree: true })
+    return function () { observer?.disconnect(); detach() }
+  }, [directory, props.sessionId])
+  return h(Fragment, null, [
+    h('span', { key: 'anchor', ref: anchor, hidden: true }),
+    containerState[0] && directory && props.connection ? ReactDOM.createPortal(navigation ? h('button', { type: 'button', className: 'dshgit-chip', disabled: true, 'aria-busy': true, 'data-workspace-pending': true }, [
+      h(Spinner, { key: 'spinner', className: 'dshgit-spinner' }), props.t('state.loading'),
+    ]) : h(HeaderGitCluster, {
+      key: String(props.sessionId || '') + ':' + directory,
+      connection: props.connection, sessionId: props.sessionId,
+      directory: directory, t: props.t,
+    }), containerState[0]) : null,
+  ])
 }
 
 /** The resident session header shares this context adapter. */

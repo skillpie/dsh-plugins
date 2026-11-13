@@ -5,7 +5,7 @@ import { GitWindow } from './client/shell/window.js'
 import { SettingsTab } from './client/features/settings/view.js'
 import { callRpc } from './client/core/rpc.js'
 import { registerCloneWorkspace } from './client/features/clone/integration.js'
-import { WorkspaceGitAction, WorkspaceNavigationAck } from './client/core/workspace.js'
+import { WorkspaceGitAction, WorkspaceBlankBridge } from './client/core/workspace.js'
 import { observeWorkspaceNavigation } from './client/core/workspace-navigation.js'
 import { installSidebarWorkspaceGit } from './client/core/sidebar-workspaces.js'
 import { openGitWindow } from './client/core/state.js'
@@ -98,14 +98,15 @@ function apply(ctx) {
     })
 
 
-    // Invisible ack consumer: resolved workspace switches settle only when the
-    // target session's surface acknowledges them. The new-chat composer surface
-    // has no session header, so it carries this silent watcher instead.
+    // Composer-surface bridge: settles resolved workspace switches (the ack)
+    // and, on the blank New Session page — whose header hides the utilities
+    // row — draws the chips in the header corner so every session shows them
+    // top-right. Real sessions render nothing here beyond the ack.
     scope.slots.inject('conversation.input.left', function () {
       return scope.slots.register(
-        { name: 'conversation.input.left', id: 'git-blank-ack', order: 40, locale: NS },
+        { name: 'conversation.input.left', id: 'git-header-bridge', order: 40, locale: NS },
         function (seatProps) {
-          return h(WorkspaceNavigationAck, seatProps)
+          return h(WorkspaceBlankBridge, { ...seatProps, connection: connection, t: seatProps.t || t })
         },
       )
     })
