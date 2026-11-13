@@ -244,7 +244,7 @@ export class DbaService {
     await this.ready()
     const connection = id ? this.store.get(id) : this.store.first()
     if (!connection) {
-      if (this.store.list().length === 0) throw new Error('还没有数据库连接，请先在「数据库」面板新建连接 / no database connection configured')
+      if (this.store.list().length === 0) throw new Error('还没有数据源，请先在「数据源」面板新建连接 / no database connection configured')
       throw new Error('连接不存在 / connection not found')
     }
     return connection

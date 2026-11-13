@@ -147,8 +147,8 @@ async function resolveConnectionId(dba, requested, session) {
       return found.id
     }
     if (rows.length === 1) return rows[0].id
-    if (rows.length === 0) throw new Error('还没有配置数据库连接。请让用户在「数据库」侧边栏面板新建连接后再试。')
-    throw new Error(`有多个数据库连接，请用 connectionId 指定：${rows.map((row) => `${row.id} (${row.name})`).join(', ')}`)
+    if (rows.length === 0) throw new Error('还没有配置数据源。请让用户在「数据源」侧边栏面板新建连接后再试。')
+    throw new Error(`有多个数据源，请用 connectionId 指定：${rows.map((row) => `${row.id} (${row.name})`).join(', ')}`)
   }
   const state = await dba.sessionState(session.id, session.cwd)
   const selected = state.selectedIds
@@ -201,7 +201,7 @@ function buildToolDefinitions(dba) {
         const marked = rows.map((row) => ({ ...row, selected: selectedIds.includes(row.id) }))
         const selectedRows = marked.filter((row) => row.selected)
         let summary = rows.length === 0
-          ? '还没有配置数据库连接。'
+          ? '还没有配置数据源。'
           : (selectedRows.length === 0
               ? '当前会话还没有选择数据库。请让用户先在输入框旁的数据库多选下拉里选择。\n'
               : `当前会话已选择 ${selectedRows.length} 个数据库：\n` + selectedRows.map((row) => `- \`${row.id}\` · ${row.name} · ${row.kind}${row.demo ? '（示例）' : ''}`).join('\n') + '\n\n')
