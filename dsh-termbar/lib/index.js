@@ -62,7 +62,7 @@ export const Config = {
 /* ── apply ───────────────────────────────────────────────────────────── */
 
 export default {
-  name: '@skillpie/dsh-termbar',
+  name: 'dsh-termbar',
   Config,
   inject: [],
   apply(ctx, rawConfig = null) {

@@ -6,7 +6,7 @@
  * 不依赖任何宿主内建 RPC。xterm 从本包 vendor 路由加载。
  */
 window.__ModuleLoader__.load({
-  id: '@skillpie/dsh-termbar',
+  id: 'dsh-termbar',
   factory(require) {
     var React = require('react')
     var h = React.createElement
@@ -934,7 +934,7 @@ window.__ModuleLoader__.load({
 
     /* ── 注册 ─────────────────────────────────────────────────────────── */
     return {
-      name: '@skillpie/dsh-termbar',
+      name: 'dsh-termbar',
       inject: ['slots', 'locale', 'shortcuts', 'workspaces'],
       apply(ctx) {
         t = ctx.locale.bind(NS)

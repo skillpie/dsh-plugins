@@ -6,5 +6,5 @@
 # terminal panel).
 - insert:
     - id: dsh-termbar
-      name: "@skillpie/dsh-termbar"
+      name: "dsh-termbar"
       config: {}
