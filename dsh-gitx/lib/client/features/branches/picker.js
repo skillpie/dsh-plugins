@@ -7,7 +7,6 @@ function BranchPicker(props) {
   var t = props.t
   var listRef = React.useRef(null)
   var [tagsOpen, setTagsOpen] = React.useState(false)
-  var [remotesOpen, setRemotesOpen] = React.useState(false)
   var limits = React.useState({ locals: 5, remotes: 5, tags: 5 })
   var query = props.query.trim().toLowerCase()
   var refs = props.refs
@@ -90,8 +89,7 @@ function BranchPicker(props) {
   var visibleLocals = query !== '' ? locals : currentLocal
     ? [currentLocal].concat(locals.filter(function (branch) { return !isCurrent(branch) }).slice(0, limits[0].locals - 1))
     : locals.slice(0, limits[0].locals)
-  var remotesCollapsed = props.compact && locals.length > 0 && !remotesOpen && query === ''
-  var visibleRemotes = remotesCollapsed ? [] : query !== '' ? remotes : remotes.slice(0, limits[0].remotes)
+  var visibleRemotes = query !== '' ? remotes : remotes.slice(0, limits[0].remotes)
   var visibleTags = query !== '' ? tags : tagsOpen ? tags.slice(0, limits[0].tags) : []
   var more = function (key, count) {
     if (query !== '' || count <= 5) return []
@@ -167,19 +165,13 @@ function BranchPicker(props) {
         else props.onSwitch(branch.name)
       }, { current: isCurrent(branch) })
     })).concat(more('locals', locals.length)).concat(remotes.length > 0
-      ? [props.compact && query === '' && locals.length > 0
-        ? h('button', { key: 'rb', type: 'button', className: 'dshgit-pickgroup dshgit-picktoggle',
-            'data-picker-toggle': 'remotes', 'aria-expanded': remotesOpen,
-            onClick: function () { setRemotesOpen(!remotesOpen) },
-          }, [t('picker.remotes') + ' · ' + remotes.length,
-            h('span', { key: 'arrow', className: 'dshgit-pickchev', 'aria-hidden': true }, h(IconChevron, { size: 12 }))])
-        : h('div', { key: 'rb', className: 'dshgit-pickgroup' }, t('picker.remotes') + ' · ' + remotes.length)]
+      ? [h('div', { key: 'rb', className: 'dshgit-pickgroup' }, t('picker.remotes') + ' · ' + remotes.length)]
       : []).concat(visibleRemotes.map(function (branch) {
         return row(branch, 'r:' + branch.ref, function () {
           if (props.mode === 'merge') props.onMerge(branch.name, branch.ref)
           else props.onRemote(branch.name)
         }, { remote: true })
-      })).concat(remotesCollapsed ? [] : more('remotes', remotes.length)).concat(tags.length > 0
+      })).concat(more('remotes', remotes.length)).concat(tags.length > 0
         ? [query !== ''
           ? h('div', { key: 'tb', className: 'dshgit-pickgroup' }, t('picker.tags') + ' · ' + tags.length)
           : h('button', { key: 'tb', type: 'button', className: 'dshgit-pickgroup dshgit-picktoggle',

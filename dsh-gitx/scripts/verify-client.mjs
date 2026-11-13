@@ -12,7 +12,6 @@
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { readFileSync, readdirSync } from 'node:fs'
-import { findHeroWorkspaceRow, insertHeroActions, syncHeroBranchFont } from '../lib/client/core/hero-placement.js'
 import { historyRangeWindow } from '../lib/client/core/history-range.js'
 import { popoverPosition } from '../lib/client/ui/popover-position.js'
 import { observeWorkspaceNavigation, getWorkspaceNavigation, acknowledgeWorkspaceNavigation } from '../lib/client/core/workspace-navigation.js'
@@ -484,17 +483,6 @@ check('the commit options are offered from the split button menu',
   check('the narrowest tier yields the chips instead of overlapping',
     tiers.some((tier) => /\.dshgit-chipcluster\{display:none\}/.test(tier.body)),
     tiers.map((tier) => `${tier.width}:${/\.dshgit-chipcluster\{display:none\}/.test(tier.body)}`).join(','))
-  // The merged chip and the external branch chip both stay visible in compact
-  // placement; nothing hides them.
-  check('compact placement keeps the branch chip and the merged chip visible',
-    !css.includes('[data-compact] [data-chip="branch"]{display:none') &&
-    !css.includes('[data-compact] [data-chip="next"]{display:none'),
-    '')
-  // Compact (Hero) placement has its own, static density: the tiers must not
-  // apply there, or the Hero row would lose chips it has room for.
-  check('the density tiers leave the compact Hero cluster alone',
-    tiers.every((tier) => tier.body.includes(':not([data-compact])')),
-    tiers.map((tier) => tier.body.includes(':not([data-compact])')).join(','))
   // A Host that is not a size container keeps the old full-density behaviour.
   check('container queries are feature-detected, with a viewport fallback',
     css.includes('@supports(container-type:inline-size){') && /@media\(max-width:620px\)\{\.dshgit-chip\[data-chip="next"\]/.test(css))
@@ -701,8 +689,8 @@ check('the button and the window use distinct ids',
 check('the button label is localized through a thunk',
   typeof footerAction[0]?.declaration.label === 'function',
   typeof footerAction[0]?.declaration.label)
-check('the four registrations target distinct slots',
-  new Set(client.registrations.map((entry) => entry.declaration.name)).size === 4,
+check('the three registrations target distinct slots',
+  new Set(client.registrations.map((entry) => entry.declaration.name)).size === 3,
   client.registrations.map((entry) => entry.declaration.name).join(', '))
 
 /* ------------------------------------------------------------------ *
@@ -1529,7 +1517,7 @@ console.log('\n--- the preview degrades to plain text without the platform highl
   const bareStub = createRpcStub(healthyHandlers())
   const bareContext = createClientContext({ connection: bareStub })
   bare.apply(bareContext.ctx)
-  check('it still registers its slots', bareContext.registrations.length === 4,
+  check('it still registers its slots', bareContext.registrations.length === 3,
     String(bareContext.registrations.length))
 }
 
@@ -3181,48 +3169,11 @@ console.log('\n--- tag clicks directly create a branch without detached checkout
 }
 
 
-console.log('\n--- blank-session Git placement after the mode picker ---')
-{
-  const row = {}
-  const preset = { parentElement: row }
-  const seat = { querySelector: (selector) => selector === '[data-slot="conversation.hero.agentPreset"]' ? preset : null }
-  const toolbar = { querySelector: () => null, parentElement: seat }
-  check('Hero placement finds the mode picker row within its own composer', findHeroWorkspaceRow({ parentElement: toolbar }) === row)
-  const boundary = { querySelector: () => null, hasAttribute: (name) => name === 'data-phase', parentElement: seat }
-  check('Hero placement never borrows another conversation mode picker', findHeroWorkspaceRow({ parentElement: boundary }) === null)
-  check('Hosts without the Hero anchor retain the toolbar fallback', findHeroWorkspaceRow({ parentElement: { querySelector: () => null } }) === null)
-  const options = { name: 'host-options-with-auto-margin' }
-  const mode = { nextSibling: options }
-  const git = { name: 'git-controls' }
-  const children = [mode, options]
-  insertHeroActions({ querySelector: () => mode, insertBefore: (node, before) => children.splice(before ? children.indexOf(before) : children.length, 0, node) }, git)
-  check('Git is inserted immediately after mode and before the Host auto-margin options', children[0] === mode && children[1] === git && children[2] === options)
-  let appended = false
-  insertHeroActions({ querySelector: () => ({ nextSibling: null }), insertBefore: (node, before) => { appended = node === git && before === null } }, git)
-  check('older Hosts without trailing options still place Git after mode', appended)
-  const label = { closest: () => null, childNodes: [{ nodeType: 3, textContent: '标准模式' }] }
-  const button = { closest: () => null, childNodes: [], querySelectorAll: () => [label] }
-  const presetSeat = { querySelector: () => button }
-  const fontRow = { querySelector: () => presetSeat }
-  const sizes = new Map()
-  const container = { style: { getPropertyValue: key => sizes.get(key), setProperty: (key, value) => sizes.set(key, value) } }
-  let labelSize = '14px'
-  const computed = element => ({ fontSize: element === label ? labelSize : '20px',
-    fontFamily: 'Arial', fontWeight: '600', lineHeight: '22px', letterSpacing: 'normal' })
-  syncHeroBranchFont(fontRow, container, computed)
-  check('branch matches the mode label font instead of the larger wrapper font', sizes.get('--dshgit-hero-font-size') === '14px')
-  labelSize = '16px'
-  syncHeroBranchFont(fontRow, container, computed)
-  check('branch font follows changes to the mode label size', sizes.get('--dshgit-hero-font-size') === '16px')
-  check('branch also follows mode label family, weight and line height',
-    sizes.get('--dshgit-hero-font-family') === 'Arial' && sizes.get('--dshgit-hero-font-weight') === '600' && sizes.get('--dshgit-hero-line-height') === '22px')
-}
-
 console.log('\n--- bounded popover placement ---')
 {
   const anchor = { left: 500, right: 640, top: 100, bottom: 130 }
   const position = popoverPosition(anchor, { width: 400, maxHeight: 400, align: 'start' }, { width: 1200, height: 800 })
-  check('Hero picker aligns with the branch button left edge and stays compact', position.left === '500px' && position.top === '136px' && position.width === '400px' && position.maxHeight === '400px')
+  check('the picker aligns with the trigger edge and keeps its width', position.left === '500px' && position.top === '136px' && position.width === '400px' && position.maxHeight === '400px')
   const above = popoverPosition({ left: 500, right: 640, top: 650, bottom: 680 }, { width: 400, maxHeight: 400, align: 'start' }, { width: 1200, height: 800 })
   check('picker flips above a low trigger without a gap for short content', above.top === undefined && above.bottom === '156px' && above.maxHeight === '400px')
   const narrow = popoverPosition(anchor, { width: 400, maxHeight: 400, align: 'start' }, { width: 320, height: 300 })
@@ -3257,7 +3208,7 @@ console.log('\n--- workspace navigation lifetime and supersession ---')
   check('a disposed observer cannot restore stale pending state', getWorkspaceNavigation() === null)
 }
 
-console.log('\n--- blank-session Git follows the selected workspace ---')
+console.log('\n--- session header Git follows the selected workspace ---')
 {
   const selected = 'D:/demo/selected-workspace'
   const other = 'D:/demo/unrelated-workspace'
@@ -3274,26 +3225,23 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   const navigations = []
   context.ctx.uiWorkspace = { openWorkspace: (workspaceId, beforeOpen) => new Promise((resolve, reject) => { navigations.push({ workspaceId, beforeOpen, resolve, reject }) }) }
   workspaceClient.apply(context.ctx)
-  const Blank = context.registrations.find((entry) => entry.declaration.name === 'conversation.input.left').Component
   const Header = context.registrations.find((entry) => entry.declaration.name === 'conversation.session.header.utilities').Component
   const Window = context.registrations.find((entry) => entry.declaration.id === 'git-window').Component
   function WorkspaceHarness(props) {
     const controls = {
       sessionId: props.sessionId || 'new-session', t,
-      useSession: (selector) => selector({ blank: props.blank }),
       useWorkspaces: (selector) => selector({ items: [
         { workspaceId: 'other', path: other, sessionIds: ['other-session'] },
         { workspaceId: 'selected', path: props.directory, sessionIds: [props.sessionId || 'new-session'] },
       ] }),
       useSessions: (selector) => selector({ byId: { 'new-session': { cwd: other } } }),
     }
-    return [h(props.blank ? Blank : Header, controls), h(Window, { t })]
+    return [h(Header, controls), h(Window, { t })]
   }
-  let props = { blank: true, directory: selected }
+  let props = { directory: selected }
   mount(WorkspaceHarness, props)
   let view = await flush(WorkspaceHarness, props)
-  check('blank composer offers a branch picker before any message', findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
-  check('blank composer has no separate Git workbench icon', !findAll(view, 'button').some((node) => node.props['aria-label'] === t('window.open')))
+  check('the session header offers a branch picker', findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
   check('workspace mapping beats both first workspace and stale session cwd', rpc.calls.filter((call) => call.method === 'repos').every((call) => call.payload.path === selected && call.payload.sessionId === 'new-session'), JSON.stringify(rpc.calls.filter((call) => call.method === 'repos')))
   findAll(view, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
   view = await flush(WorkspaceHarness, props)
@@ -3303,10 +3251,7 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   check('branch picker shows ahead and behind counts beside the current branch', hasText(trackingCounts, '↑2') && hasText(trackingCounts, '↓1'))
   const syncedRow = walk(view).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/feature/新功能')
   check('branches with zero divergence have no count badge', !walk(syncedRow).some((node) => node.props?.className === 'dshgit-picker-tracking'))
-  check('many remote branches start collapsed in the Hero picker', remoteRows().length === 0 && findAll(view, 'button').some((node) => node.props['data-picker-toggle'] === 'remotes' && node.props['aria-expanded'] === false))
-  findAll(view, 'button').find((node) => node.props['data-picker-toggle'] === 'remotes').props.onClick()
-  view = await flush(WorkspaceHarness, props)
-  check('expanding remote branches initially renders only five rows', remoteRows().length === 5)
+  check('the remote list starts capped at five rows', remoteRows().length === 5 && !findAll(view, 'button').some((node) => node.props['data-picker-toggle'] === 'remotes'))
   findAll(view, 'button').find((node) => node.props['data-picker-more'] === 'remotes').props.onClick()
   view = await flush(WorkspaceHarness, props)
   check('show more reveals remote branches in small batches', remoteRows().length === 10)
@@ -3318,10 +3263,10 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   const trackedMain = walk(view).find(node => node.props?.['data-picker-branch'] === 'refs/heads/main')
   findAll(trackedMain, 'button').find(node => node.props['data-branch-action'] === 'push').props.onClick({ preventDefault() {}, stopPropagation() {} })
   view = await flush(WorkspaceHarness, props)
-  const blankPush = rpc.calls.find(call => call.method === 'write.push')
-  check('blank-session branch push uses the selected workspace and upstream', blankPush?.payload.root === selected &&
-    blankPush.payload.remote === 'origin' && blankPush.payload.sourceBranch === 'main' && blankPush.payload.targetBranch === 'main')
-  check('blank-session tracked push opens no push configuration dialog', !walk(view).some(node => node.props?.role === 'dialog' && node.props?.['aria-label'] === t('wb.push')))
+  const trackedPush = rpc.calls.find(call => call.method === 'write.push')
+  check('the branch push uses the selected workspace and upstream', trackedPush?.payload.root === selected &&
+    trackedPush.payload.remote === 'origin' && trackedPush.payload.sourceBranch === 'main' && trackedPush.payload.targetBranch === 'main')
+  check('the tracked push opens no push configuration dialog', !walk(view).some(node => node.props?.role === 'dialog' && node.props?.['aria-label'] === t('wb.push')))
   findAll(view, 'button').find(node => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
   view = await flush(WorkspaceHarness, props)
   const row = walk(view).find((node) => node.props?.['data-picker-branch'] === 'refs/heads/feature/新功能')
@@ -3331,16 +3276,11 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   findAll(dialog, 'button').find((node) => textOf(node) === t('action.switchBranch')).props.onClick()
   view = await flush(WorkspaceHarness, props)
   const checkout = rpc.calls.find((call) => call.method === 'write.checkout')
-  check('blank-session checkout writes to the selected workspace', checkout?.payload.root === selected && checkout.payload.ref === 'refs/heads/feature/新功能' && checkout.payload.confirm === true)
-  const notice = walk(view).find((node) => node.props?.className === 'dshgit-notice' && node.props?.['data-placement'] === 'bottom')
-  check('blank-session outcomes appear at the viewport bottom center', notice?.props.style.bottom === '24px' && notice.props.style.left === '50%' && notice.props.style.top === 'auto')
-  findAll(view, 'button').find((node) => node.props['data-chip'] === 'branch').props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 420, bottom: 40 }) } })
-  view = await flush(WorkspaceHarness, props)
-  findAll(view, 'button').find((node) => node.props['data-picker-open-git']).props.onClick()
-  view = await flush(WorkspaceHarness, props)
-  check('branch popup opens the full Git window and closes itself', walk(view).some((node) => node.props?.['data-mode'] === 'full') && !walk(view).some((node) => node.props?.['data-popover'] === 'branch'))
-  check('blank-session workbench discovers the same explicit directory', rpc.calls.filter((call) => call.method === 'repos').every((call) => call.payload.path === selected))
-  props = { blank: true, directory: empty }
+  check('checkout writes to the selected workspace', checkout?.payload.root === selected && checkout.payload.ref === 'refs/heads/feature/新功能' && checkout.payload.confirm === true)
+  const notice = walk(view).find((node) => node.props?.className === 'dshgit-notice')
+  check('the checkout outcome renders as a notice beside the chips', Boolean(notice))
+  check('every repository lookup targets the selected workspace', rpc.calls.filter((call) => call.method === 'repos').every((call) => call.payload.path === selected))
+  props = { directory: empty }
   view = await flush(WorkspaceHarness, props)
   check('changing workspace clears the old branch and offers initialization', findAll(view, 'button').some((node) => node.props['data-chip'] === 'init'))
   findAll(view, 'button').find((node) => node.props['data-chip'] === 'init').props.onClick()
@@ -3348,6 +3288,8 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   check('initialization explicitly targets the new workspace', rpc.calls.some((call) => call.method === 'initRepository' && call.payload.directory === empty))
   check('initialized workspace gains a branch picker', findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
   const previousRun = context.registrations.find((entry) => entry.declaration.name === 'settings.section').Component({ t }).props.run
+  findAll(view, 'button').find((node) => node.props['aria-label'] === t('window.open')).props.onClick()
+  view = await flush(WorkspaceHarness, props)
   const switching = context.ctx.uiWorkspace.openWorkspace('selected')
   view = await flush(WorkspaceHarness, props)
   check('slow workspace navigation disables the old Git controls', findAll(view, 'button').some((node) => node.props['data-workspace-pending'] && node.props.disabled) && !findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
@@ -3359,7 +3301,7 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   await switching
   view = await flush(WorkspaceHarness, props)
   check('navigation completion still waits for the new session binding', findAll(view, 'button').some((node) => node.props['data-workspace-pending']))
-  props = { blank: true, directory: selected, sessionId: 'next-session' }
+  props = { directory: selected, sessionId: 'next-session' }
   view = await flush(WorkspaceHarness, props)
   check('the matching new session restores Git against its directory', !findAll(view, 'button').some((node) => node.props['data-workspace-pending']) && rpc.calls.filter((call) => call.method === 'repos').at(-1)?.payload.path === selected)
   const failing = context.ctx.uiWorkspace.openWorkspace('other').catch((error) => error.message)
@@ -3368,12 +3310,9 @@ console.log('\n--- blank-session Git follows the selected workspace ---')
   check('navigation errors preserve the Host error', await failing === 'navigation failed')
   view = await flush(WorkspaceHarness, props)
   check('failed navigation restores the original workspace controls', !findAll(view, 'button').some((node) => node.props['data-workspace-pending']) && findAll(view, 'button').some((node) => node.props['data-chip'] === 'branch'))
-  props = { blank: false, directory: selected }
-  view = await flush(WorkspaceHarness, props)
-  check('after the first message the header continues using the workspace', rpc.calls.filter((call) => call.method === 'repos').at(-1)?.payload.path === selected)
-  function BlankOnly(props) { return h(Blank, { sessionId: 'new-session', t, useSession: (select) => select({ blank: props.blank }), useWorkspaces: (select) => select({ items: [] }), useSessions: (select) => select({ byId: {} }) }) }
-  mount(BlankOnly, { blank: true })
-  view = await flush(BlankOnly, { blank: true })
+  function HeaderOnly() { return h(Header, { sessionId: 'new-session', t, useWorkspaces: (select) => select({ items: [{ workspaceId: 'w', sessionIds: ['new-session'] }] }), useSessions: (select) => select({ byId: {} }) }) }
+  mount(HeaderOnly, {})
+  view = await flush(HeaderOnly, {})
   check('without a workspace no repository is guessed', findAll(view, 'button').length === 0)
 }
 

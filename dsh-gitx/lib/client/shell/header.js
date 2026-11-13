@@ -1143,7 +1143,7 @@ function GitStatusChips(props) {
   ]
 
   return h(Fragment, null, [
-    aiNotice ? h(Toast, { key: 'ai-notice', placement: props.compact ? 'bottom' : undefined, seq: aiNotice, text: aiNotice, tone: 'warning', onDone: function () { setAiNotice(null) } }) : null,
+    aiNotice ? h(Toast, { key: 'ai-notice', seq: aiNotice, text: aiNotice, tone: 'warning', onDone: function () { setAiNotice(null) } }) : null,
 
     // Keep recovery visible while a Git operation is unfinished.
     operation !== null ? h('button', {
@@ -1212,16 +1212,12 @@ function GitStatusChips(props) {
           kind: 'branch',
           title: t('action.switchBranch'),
           anchor: anchor,
-          width: props.compact ? 400 : 460,
-          align: props.compact ? 'start' : 'end',
+          width: 460,
+          align: 'end',
           maxHeight: 400,
           onClose: closePopover,
         }, h(BranchPicker, {
-          compact: props.compact,
-          onOpenGit: props.compact ? function () {
-            closePopover()
-            openWindow()
-          } : undefined,
+          onOpenGit: undefined,
           t: t,
           busy: busy,
           refs: refs,
@@ -1424,12 +1420,11 @@ function GitStatusChips(props) {
         })
       : null,
 
-    headerJob[0]?.state === 'running' && notice === null ? h(OperationProgress, { key: 'progress', placement: props.compact ? 'bottom' : undefined, job: headerJob[0], t: t, onCancel: function () { call('operationCancel', { root: headerJob[0].root, id: headerJob[0].id }).catch(function (failure) { fail(failure.message) }) } }) : null,
+    headerJob[0]?.state === 'running' && notice === null ? h(OperationProgress, { key: 'progress', job: headerJob[0], t: t, onCancel: function () { call('operationCancel', { root: headerJob[0].root, id: headerJob[0].id }).catch(function (failure) { fail(failure.message) }) } }) : null,
 
     notice !== null
       ? h(ChipNotice, {
           key: 'notice',
-          placement: props.compact ? 'bottom' : undefined,
           outcome: notice,
           detailsOpen: noticeOpen,
           t: t,

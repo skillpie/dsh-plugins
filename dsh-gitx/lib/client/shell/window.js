@@ -52,7 +52,7 @@ function HeaderGitCluster(props) {
   var open = state.mode !== 'closed'
   var minimized = open && state.minimized === true
 
-  return h('div', { className: 'dshgit-workspace-actions', 'data-compact': props.compact || undefined }, [
+  return h('div', { className: 'dshgit-workspace-actions' }, [
     // One positioned cluster, so the outcome banner can hang BELOW the chips
     // as an absolutely positioned card. Every other child here is either a
     // `position:fixed` overlay (popovers, dialogs, the viewer) or a plain
@@ -66,12 +66,11 @@ function HeaderGitCluster(props) {
         // RPC layer WHICH session to send, not that the answer went stale.
         sessionId: props.sessionId,
         directory: props.directory,
-        compact: props.compact,
         refreshToken: state.refreshToken,
         t: t,
       }),
     ]),
-    props.compact ? null : h('button', {
+    h('button', {
       key: 'launcher',
       type: 'button',
       className: 'dshgit-iconbtn',

@@ -97,13 +97,6 @@ function apply(ctx) {
       )
     })
 
-    // The resident composer exists before the first message. Its left toolbar
-    // is the public extension seat shared by Hero and active conversations.
-    scope.slots.inject('conversation.input.left', function () {
-      return scope.slots.register({ name: 'conversation.input.left', id: 'git-blank', order: 40, locale: NS }, function (props) {
-        return h(WorkspaceGitAction, { ...props, connection: connection, blankOnly: true, t: props.t || t })
-      })
-    })
 
     scope.slots.inject('shell.overlay', function () {
       return scope.slots.register(
