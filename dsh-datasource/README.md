@@ -1,11 +1,9 @@
-# dsh-dba
+# dsh-datasource
 
 简体中文 ｜ [English](./README.en.md)
 
-[![test](https://github.com/etShaw-zh/dsh-dba/actions/workflows/test.yml/badge.svg)](https://github.com/etShaw-zh/dsh-dba/actions/workflows/test.yml)
-[![License](https://img.shields.io/github/license/etShaw-zh/dsh-dba)](LICENSE)
-[![release](https://img.shields.io/github/v/release/etShaw-zh/dsh-dba)](https://github.com/etShaw-zh/dsh-dba/releases)
-[![npm](https://img.shields.io/npm/v/dsh-dba)](https://www.npmjs.com/package/dsh-dba)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/dsh-datasource)](https://www.npmjs.com/package/dsh-datasource)
 
 在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）里连接数据库，直接在对话中查数据、改数据。
 
@@ -30,22 +28,16 @@
 ```bash
 # macOS 桌面端
 DSH_CLI="/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh"
-"$DSH_CLI" plugin --profile desktop add dsh-dba@1.0.3
+"$DSH_CLI" plugin --profile desktop add dsh-datasource@1.0.5
 ```
 
-也可以直接从 GitHub 安装：
-
-```bash
-"$DSH_CLI" plugin --profile desktop add github:etShaw-zh/dsh-dba
-```
-
-安装后**重启 DeepSeek Harness**。稳定版见 [Releases](https://github.com/etShaw-zh/dsh-dba/releases)。Windows / Linux 使用本机对应的 `dsh` 路径即可。
+安装后**重启 DeepSeek Harness**。Windows / Linux 使用本机对应的 `dsh` 路径即可。
 
 从源码安装：
 
 ```bash
-git clone https://github.com/etShaw-zh/dsh-dba.git
-"$DSH_CLI" plugin --profile desktop add "$PWD/dsh-dba"
+git clone https://github.com/skillpie/dsh-plugins.git
+"$DSH_CLI" plugin --profile desktop add "$PWD/dsh-plugins/dsh-datasource"
 ```
 
 ## 开始使用
@@ -74,7 +66,7 @@ git clone https://github.com/etShaw-zh/dsh-dba.git
 
 ## 数据与安全
 
-- 连接信息保存在 `~/.dsh/dsh-dba/connections.json`，文件权限为 `0600`。
+- 连接信息保存在 `~/.dsh/dsh-datasource/connections.json`，文件权限为 `0600`。
 - 密码只保存在本机，不会发送到浏览器或模型上下文。
 - 生产库建议使用只读账号、只读连接，或设置 `allowWrite: false`。
 
@@ -85,7 +77,7 @@ npm install
 npm test
 ```
 
-欢迎提交 Issue 或 PR：<https://github.com/etShaw-zh/dsh-dba>
+欢迎提交 Issue 或 PR：<https://github.com/skillpie/dsh-plugins/issues>
 
 ## License
 

@@ -17,7 +17,7 @@
  * The file is private (`0700` directory, `0600` file), like the connection
  * store.
  *
- * @module dsh-dba/session-store
+ * @module dsh-datasource/session-store
  */
 
 import { randomUUID } from 'node:crypto'
@@ -89,7 +89,7 @@ export class SessionSelectionStore {
       }
     } catch (error) {
       if (error?.code !== 'ENOENT') {
-        console.warn('dsh-dba: ignoring unreadable session store —', error?.message ?? error)
+        console.warn('dsh-datasource: ignoring unreadable session store —', error?.message ?? error)
       }
     }
     return this

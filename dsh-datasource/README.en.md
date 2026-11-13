@@ -1,11 +1,9 @@
-# dsh-dba
+# dsh-datasource
 
 English ｜ [简体中文](./README.md)
 
-[![test](https://github.com/etShaw-zh/dsh-dba/actions/workflows/test.yml/badge.svg)](https://github.com/etShaw-zh/dsh-dba/actions/workflows/test.yml)
-[![License](https://img.shields.io/github/license/etShaw-zh/dsh-dba)](LICENSE)
-[![release](https://img.shields.io/github/v/release/etShaw-zh/dsh-dba)](https://github.com/etShaw-zh/dsh-dba/releases)
-[![npm](https://img.shields.io/npm/v/dsh-dba)](https://www.npmjs.com/package/dsh-dba)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/dsh-datasource)](https://www.npmjs.com/package/dsh-datasource)
 
 Connect to databases in [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH), then query and edit data right in the conversation.
 
@@ -32,22 +30,16 @@ From npm:
 ```bash
 # macOS desktop
 DSH_CLI="/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh"
-"$DSH_CLI" plugin --profile desktop add dsh-dba@1.0.3
+"$DSH_CLI" plugin --profile desktop add dsh-datasource@1.0.5
 ```
 
-Or install directly from GitHub:
-
-```bash
-"$DSH_CLI" plugin --profile desktop add github:etShaw-zh/dsh-dba
-```
-
-Restart DeepSeek Harness afterwards. Stable builds are listed in [Releases](https://github.com/etShaw-zh/dsh-dba/releases). On Windows / Linux use the `dsh` path installed on your machine.
+Restart DeepSeek Harness afterwards. On Windows / Linux use the `dsh` path installed on your machine.
 
 From source:
 
 ```bash
-git clone https://github.com/etShaw-zh/dsh-dba.git
-"$DSH_CLI" plugin --profile desktop add "$PWD/dsh-dba"
+git clone https://github.com/skillpie/dsh-plugins.git
+"$DSH_CLI" plugin --profile desktop add "$PWD/dsh-plugins/dsh-datasource"
 ```
 
 ## Getting started
@@ -76,7 +68,7 @@ Set these in the profile's `cordis.patch.yml`:
 
 ## Data and security
 
-- Connections live in `~/.dsh/dsh-dba/connections.json` with file mode `0600`.
+- Connections live in `~/.dsh/dsh-datasource/connections.json` with file mode `0600`.
 - Passwords stay on this machine and never reach the browser or the model context.
 - For production databases, use a read-only account or connection, or set `allowWrite: false`.
 
@@ -87,7 +79,7 @@ npm install
 npm test
 ```
 
-Issues and PRs are welcome: <https://github.com/etShaw-zh/dsh-dba>
+Issues and PRs are welcome: <https://github.com/skillpie/dsh-plugins/issues>
 
 ## License
 

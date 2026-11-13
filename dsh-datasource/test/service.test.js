@@ -91,7 +91,7 @@ test('connection CRUD, read-only policy and testConnection', async () => {
     assert.equal(after.connections.length, 1)
     assert.equal(after.connections[0].name, 'renamed')
 
-    const storeFile = join(home, 'dsh-dba', 'connections.json')
+    const storeFile = join(home, 'dsh-datasource', 'connections.json')
     const mode = (await stat(storeFile)).mode & 0o777
     assert.equal(mode, 0o600)
   } finally {

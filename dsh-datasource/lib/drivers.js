@@ -13,7 +13,7 @@
  * MySQL load `pg` / `mysql2` lazily and report a friendly error if a deployment
  * chose not to install them.
  *
- * @module dsh-dba/drivers
+ * @module dsh-datasource/drivers
  */
 
 import { stat } from 'node:fs/promises'

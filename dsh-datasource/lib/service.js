@@ -1,12 +1,12 @@
 /**
- * DbaService — the headless half of dsh-dba.
+ * DbaService — the headless half of dsh-datasource.
  *
  * Owns the connection store, one cached adapter per connection, the demo
  * database, and the operation vocabulary shared by the HTTP route and the
  * agent tools. Nothing here imports Cordis, so the whole service is testable in
  * a plain Node process.
  *
- * @module dsh-dba/service
+ * @module dsh-datasource/service
  */
 
 import { chmod, mkdir, stat, writeFile } from 'node:fs/promises'
@@ -174,7 +174,7 @@ export class DbaService {
       try {
         await this.#ensureDemo()
       } catch (error) {
-        console.warn('dsh-dba: demo database could not be created —', error?.message ?? error)
+        console.warn('dsh-datasource: demo database could not be created —', error?.message ?? error)
       }
     }
   }
@@ -478,7 +478,7 @@ export class DbaService {
         ...outcome,
       })
     } catch (error) {
-      console.warn('dsh-dba: failed to record SQL history —', error?.message ?? error)
+      console.warn('dsh-datasource: failed to record SQL history —', error?.message ?? error)
     }
   }
 

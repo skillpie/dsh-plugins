@@ -1,10 +1,10 @@
 /**
- * dsh-dba — Cordis entry (host half).
+ * dsh-datasource — Cordis entry (host half).
  *
  * Exposes two independent surfaces, both optional so a headless or non-HTTP
  * assembly still gets the other:
  *
- *   - `POST /dsh-dba/api` for the browser panel (overview, CRUD, rows,
+ *   - `POST /dsh-datasource/api` for the browser panel (overview, CRUD, rows,
  *     SQL).
  *   - model-facing tools `db_list_connections`, `db_describe_schema`,
  *     `db_query`, `db_execute`.
@@ -14,12 +14,12 @@
  * are probed through `optionalHostImport`, the same pattern dsh-bill uses, so
  * a `link:`ed checkout resolves them from the harness entry point.
  *
- * @module dsh-dba
+ * @module dsh-datasource
  */
 
 import { createDba, DEFAULT_CONFIG } from './service.js'
 
-const ROUTE = '/dsh-dba/api'
+const ROUTE = '/dsh-datasource/api'
 const MAX_BODY = 4 * 1024 * 1024
 
 /** One issue in the Standard Schema config vocabulary. */
@@ -34,7 +34,7 @@ const issue = (message, ...path) => ({ message, path: path.length ? path : undef
 export const Config = {
   '~standard': {
     version: 1,
-    vendor: 'dsh-dba',
+    vendor: 'dsh-datasource',
     validate(input) {
       if (input === undefined || input === null) return { value: { ...DEFAULT_CONFIG } }
       if (typeof input !== 'object' || Array.isArray(input)) return { issues: [issue('expected an object')] }
@@ -515,7 +515,7 @@ async function dispatch(dba, body, options = {}) {
 
 /** Cordis plugin entry. */
 export default {
-  name: '@skillpie/dsh-dba',
+  name: 'dsh-datasource',
   Config,
   inject: [],
   apply(ctx, config = null) {
@@ -525,10 +525,10 @@ export default {
     // Kick the load/demo seed off now; individual requests await the same
     // promise, so the first request after boot cannot race it.
     dba.ready().catch((error) => {
-      console.warn('dsh-dba: initialization failed —', error?.message ?? error)
+      console.warn('dsh-datasource: initialization failed —', error?.message ?? error)
     })
 
-    ctx.effect(() => () => dba.dispose().catch(() => {}), 'dsh-dba: adapters')
+    ctx.effect(() => () => dba.dispose().catch(() => {}), 'dsh-datasource: adapters')
 
     // Live Session lookup for workspace-aware defaults. `sessions` may not be
     // mounted in every assembly, so this is a probe rather than an inject.
@@ -567,7 +567,7 @@ export default {
             }
           }
           if (req.method !== 'POST') {
-            send(200, { ok: true, service: 'dsh-dba', route: ROUTE })
+            send(200, { ok: true, service: 'dsh-datasource', route: ROUTE })
             return
           }
           try {
@@ -577,7 +577,7 @@ export default {
             send(200, { ok: false, error: error?.message ?? String(error) })
           }
         },
-      }), 'dsh-dba: http api')
+      }), 'dsh-datasource: http api')
     })
 
     // ── model-facing tools ───────────────────────────────────────────────
@@ -591,31 +591,31 @@ export default {
             if (execution?.name !== 'db_execute') return next()
             return {
               kind: 'ask',
-              reason: 'dsh-dba db_execute writes to the database',
+              reason: 'dsh-datasource db_execute writes to the database',
               displayReason: {
                 en: 'The assistant wants to run a write statement against your database (INSERT / UPDATE / DELETE / DDL). It only executes after you approve.',
                 zh: '助手即将对数据库执行写操作（INSERT / UPDATE / DELETE / DDL），你确认后才会执行。',
               },
             }
-          }), 'dsh-dba: agent write approval gate')
+          }), 'dsh-datasource: agent write approval gate')
         }
         optionalHostImport('@deepseek-ai/dsh-tools').then((mod) => {
           if (!mod?.defineTool) {
-            console.warn('dsh-dba: @deepseek-ai/dsh-tools not reachable; agent tools are disabled')
+            console.warn('dsh-datasource: @deepseek-ai/dsh-tools not reachable; agent tools are disabled')
             return
           }
           try {
             child.effect(() => {
               const definitions = buildToolDefinitions(dba)
               const disposers = definitions.map((definition) => child.tools.register(mod.defineTool(definition)))
-              console.info('dsh-dba: registered ' + definitions.length + ' agent tools (' + definitions.map((definition) => definition.name).join(', ') + ')')
+              console.info('dsh-datasource: registered ' + definitions.length + ' agent tools (' + definitions.map((definition) => definition.name).join(', ') + ')')
               return () => { for (const dispose of disposers) dispose?.() }
-            }, 'dsh-dba: agent tools')
+            }, 'dsh-datasource: agent tools')
           } catch (error) {
-            console.warn('dsh-dba: agent tools not registered —', error?.message ?? error)
+            console.warn('dsh-datasource: agent tools not registered —', error?.message ?? error)
           }
         }).catch((error) => {
-          console.warn('dsh-dba: agent tools not registered —', error?.message ?? error)
+          console.warn('dsh-datasource: agent tools not registered —', error?.message ?? error)
         })
       })
     }

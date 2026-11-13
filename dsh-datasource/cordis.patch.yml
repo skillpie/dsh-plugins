@@ -1,11 +1,11 @@
-# dsh-dba bundle patch.
+# dsh-datasource bundle patch.
 #
-# `dsh plugin --profile <name> add dsh-dba` reads this file and appends the
+# `dsh plugin --profile <name> add dsh-datasource` reads this file and appends the
 # row below to the profile's bundle stack. The `name` is the npm package name,
 # so Node module resolution finds the installed package.
 - insert:
-    - id: dba
-      name: "@skillpie/dsh-dba"
+    - id: dsh-datasource
+      name: "dsh-datasource"
       config:
         demo: true
         allowWrite: true

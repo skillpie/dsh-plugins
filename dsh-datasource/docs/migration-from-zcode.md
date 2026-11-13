@@ -1,10 +1,10 @@
-# dsh-dba 可从 ZCode DB 工具迁移的优点(插件侧改造清单)
+# dsh-datasource 可从 ZCode DB 工具迁移的优点(插件侧改造清单)
 
 对比对象:
 - ZCode:`ZCodeOnline/apps/zcode-cli/packages/core/src/tool/handlers/db/`(driver / db-query / db-execute / db-schema / db-export / store)+ `packages/shared/src/dataSource.ts`
 - 本插件:`lib/drivers.js`、`lib/service.js`、`lib/index.js`
 
-约束:**只改 dsh-dba 插件,不改 DSH 宿主源码**。依赖宿主扩展点的项标注了可行路径或明确放弃。
+约束:**只改 dsh-datasource 插件,不改 DSH 宿主源码**。依赖宿主扩展点的项标注了可行路径或明确放弃。
 
 ## P0 — 安全与正确性(低成本高收益)
 

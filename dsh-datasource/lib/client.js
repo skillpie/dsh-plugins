@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: "@skillpie/dsh-dba",
+  id: "dsh-datasource",
   factory: (require) => {
     var module = { exports: {} };
     var exports = module.exports;
@@ -7,8 +7,8 @@ window.__ModuleLoader__.load({
     var ReactDOM = null;
     try { ReactDOM = require("react-dom"); } catch (error) { ReactDOM = null; }
     var h = React.createElement;
-    var NS = "@skillpie/dsh-dba";
-    var API = "/dsh-dba/api";
+    var NS = "dsh-datasource";
+    var API = "/dsh-datasource/api";
 
     // ── copy ────────────────────────────────────────────────────────────
     var zh = {
@@ -320,7 +320,7 @@ window.__ModuleLoader__.load({
     // The picker and the status strip are two seats
     // over one host-owned answer. They share this small store so a checkbox
     // flips every surface at once; the host remains the authority and every
-    // mutation round-trips through /dsh-dba/api.
+    // mutation round-trips through /dsh-datasource/api.
     var SESSION_CACHE = new Map();
     var sessionListeners = new Map();
 
@@ -780,17 +780,17 @@ window.__ModuleLoader__.load({
      */
     function installStyles(ctx) {
       ctx.effect(function () {
-        var tagId = "@skillpie/dsh-dba/client.css";
+        var tagId = "dsh-datasource/client.css";
         if (typeof document === "undefined") return;
         var existing = document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]");
         if (existing) return function () {};
         var style = document.createElement("style");
-        style.dataset.plugin = "@skillpie/dsh-dba";
+        style.dataset.plugin = "dsh-datasource";
         style.dataset.pluginCss = tagId;
         style.textContent = css;
         document.head.appendChild(style);
         return function () { style.remove(); };
-      }, "@skillpie/dsh-dba: styles");
+      }, "dsh-datasource: styles");
     }
 
     // ── small UI atoms ───────────────────────────────────────────────────
@@ -2048,14 +2048,14 @@ window.__ModuleLoader__.load({
       return h(DatabaseIcon, { size: props.size || 14 });
     }
 
-    exports.name = "@skillpie/dsh-dba";
+    exports.name = "dsh-datasource";
     exports.inject = ["slots", "layout", "locale", "commandUi"];
     exports.apply = function (ctx) {
       APP_CTX = ctx;
       installStyles(ctx);
       ctx.effect(function () {
         return ctx.locale.register(NS, { zh: zh, en: en });
-      }, "@skillpie/dsh-dba: dictionaries");
+      }, "dsh-datasource: dictionaries");
       var t = ctx.locale.bind(NS);
 
       // `/db` in the composer: same row treatment as the built-in commands,
@@ -2074,7 +2074,7 @@ window.__ModuleLoader__.load({
               run: function () { openGlobalPanel(); }
             }
           });
-        }, "@skillpie/dsh-dba: /db command");
+        }, "dsh-datasource: /db command");
       }
 
       ctx.slots.inject("main", function () {

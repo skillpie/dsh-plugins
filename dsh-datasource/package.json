@@ -1,6 +1,6 @@
 {
-  "name": "@skillpie/dsh-dba",
-  "version": "1.0.4",
+  "name": "dsh-datasource",
+  "version": "1.0.5",
   "description": "Connect to databases in DeepSeek Harness (DSH), then query and edit data right in the conversation.",
   "type": "module",
   "license": "MIT",
@@ -59,12 +59,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/etShaw-zh/dsh-db-studio.git"
+    "url": "git+https://github.com/skillpie/dsh-plugins.git",
+    "directory": "dsh-datasource"
   },
   "author": "Jianjun Xiao <et_shaw@126.com>",
-  "homepage": "https://github.com/etShaw-zh/dsh-db-studio#readme",
+  "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-datasource#readme",
   "bugs": {
-    "url": "https://github.com/etShaw-zh/dsh-db-studio/issues"
+    "url": "https://github.com/skillpie/dsh-plugins/issues"
   },
   "publishConfig": {
     "access": "public",
