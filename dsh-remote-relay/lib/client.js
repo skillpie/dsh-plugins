@@ -43,6 +43,7 @@ window.__ModuleLoader__.load({
       stop: '停止',
       enable: '开启',
       statusActive: '远程控制已开启',
+      riskNote: '风险提示：远程码等同于本机完整控制权限，请妥善保管、仅分享给信任的人；不再使用时请停止并重新生成。',
       relayFaceHosts: '中转面已注册宿主机',
       offlineHost: '离线',
       close: '关闭',
@@ -68,6 +69,7 @@ window.__ModuleLoader__.load({
       stop: 'Stop',
       enable: 'Enable',
       statusActive: 'Remote control is on',
+      riskNote: 'Risk notice: the remote code grants full control of this machine. Please keep it safe and share it only with people you trust; stop and regenerate it when no longer needed.',
       relayFaceHosts: 'Relay face registered hosts',
       offlineHost: 'offline',
       close: 'Close',
@@ -144,6 +146,21 @@ window.__ModuleLoader__.load({
         h('path', { d: 'M9 8V2' }),
         h('path', { d: 'M15 8V2' }),
         h('path', { d: 'M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z' }),
+      )
+    }
+
+    // lucide triangle-alert（风险提示卡图标）。
+    function AlertIcon(props) {
+      var size = props && props.size ? props.size : 14
+      return h('svg', {
+        viewBox: '0 0 24 24', width: size, height: size, 'aria-hidden': true,
+        fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+        style: { display: 'block', flex: 'none' },
+      },
+        h('path', { d: 'm21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z' }),
+        h('path', { d: 'M12 9v4' }),
+        h('path', { d: 'M12 17h.01' }),
       )
     }
 
@@ -396,8 +413,19 @@ window.__ModuleLoader__.load({
           h(LinkRow, { key: 'relay', t: t, label: t('relayUrl'), url: status.enabled ? status.relayUrlPublic : undefined }),
           h(LinkRow, { key: 'direct', t: t, label: t('directUrl'), url: status.directUrl }),
           status.enabled ? null : h('div', { style: { marginTop: 8, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('disabled')),
-        ),
-        // Relay-face hosts card（服务器部署面板用；宿主面无此数据）
+          // 风险提示（弱化的注释条，收在远程码板块内）：
+          // 点侧栏图标即开启，这条是「知情」的最低限度——码等于整台机器的控制权。
+          h('div', {
+            role: 'note',
+            style: { display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 8, padding: '5px 0', background: 'var(--dsw-alias-bg-base)', borderRadius: 8 },
+          },
+            h('span', { style: { color: 'var(--dsw-alias-state-warn-primary)', marginTop: 2 } },
+              h(AlertIcon, { size: 13 })),
+            h('span', {
+              style: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--dsw-alias-label-secondary)' },
+            }, t('riskNote')),
+          ),
+        ),        // Relay-face hosts card（服务器部署面板用；宿主面无此数据）
         (status.relayFace && status.relayFace.hosts && status.relayFace.hosts.length)
           ? h('div', { style: cardStyle },
           h('div', { style: labelStyle }, t('relayFaceHosts')),
