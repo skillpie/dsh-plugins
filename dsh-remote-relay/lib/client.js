@@ -25,10 +25,11 @@ window.__ModuleLoader__.load({
     var zh = {
       title: '远程控制',
       codeLabel: '远程码',
-      relayUrl: '中转链接',
+      relayUrl: '远程链接',
       directUrl: '本机直连',
       copy: '复制',
       copied: '已复制',
+      open: '打开',
       relay: '中转站',
       direct: '直连',
       online: '已连接',
@@ -53,10 +54,11 @@ window.__ModuleLoader__.load({
     var en = {
       title: 'Remote control',
       codeLabel: 'Remote code',
-      relayUrl: 'Relay link',
+      relayUrl: 'Remote link',
       directUrl: 'Direct link',
       copy: 'Copy',
       copied: 'Copied',
+      open: 'Open',
       relay: 'Relay',
       direct: 'Direct',
       online: 'connected',
@@ -134,6 +136,22 @@ window.__ModuleLoader__.load({
         h('path', { d: 'M7.5 13.5 10 11' }),
         h('path', { d: 'M10.5 16.5 13 14' }),
         h('path', { d: 'm12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z' }),
+      )
+    }
+
+    // lucide plug（开启/连接按钮图标，与停止钮的 unplug 配对同风格）。
+    function PlugIcon(props) {
+      var size = props && props.size ? props.size : 14
+      return h('svg', {
+        viewBox: '0 0 24 24', width: size, height: size, 'aria-hidden': true,
+        fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+        style: { display: 'block', flex: 'none' },
+      },
+        h('path', { d: 'M12 22v-5' }),
+        h('path', { d: 'M9 8V2' }),
+        h('path', { d: 'M15 8V2' }),
+        h('path', { d: 'M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z' }),
       )
     }
 
@@ -291,6 +309,11 @@ window.__ModuleLoader__.load({
           },
         }, url),
         h('button', { type: 'button', onClick: copy, style: buttonStyle }, copied ? t('copied') : t('copy')),
+        h('button', {
+          type: 'button', style: buttonStyle,
+          title: t('open'), 'aria-label': t('open'),
+          onClick: function () { window.open(url, '_blank', 'noopener') },
+        }, t('open')),
       )
     }
 
@@ -314,6 +337,42 @@ window.__ModuleLoader__.load({
             boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
           },
         }),
+      )
+    }
+
+    // 活动记录（调试用）：默认折叠，点标题展开/收起。
+    // 带 hooks 的组件必须以 h(Component, props) 渲染，禁止当普通函数调用。
+    function LogCard(props) {
+      var t = props.t
+      var log = props.log
+      var openPair = React.useState(false)
+      var open = openPair[0]
+      var setOpen = openPair[1]
+      var entries = (log || []).slice().reverse()
+      return h('div', { style: cardStyle },
+        h('div', {
+          role: 'button', tabIndex: 0,
+          'aria-expanded': open ? 'true' : 'false',
+          onClick: function () { setOpen(!open) },
+          onKeyDown: function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(!open) } },
+          style: {
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            cursor: 'pointer', userSelect: 'none', color: 'var(--dsw-alias-label-secondary)',
+            marginBottom: open ? 6 : 0,
+          },
+        },
+          h('span', { style: Object.assign({}, labelStyle, { marginBottom: 0 }) },
+            t('log') + (entries.length ? '（' + String(entries.length) + '）' : '')),
+          h('span', { style: { fontSize: 10, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' } }, '▾'),
+        ),
+        open ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 220, overflowY: 'auto' } },
+          entries.map(function (entry, index) {
+            return h('div', { key: index, style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', display: 'flex', gap: 8 } },
+              h('span', { style: { flex: 'none', fontFamily: 'var(--dsw-font-mono, monospace)' } }, new Date(entry.time).toLocaleTimeString()),
+              h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, entry.text),
+            )
+          }),
+        ) : null,
       )
     }
 
@@ -359,21 +418,18 @@ window.__ModuleLoader__.load({
           StatusChip({ on: status.enabled && status.relay && status.relay.connected, text: t('relay') + ': ' + relayText }),
           status.direct ? StatusChip({ on: true, text: t('direct') }) : null,
         ),
-        // Status banner（参考 ZCode「等待手机连接 ●已就绪 + 停止」形态）
+        // Status banner（开启/关闭 + 操作按钮；状态细节不再放标签，保持一行干净）
         h('div', {
           style: Object.assign({ display: 'flex', alignItems: 'center', gap: 10 }, cardStyle, { padding: '12px 16px' }),
         },
           h('span', { style: { fontSize: 14, fontWeight: 700, color: 'var(--dsw-alias-label-primary)' } },
             status.enabled ? t('statusActive') : t('disabled')),
-          status.enabled
-            ? h(StatusChip, { on: !!(status.relay && status.relay.connected), text: status.relay && status.relay.connected ? t('online') : t('offline') })
-            : null,
           h('span', { style: { flex: 1 } }),
           h('button', {
             type: 'button', style: buttonStyle,
             onClick: status.enabled ? stop : enable,
           },
-            status.enabled ? h(UnplugIcon, { size: 14 }) : null,
+            status.enabled ? h(UnplugIcon, { size: 14 }) : h(PlugIcon, { size: 14 }),
             status.enabled ? t('stop') : t('enable'),
           ),
         ),
@@ -428,18 +484,8 @@ window.__ModuleLoader__.load({
             )
             : null,
         ),
-        // Log card
-        h('div', { style: cardStyle },
-          h('div', { style: labelStyle }, t('log')),
-          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 220, overflowY: 'auto' } },
-            (status.log || []).slice().reverse().map(function (entry, index) {
-              return h('div', { key: index, style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', display: 'flex', gap: 8 } },
-                h('span', { style: { flex: 'none', fontFamily: 'var(--dsw-font-mono, monospace)' } }, new Date(entry.time).toLocaleTimeString()),
-                h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, entry.text),
-              )
-            }),
-          ),
-        ),
+        // Log card（调试用途，默认折叠）
+        h(LogCard, { t: t, log: status.log }),
         err ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-state-error-primary)' } }, t('actionFailed') + '：' + err) : null,
       )
     }
