@@ -58,9 +58,9 @@ export const Config = {
       const issues = []
       const value = {}
       const bools = [
-        ['enabled', true],
+        ['enabled', false],
         ['allowControl', true],
-        ['direct', true],
+        ['direct', false],
       ]
       for (const [key, fallback] of bools) {
         const parsed = bool(input[key], fallback)
@@ -136,9 +136,11 @@ export default {
   inject: [],
   apply(ctx, rawConfig = null) {
     const cfg = rawConfig ?? {}
-    const enabled = cfg.enabled ?? true
+    // 默认关闭：远程控制涉及向第三方中转站建立出站长连接并开放完整 GUI
+    // 权限，必须由属主在设置页主动开启（开启时客户端会弹确认提示）。
+    const enabled = cfg.enabled ?? false
     const allowControl = cfg.allowControl ?? true
-    const direct = cfg.direct ?? true
+    const direct = cfg.direct ?? false
     const mode = cfg.mode === 'console' ? 'console' : 'gui'
     const relayUrl = cfg.relayUrl ?? DEFAULT_RELAY_URL
     const relayFaceEnabled = cfg.relay?.enabled === true

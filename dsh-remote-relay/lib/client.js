@@ -43,6 +43,7 @@ window.__ModuleLoader__.load({
       loading: '正在读取状态…',
       actionFailed: '操作失败',
       confirmRegenerate: '重新生成后旧链接立即失效，确认？',
+      confirmEnable: '开启后将向中转站（dsh.skillpie.cn）建立出站长连接，并生成 8 位远程码：任何拿到该链接的人都能获得与属主等价的完整 GUI 权限（所有会话、终端、设置页）。确认开启？',
       relayFaceHosts: '中转面已注册宿主机',
       offlineHost: '离线',
       visitorAt: '接入于',
@@ -69,6 +70,7 @@ window.__ModuleLoader__.load({
       loading: 'Loading status…',
       actionFailed: 'Action failed',
       confirmRegenerate: 'The old link stops working immediately. Regenerate?',
+      confirmEnable: 'Enabling opens an outbound connection to the relay (dsh.skillpie.cn) and generates an 8-digit remote code: anyone who obtains that link gets full GUI access equivalent to the owner (all sessions, terminal, settings). Enable?',
       relayFaceHosts: 'Relay face registered hosts',
       offlineHost: 'offline',
       visitorAt: 'connected at',
@@ -332,7 +334,14 @@ window.__ModuleLoader__.load({
           h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
             h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
               h('span', null, t('enabledToggle')),
-              Toggle({ checked: status.enabled, onChange: act({ action: 'set-enabled', value: !status.enabled }) }),
+              Toggle({
+                checked: status.enabled,
+                onChange: function () {
+                  if (status.enabled) { act({ action: 'set-enabled', value: false })(); return }
+                  // 开启前必须确认：远程码等价于把整台机器交给持码者。
+                  if (window.confirm(t('confirmEnable'))) act({ action: 'set-enabled', value: true })()
+                },
+              }),
             ),
             h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
               h('span', null, t('allowControl')),
