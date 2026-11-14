@@ -96,6 +96,9 @@ export class HostEngine {
     if (frame.t !== 'cmd') return
     const { id, from, cmd } = frame
     if (typeof id !== 'string' || typeof from !== 'string' || typeof cmd !== 'string') return
+    // 访客活跃度：任何指令帧都刷新该访客的 lastActive（面板展示用）。
+    const activeRecord = this.visitors.get(from)
+    if (activeRecord) activeRecord.lastActive = Date.now()
     const known = VISITOR_COMMANDS.has(cmd) || INTERNAL_COMMANDS.has(cmd)
     if (!known) return this.reply(id, false, undefined, `unknown command: ${cmd}`, channel)
     Promise.resolve()
@@ -128,7 +131,16 @@ export class HostEngine {
         if (previous) {
           for (const sessionId of previous.sessions) this.unobserve(from, sessionId)
         }
-        this.visitors.set(from, { id: from, connectedAt: Date.now(), sessions: new Set(), channel })
+        this.visitors.set(from, {
+          id: from,
+          connectedAt: Date.now(),
+          lastActive: Date.now(),
+          // channel.meta.ip 由接入方携带（直连模式为本机来源地址；
+          // relay 模式流量走单条隧道，宿主侧无访客 IP）。
+          ip: channel.meta && typeof channel.meta.ip === 'string' ? channel.meta.ip : undefined,
+          sessions: new Set(),
+          channel,
+        })
         this.log('visitor', `访客接入 ${shortId(from)}`)
         return {
           host: {
@@ -335,6 +347,8 @@ export class HostEngine {
       visitors: [...this.visitors.entries()].map(([id, visitor]) => ({
         id,
         connectedAt: visitor.connectedAt,
+        lastActive: visitor.lastActive ?? visitor.connectedAt,
+        ip: visitor.ip,
         sessions: [...visitor.sessions],
       })),
     }

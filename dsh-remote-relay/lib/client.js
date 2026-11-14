@@ -37,7 +37,7 @@ window.__ModuleLoader__.load({
       disabled: '远程控制已关闭',
       visitors: '在线访客',
       none: '暂无',
-      allowControl: '允许访客控制会话（关闭为只读）',
+      allowControl: '允许控制会话（关闭为只读）',
       regenerate: '重新生成远程码',
       log: '活动记录',
       loading: '正在读取状态…',
@@ -49,6 +49,10 @@ window.__ModuleLoader__.load({
       relayFaceHosts: '中转面已注册宿主机',
       offlineHost: '离线',
       visitorAt: '接入于',
+      activeNow: '活跃',
+      activeMinAgo: '分钟前活跃',
+      viaRelay: '经中转接入',
+      visitorsGuiHint: 'GUI 模式经隧道透传，宿主侧不区分单个访客；控制台（console）模式可列出访客与来源。',
       close: '关闭',
     }
     var en = {
@@ -66,7 +70,7 @@ window.__ModuleLoader__.load({
       disabled: 'Remote control is disabled',
       visitors: 'Visitors online',
       none: 'none',
-      allowControl: 'Allow visitors to control sessions (off = read-only)',
+      allowControl: 'Allow session control (off = read-only)',
       regenerate: 'Regenerate remote code',
       log: 'Activity',
       loading: 'Loading status…',
@@ -78,6 +82,10 @@ window.__ModuleLoader__.load({
       relayFaceHosts: 'Relay face registered hosts',
       offlineHost: 'offline',
       visitorAt: 'connected at',
+      activeNow: 'active',
+      activeMinAgo: 'min ago active',
+      viaRelay: 'via relay',
+      visitorsGuiHint: 'In GUI mode traffic is tunneled opaquely; console mode lists visitors and their source.',
       close: 'Close',
     }
     var pageT = function (key) { return key }
@@ -442,13 +450,24 @@ window.__ModuleLoader__.load({
           h('div', { style: labelStyle }, t('visitors') + '：' + (status.visitors.length ? String(status.visitors.length) : t('none'))),
           status.visitors.length
             ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }, status.visitors.map(function (v) {
-              return h('div', { key: v.id, style: { fontSize: 12, display: 'flex', gap: 8 } },
+              // 活跃度：60 秒内有指令帧视为活跃（绿点）。
+              var idleMs = Date.now() - (v.lastActive || v.connectedAt)
+              var active = idleMs < 60_000
+              var idleText = active ? t('activeNow') : Math.max(1, Math.round(idleMs / 60000)) + ' ' + t('activeMinAgo')
+              var source = v.ip ? v.ip : t('viaRelay')
+              return h('div', { key: v.id, style: { fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' } },
+                h('span', { style: { width: 7, height: 7, borderRadius: 999, flex: 'none', background: active ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-border-l1)' } }),
                 h('code', { style: { fontFamily: 'var(--dsw-font-mono, monospace)' } }, v.id),
+                h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } }, source),
+                h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } }, idleText),
                 h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } },
                   t('visitorAt') + ' ' + new Date(v.connectedAt).toLocaleTimeString() +
                   (v.sessions && v.sessions.length ? ' · ' + v.sessions.length + ' 会话' : '')),
               )
             }))
+            : null,
+          status.mode === 'gui' && !status.visitors.length
+            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('visitorsGuiHint'))
             : null,
           status.relayFace && status.relayFace.hosts && status.relayFace.hosts.length
             ? h('div', { style: { marginTop: 12 } },

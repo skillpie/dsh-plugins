@@ -462,6 +462,7 @@ export default {
         directUrl: direct && services.webServerOrigin ? `${services.webServerOrigin}/${identity.code}/` : undefined,
         relayUrlPublic: relayUrl.replace(/^ws/, 'http') + '/' + identity.code + '/',
         visitors: state.peer?.status ? state.peer.status().visitors : [],
+        mode,
         relayFace: relayFaceEnabled ? (state.relayCore?.status() ?? { hosts: [] }) : undefined,
         log: logRing.slice(-80),
       }
