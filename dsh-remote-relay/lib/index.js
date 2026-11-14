@@ -277,9 +277,12 @@ export default {
         logLine('boot', `dsh-remote-relay 已加载（远程码 ${identity.code}，远程访问已关闭）`)
       }
 
-      // 5. Owner panel API (same-origin, behind the GUI session auth). Host
-      //    roles only — a relay-only server row mounts no owner API.
-      if (enabled || direct) {
+      // 5. Owner panel API (same-origin, behind the GUI session auth).
+      //    默认关闭后属主面板是唯一的开启入口，所以宿主面即使全关也要挂，
+      //    否则面板永远停在「正在读取状态」、开关无从打开；只有 relay-only
+      //    服务器行（只当中转面用）不挂，避免暴露 regenerate 等操作。
+      const relayOnly = relayFaceEnabled && !enabled && !direct
+      if (!relayOnly) {
         disposers.push(webServer.register({
           kind: 'exact',
           path: OWNER_API_PATH,
