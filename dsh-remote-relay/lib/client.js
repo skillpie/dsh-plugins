@@ -52,7 +52,6 @@ window.__ModuleLoader__.load({
       activeNow: '活跃',
       activeMinAgo: '分钟前活跃',
       viaRelay: '经中转接入',
-      visitorsGuiHint: 'GUI 模式经隧道透传，宿主侧不区分单个访客；控制台（console）模式可列出访客与来源。',
       close: '关闭',
     }
     var en = {
@@ -85,7 +84,6 @@ window.__ModuleLoader__.load({
       activeNow: 'active',
       activeMinAgo: 'min ago active',
       viaRelay: 'via relay',
-      visitorsGuiHint: 'In GUI mode traffic is tunneled opaquely; console mode lists visitors and their source.',
       close: 'Close',
     }
     var pageT = function (key) { return key }
@@ -445,8 +443,12 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
-        // Visitors card
-        h('div', { style: cardStyle },
+        // Visitors card：GUI 模式宿主侧不感知单个访客（整条隧道透传），
+        // 主推形态下不渲染这张卡；console 模式列出访客（活跃度+来源）。
+        (status.mode === 'gui' && !status.visitors.length &&
+          !(status.relayFace && status.relayFace.hosts && status.relayFace.hosts.length))
+          ? null
+          : h('div', { style: cardStyle },
           h('div', { style: labelStyle }, t('visitors') + '：' + (status.visitors.length ? String(status.visitors.length) : t('none'))),
           status.visitors.length
             ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }, status.visitors.map(function (v) {
@@ -465,9 +467,6 @@ window.__ModuleLoader__.load({
                   (v.sessions && v.sessions.length ? ' · ' + v.sessions.length + ' 会话' : '')),
               )
             }))
-            : null,
-          status.mode === 'gui' && !status.visitors.length
-            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('visitorsGuiHint'))
             : null,
           status.relayFace && status.relayFace.hosts && status.relayFace.hosts.length
             ? h('div', { style: { marginTop: 12 } },
