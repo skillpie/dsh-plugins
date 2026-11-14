@@ -43,7 +43,8 @@ window.__ModuleLoader__.load({
       loading: '正在读取状态…',
       actionFailed: '操作失败',
       confirmRegenerate: '重新生成后旧链接立即失效，确认？',
-      confirmEnable: '开启后将向中转站（dsh.skillpie.cn）建立出站长连接，并生成 8 位远程码：任何拿到该链接的人都能获得与属主等价的完整 GUI 权限（所有会话、终端、设置页）。确认开启？',
+      stop: '停止',
+      statusActive: '远程控制已开启',
       relayFaceHosts: '中转面已注册宿主机',
       offlineHost: '离线',
       visitorAt: '接入于',
@@ -70,7 +71,8 @@ window.__ModuleLoader__.load({
       loading: 'Loading status…',
       actionFailed: 'Action failed',
       confirmRegenerate: 'The old link stops working immediately. Regenerate?',
-      confirmEnable: 'Enabling opens an outbound connection to the relay (dsh.skillpie.cn) and generates an 8-digit remote code: anyone who obtains that link gets full GUI access equivalent to the owner (all sessions, terminal, settings). Enable?',
+      stop: 'Stop',
+      statusActive: 'Remote control is on',
       relayFaceHosts: 'Relay face registered hosts',
       offlineHost: 'offline',
       visitorAt: 'connected at',
@@ -81,6 +83,8 @@ window.__ModuleLoader__.load({
     /* ── shared dialog open state (footer button ⇄ overlay) ───────────── */
 
     var openStore = { open: false, listeners: new Set() }
+    // 用户主动停止后的标记：之后再点侧栏图标不再自动开启（面板里手动开启会清除）。
+    var STOP_FLAG = 'dsh-remote-relay:user-stopped'
     function setPanelOpen(value) {
       openStore.open = value
       openStore.listeners.forEach(function (listener) { listener(value) })
@@ -115,6 +119,24 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // lucide unplug（停止/断开按钮图标，与 ZCode 停止钮同款）。
+    function UnplugIcon(props) {
+      var size = props && props.size ? props.size : 14
+      return h('svg', {
+        viewBox: '0 0 24 24', width: size, height: size, 'aria-hidden': true,
+        fill: 'none', stroke: 'currentColor', 'stroke-width': 2,
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+        style: { display: 'block', flex: 'none' },
+      },
+        h('path', { d: 'm19 5 3-3' }),
+        h('path', { d: 'm2 22 3-3' }),
+        h('path', { d: 'M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z' }),
+        h('path', { d: 'M7.5 13.5 10 11' }),
+        h('path', { d: 'M10.5 16.5 13 14' }),
+        h('path', { d: 'm12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z' }),
+      )
+    }
+
     /* ── sidebar foot action button ───────────────────────────────────── */
 
     function FooterAction(props) {
@@ -124,6 +146,11 @@ window.__ModuleLoader__.load({
       var hoverState = React.useState(false)
       var hovered = hoverState[0]
       var setHovered = hoverState[1]
+      // 启动中（远程控制已开启）图标用品牌高亮色，关闭时为次级灰。
+      var status = useStatus()
+      var active = !!(status && status.enabled)
+      var idleColor = 'var(--dsw-alias-label-secondary)'
+      var baseColor = active ? 'var(--dsw-alias-brand-primary)' : idleColor
       // ZCode 观感：图标与账号行同行、位于其右端。账号行本身是宿主占用的
       // settingsArea（插件无法插入同排元素），这里用零高覆盖层把 28px 图标
       // 按钮精确叠到账号行的右侧空白处（宽模式 trigger 高 42px + 上下 4px
@@ -139,7 +166,17 @@ window.__ModuleLoader__.load({
           type: 'button',
           title: t('title'),
           'aria-label': t('title'),
-          onClick: function () { setPanelOpen(true) },
+          // 默认关闭：首次点图标打开面板时自动开启远程控制（用户主动点击
+          // 即视为开启意愿）；点过「停止」后不再自动开，只开面板。
+          onClick: function () {
+            setPanelOpen(true)
+            if (typeof localStorage !== 'undefined' && localStorage.getItem(STOP_FLAG)) return
+            post({ action: 'status' }).then(function (data) {
+              if (data && data.ok && data.status && !data.status.enabled) {
+                post({ action: 'set-enabled', value: true }).catch(function () {})
+              }
+            }).catch(function () {})
+          },
           onMouseEnter: function () { setHovered(true) },
           onMouseLeave: function () { setHovered(false) },
           onFocus: function () { setHovered(true) },
@@ -150,7 +187,7 @@ window.__ModuleLoader__.load({
             borderRadius: 8,
             border: '1px solid ' + (hovered ? 'var(--dsw-alias-border-l1)' : 'transparent'),
             background: hovered ? 'var(--dsw-alias-bg-layer-1)' : 'transparent',
-            color: hovered ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-secondary)',
+            color: hovered ? (active ? baseColor : 'var(--dsw-alias-label-primary)') : baseColor,
             cursor: 'pointer', flex: 'none',
             pointerEvents: 'auto',
           }, buttonStyle),
@@ -295,6 +332,11 @@ window.__ModuleLoader__.load({
           }).catch(function (error) { setErr(String(error)) })
         }
       }
+      // 停止：断开连接并记标记（侧栏图标不再自动开启，直到面板里手动开启）。
+      var stop = function () {
+        try { localStorage.setItem(STOP_FLAG, '1') } catch (e) { /* 隐私模式等；不影响断开 */ }
+        act({ action: 'set-enabled', value: false })()
+      }
 
       if (!status) {
         return h('div', { style: { padding: 24, color: 'var(--dsw-alias-label-secondary)', fontSize: 13 } }, t('loading'))
@@ -311,6 +353,21 @@ window.__ModuleLoader__.load({
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           StatusChip({ on: status.enabled && status.relay && status.relay.connected, text: t('relay') + ': ' + relayText }),
           status.direct ? StatusChip({ on: true, text: t('direct') }) : null,
+        ),
+        // Status banner（参考 ZCode「等待手机连接 ●已就绪 + 停止」形态）
+        h('div', {
+          style: Object.assign({ display: 'flex', alignItems: 'center', gap: 10 }, cardStyle, { padding: '12px 16px' }),
+        },
+          h('span', { style: { fontSize: 14, fontWeight: 700, color: 'var(--dsw-alias-label-primary)' } },
+            status.enabled ? t('statusActive') : t('disabled')),
+          status.enabled
+            ? h(StatusChip, { on: !!(status.relay && status.relay.connected), text: status.relay && status.relay.connected ? t('online') : t('offline') })
+            : null,
+          h('span', { style: { flex: 1 } }),
+          status.enabled
+            ? h('button', { type: 'button', style: buttonStyle, onClick: stop },
+              h(UnplugIcon, { size: 14 }), t('stop'))
+            : null,
         ),
         // Code card
         h('div', { style: cardStyle },
@@ -337,9 +394,11 @@ window.__ModuleLoader__.load({
               Toggle({
                 checked: status.enabled,
                 onChange: function () {
-                  if (status.enabled) { act({ action: 'set-enabled', value: false })(); return }
-                  // 开启前必须确认：远程码等价于把整台机器交给持码者。
-                  if (window.confirm(t('confirmEnable'))) act({ action: 'set-enabled', value: true })()
+                  try {
+                    if (status.enabled) localStorage.setItem(STOP_FLAG, '1')
+                    else localStorage.removeItem(STOP_FLAG)
+                  } catch (e) { /* 同上，不影响主流程 */ }
+                  act({ action: 'set-enabled', value: !status.enabled })()
                 },
               }),
             ),
