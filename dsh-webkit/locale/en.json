@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Web Toolbox",
+    "description": "Picks an element in the right-Sidebar browser and drops its structure, style, and HTML into the chat draft."
+  }
+}

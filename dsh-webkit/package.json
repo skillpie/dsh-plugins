@@ -1,0 +1,63 @@
+{
+  "name": "dsh-webkit",
+  "version": "1.6.0",
+  "type": "module",
+  "description": "Web toolbox for the right-Sidebar browser: element picker + free-size viewport. Fork of mmyddd/dsh-element-lens v1.1.3, renamed.",
+  "license": "MIT",
+  "author": "skillpie",
+  "engines": {
+    "node": ">=22.13",
+    "dsh": ">=0.2.1-rc.3"
+  },
+  "contributors": [
+    "mmyddd (original dsh-element-lens)"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "element-picker",
+    "devtools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skillpie/dsh-plugins.git",
+    "directory": "dsh-webkit"
+  },
+  "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-webkit#readme",
+  "bugs": {
+    "url": "https://github.com/skillpie/dsh-plugins/issues"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "assets"
+  ],
+  "scripts": {
+    "test": "node test/manifest.cjs && node test/fold.cjs && node test/handoff.cjs && node test/smoke.cjs && node test/sync.cjs && node test/webview.cjs && node test/chip.cjs && node test/viewport.cjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}
