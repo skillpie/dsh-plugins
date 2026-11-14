@@ -37,13 +37,13 @@ window.__ModuleLoader__.load({
       visitors: '在线访客',
       none: '暂无',
       allowControl: '允许访客控制会话（关闭为只读）',
-      enabledToggle: '启用远程控制',
       regenerate: '重新生成远程码',
       log: '活动记录',
       loading: '正在读取状态…',
       actionFailed: '操作失败',
       confirmRegenerate: '重新生成后旧链接立即失效，确认？',
       stop: '停止',
+      enable: '开启',
       statusActive: '远程控制已开启',
       relayFaceHosts: '中转面已注册宿主机',
       offlineHost: '离线',
@@ -65,13 +65,13 @@ window.__ModuleLoader__.load({
       visitors: 'Visitors online',
       none: 'none',
       allowControl: 'Allow visitors to control sessions (off = read-only)',
-      enabledToggle: 'Enable remote control',
       regenerate: 'Regenerate remote code',
       log: 'Activity',
       loading: 'Loading status…',
       actionFailed: 'Action failed',
       confirmRegenerate: 'The old link stops working immediately. Regenerate?',
       stop: 'Stop',
+      enable: 'Enable',
       statusActive: 'Remote control is on',
       relayFaceHosts: 'Relay face registered hosts',
       offlineHost: 'offline',
@@ -150,7 +150,7 @@ window.__ModuleLoader__.load({
       var status = useStatus()
       var active = !!(status && status.enabled)
       var idleColor = 'var(--dsw-alias-label-secondary)'
-      var baseColor = active ? 'var(--dsw-alias-brand-primary)' : idleColor
+      var baseColor = active ? 'var(--dsw-alias-state-warning-primary, #f59e0b)' : idleColor
       // ZCode 观感：图标与账号行同行、位于其右端。账号行本身是宿主占用的
       // settingsArea（插件无法插入同排元素），这里用零高覆盖层把 28px 图标
       // 按钮精确叠到账号行的右侧空白处（宽模式 trigger 高 42px + 上下 4px
@@ -332,10 +332,15 @@ window.__ModuleLoader__.load({
           }).catch(function (error) { setErr(String(error)) })
         }
       }
-      // 停止：断开连接并记标记（侧栏图标不再自动开启，直到面板里手动开启）。
+      // 停止：断开连接并记标记（侧栏图标不再自动开启，直到手动开启）。
       var stop = function () {
         try { localStorage.setItem(STOP_FLAG, '1') } catch (e) { /* 隐私模式等；不影响断开 */ }
         act({ action: 'set-enabled', value: false })()
+      }
+      // 手动开启：清除停止标记，恢复侧栏图标的自动开启行为。
+      var enable = function () {
+        try { localStorage.removeItem(STOP_FLAG) } catch (e) { /* 同上 */ }
+        act({ action: 'set-enabled', value: true })()
       }
 
       if (!status) {
@@ -364,10 +369,13 @@ window.__ModuleLoader__.load({
             ? h(StatusChip, { on: !!(status.relay && status.relay.connected), text: status.relay && status.relay.connected ? t('online') : t('offline') })
             : null,
           h('span', { style: { flex: 1 } }),
-          status.enabled
-            ? h('button', { type: 'button', style: buttonStyle, onClick: stop },
-              h(UnplugIcon, { size: 14 }), t('stop'))
-            : null,
+          h('button', {
+            type: 'button', style: buttonStyle,
+            onClick: status.enabled ? stop : enable,
+          },
+            status.enabled ? h(UnplugIcon, { size: 14 }) : null,
+            status.enabled ? t('stop') : t('enable'),
+          ),
         ),
         // Code card
         h('div', { style: cardStyle },
@@ -386,22 +394,9 @@ window.__ModuleLoader__.load({
           h(LinkRow, { key: 'direct', t: t, label: t('directUrl'), url: status.directUrl }),
           status.enabled ? null : h('div', { style: { marginTop: 8, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('disabled')),
         ),
-        // Controls card
+        // Controls card（开关入口只有横幅按钮一处，避免两个入口重叠）
         h('div', { style: cardStyle },
           h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
-            h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
-              h('span', null, t('enabledToggle')),
-              Toggle({
-                checked: status.enabled,
-                onChange: function () {
-                  try {
-                    if (status.enabled) localStorage.setItem(STOP_FLAG, '1')
-                    else localStorage.removeItem(STOP_FLAG)
-                  } catch (e) { /* 同上，不影响主流程 */ }
-                  act({ action: 'set-enabled', value: !status.enabled })()
-                },
-              }),
-            ),
             h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
               h('span', null, t('allowControl')),
               Toggle({ checked: status.allowControl, onChange: act({ action: 'set-control', value: !status.allowControl }) }),
