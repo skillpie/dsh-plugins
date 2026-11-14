@@ -5,29 +5,26 @@
  * the local direct mode. A host socket registers with an 8-digit code; the
  * core mounts the public surface for `/<code>` on the given webServer:
  *
- * - `gui` mode (default): transparently mounts the host's real DSH Web GUI
+ * - `gui` mode: transparently mounts the host's real DSH Web GUI
  *   under `/<code>/`. HTTP requests are stripped of the prefix, framed over
  *   the control channel, and served from the host's own web server over
  *   loopback; the GUI's single mux WebSocket (`/api/remote.mux`) is spliced
  *   byte-by-byte. Set-cookie lines are rewritten per code (name prefix
  *   `r<code>-`, `Path=/` → `Path=/<code>/`) so several hosts can share one
  *   relay origin without cookie collisions.
- * - `console` mode: the lightweight visitor console page and its JSON
- *   command channel.
  *
  * Registry: hosts keyed by hostId, codes kept unique; tokens stored hashed.
  * A host reconnecting with the correct token supersedes its stale socket;
  * an unknown hostId claims its id fresh (fail-closed, matching the built-in
  * relay's design) and receives a newly minted token.
  */
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { WebSocketServer } from 'ws'
 import {
   PROTOCOL_VERSION,
   isValidCode,
   hashToken,
   parseFrame,
-  VISITOR_COMMANDS,
   encodeBin,
   decodeBin,
 } from './protocol.js'
@@ -36,26 +33,22 @@ import { fileRouteKey } from './file-route.js'
 
 const HELLO_TIMEOUT_MS = 5_000
 const OFFLINE_GRACE_MS = 10 * 60_000
-const VISITOR_IDLE_MS = 90_000
 const HTTP_OP_TIMEOUT_MS = 150_000
 const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024
 /**
  * Inbound caps. Host frames carry whole GUI responses as binary chunks
  * (capped at 8 MiB each by the sender); visitor frames carry POST bodies in
- * the same chunking, so the visitor cap stays generous too. Commands in
- * console mode are tiny and checked separately.
+ * the same chunking, so the visitor cap stays generous too.
  */
 const MAX_HOST_FRAME_BYTES = 8 * 1024 * 1024
 const MAX_HTML_INJECT_BYTES = 4 * 1024 * 1024
 const MAX_VISITOR_FRAME_BYTES = 8 * 1024 * 1024
 
 export class RelayCore {
-  constructor({ webServer, consoleHtml, log = () => {}, maxVisitorsPerHost = 8, mode = 'console' }) {
+  constructor({ webServer, log = () => {}, maxVisitorsPerHost = 8 }) {
     this.webServer = webServer
-    this.consoleHtml = consoleHtml
     this.log = log
     this.maxVisitorsPerHost = maxVisitorsPerHost
-    this.mode = mode === 'gui' ? 'gui' : 'console'
     /** hostId → host record */
     this.hosts = new Map()
     /** code → hostId */
@@ -71,21 +64,19 @@ export class RelayCore {
     // ①独立输码页路由(供手动访问/边缘转发目标),②由 index.js 用
     // webServer.tapIndex 把守卫脚本注进服务器 SPA 文档——未知码路径命中的
     // 正是 SPA fallback 渲染的 index,守卫脚本据 pathname 弹输码框。
-    if (this.mode === 'gui') {
-      try {
-        this.enterDisposers.push(this.webServer.register({
-          kind: 'prefix',
-          path: '/dsh-remote-relay-enter',
-          handler: (req, res) => {
-            try { this.serveEnter(req, res) } catch (error) {
-              this.log('relay', `输码页请求失败（已隔离）: ${error?.message ?? error}`)
-              try { res.writeHead(500).end() } catch { /* gone */ }
-            }
-          },
-        }))
-      } catch (error) {
-        this.log('relay', `输码路由注册失败（已隔离）: ${error?.message ?? error}`)
-      }
+    try {
+      this.enterDisposers.push(this.webServer.register({
+        kind: 'prefix',
+        path: '/dsh-remote-relay-enter',
+        handler: (req, res) => {
+          try { this.serveEnter(req, res) } catch (error) {
+            this.log('relay', `输码页请求失败（已隔离）: ${error?.message ?? error}`)
+            try { res.writeHead(500).end() } catch { /* gone */ }
+          }
+        },
+      }))
+    } catch (error) {
+      this.log('relay', `输码路由注册失败（已隔离）: ${error?.message ?? error}`)
     }
   }
 
@@ -217,9 +208,7 @@ i.focus();
         socket.send({ t: 'hb' })
         return
       }
-      if (frame.t === 'res') this.routeResult(host, frame)
-      else if (frame.t === 'push') this.routePush(host, frame)
-      else if (frame.t === 'hres' || frame.t === 'hfail') this.routeHttp(host, frame)
+      if (frame.t === 'hres' || frame.t === 'hfail') this.routeHttp(host, frame)
       else if (frame.t === 'hend') this.finishHttp(host, frame.id)
       else if (frame.t === 'wok' || frame.t === 'wfail') this.routeSpliceControl(host, frame)
       else if (frame.t === 'wclose') this.finishSplice(host, frame)
@@ -252,9 +241,6 @@ i.focus();
       if (!host || host.socket !== socket) return
       this.log('relay', `host offline: ${host.name} (${host.code})`)
       host.socket = undefined
-      for (const visitor of host.visitors.values()) visitor.socket.close()
-      host.visitors.clear()
-      host.pending.clear()
       for (const op of host.httpOps.values()) {
         this.disposeTimer(op.timer)
         try { op.res.destroy() } catch { op.res.end() }
@@ -302,8 +288,6 @@ i.focus();
     }
     const host = existing ?? {
       hostId,
-      visitors: new Map(),
-      pending: new Map(),
       httpOps: new Map(),
       splices: new Map(),
       routes: [],
@@ -328,56 +312,34 @@ i.focus();
     if (previousCode && previousCode !== code && this.codeIndex.get(previousCode) === hostId) {
       this.codeIndex.delete(previousCode)
     }
-    // Mount the public surface for this code.
+    // Mount the public surface for this code: the real GUI under /<code>/.
     try {
-      if (this.mode === 'gui') {
-        host.routes.push(this.webServer.register({
-          kind: 'prefix',
-          path: `/${code}`,
-          handler: (req, res) => {
-            try { this.proxyHttp(req, res, code, host) } catch (error) {
-              this.log('relay', `代理请求失败（已隔离）: ${error?.message ?? error}`)
-              try { res.writeHead(500).end() } catch { /* gone */ }
-            }
-          },
-        }))
-        host.routes.push(this.webServer.registerUpgrade({
-          path: `/${code}/api/remote.mux`,
-          handler: (req, upgradeSocket, head) => {
-            try { this.acceptWsSplice(req, upgradeSocket, head, host) } catch (error) {
-              this.log('relay', `访客升级失败（已隔离）: ${error?.message ?? error}`)
-              try { upgradeSocket.destroy() } catch { /* gone */ }
-            }
-          },
-        }))
-      } else {
-        host.routes.push(this.webServer.register({
-          kind: 'prefix',
-          path: `/${code}`,
-          handler: (req, res) => {
-            try { this.serveConsole(req, res, code, host) } catch (error) {
-              this.log('relay', `控制台请求失败（已隔离）: ${error?.message ?? error}`)
-              try { res.writeHead(500).end() } catch { /* gone */ }
-            }
-          },
-        }))
-        host.routes.push(this.webServer.registerUpgrade({
-          path: `/${code}/ws`,
-          handler: (req, upgradeSocket, head) => {
-            try { this.acceptVisitor(req, upgradeSocket, head, host) } catch (error) {
-              this.log('relay', `访客升级失败（已隔离）: ${error?.message ?? error}`)
-              try { upgradeSocket.destroy() } catch { /* gone */ }
-            }
-          },
-        }))
-      }
+      host.routes.push(this.webServer.register({
+        kind: 'prefix',
+        path: `/${code}`,
+        handler: (req, res) => {
+          try { this.proxyHttp(req, res, code, host) } catch (error) {
+            this.log('relay', `代理请求失败（已隔离）: ${error?.message ?? error}`)
+            try { res.writeHead(500).end() } catch { /* gone */ }
+          }
+        },
+      }))
+      host.routes.push(this.webServer.registerUpgrade({
+        path: `/${code}/api/remote.mux`,
+        handler: (req, upgradeSocket, head) => {
+          try { this.acceptWsSplice(req, upgradeSocket, head, host) } catch (error) {
+            this.log('relay', `访客升级失败（已隔离）: ${error?.message ?? error}`)
+            try { upgradeSocket.destroy() } catch { /* gone */ }
+          }
+        },
+      }))
     } catch (error) {
       this.log('relay', `route registration failed for ${code}: ${error?.message ?? error}`)
       this.codeIndex.delete(code)
       this.hosts.delete(hostId)
       return fail('route registration failed')
     }
-    this.log('relay', `host registered: ${host.name} code=${code} mode=${this.mode}${minted ? ' (token minted)' : ''}`)
+    this.log('relay', `host registered: ${host.name} code=${code}${minted ? ' (token minted)' : ''}`)
     socket.send({ t: 'hello', v: PROTOCOL_VERSION, ok: true, token: newToken })
     return hostId
   }
@@ -391,9 +353,6 @@ i.focus();
     for (const route of host.routes) route()
     host.routes = []
     host.socket?.close()
-    for (const visitor of host.visitors.values()) visitor.socket.close()
-    host.visitors.clear()
-    host.pending.clear()
     for (const op of host.httpOps.values()) {
       this.disposeTimer(op.timer)
       try { op.res.destroy() } catch { op.res.end() }
@@ -1042,111 +1001,6 @@ try{document.querySelectorAll('[role=menu]').forEach(patch)}catch(e){}
     try { splice.socket.close(frame.code ?? 1000, frame.reason ?? '') } catch { try { splice.raw.destroy() } catch { /* gone */ } }
   }
 
-  /* ── console mode ───────────────────────────────────────────────────── */
-
-  serveConsole(req, res, code, host) {
-    let pathname = ''
-    try { pathname = new URL(req.url ?? '/', 'http://localhost').pathname } catch { pathname = '/' }
-    const send = (status, body, type) => {
-      res.writeHead(status, {
-        'Content-Type': type,
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
-      })
-      res.end(body)
-    }
-    if (pathname !== `/${code}`) {
-      send(404, JSON.stringify({ ok: false, error: 'not found' }) + '\n', 'application/json; charset=utf-8')
-      return
-    }
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      send(405, JSON.stringify({ ok: false, error: 'method not allowed' }) + '\n', 'application/json; charset=utf-8')
-      return
-    }
-    send(200, this.consoleHtml({ code, offline: !host.socket }), 'text/html; charset=utf-8')
-  }
-
-  acceptVisitor(req, rawSocket, head, host) {
-    if (this.closed || !host) { rawSocket.destroy(); return }
-    // Same-origin browsers only; scripts without Origin pass (curl, CLI).
-    const origin = req.headers.origin
-    if (typeof origin === 'string' && origin !== '') {
-      let sameOrigin = false
-      try { sameOrigin = new URL(origin).host === req.headers.host } catch { sameOrigin = false }
-      if (!sameOrigin) { rawSocket.destroy(); return }
-    }
-    if (host.visitors.size >= this.maxVisitorsPerHost) {
-      this.log('relay', `visitor rejected on ${host.code}: visitor cap`)
-      rawSocket.destroy()
-      return
-    }
-    this.wss.handleUpgrade(req, rawSocket, head, (raw) => {
-      const socket = adaptSocket(raw)
-      const visitorId = 'v-' + randomUUID().slice(0, 8)
-      host.visitors.set(visitorId, { socket, connectedAt: Date.now() })
-      this.log('relay', `visitor ${visitorId} connected to ${host.code}`)
-      // Engine composes the welcome payload; relay forwards it as-is.
-      this.toHost(host, 'visitor.hello', visitorId, undefined, (frame) => {
-        if (frame.ok) {
-          socket.send({ t: 'welcome', v: PROTOCOL_VERSION, visitor: visitorId, host: frame.data.host, sessions: frame.data.sessions })
-        } else {
-          socket.send({ t: 'welcome', v: PROTOCOL_VERSION, visitor: visitorId, error: frame.error })
-        }
-      })
-      let visitorIdleTimer = this.later(() => socket.close(), VISITOR_IDLE_MS)
-      const refreshIdle = () => {
-        this.disposeTimer(visitorIdleTimer)
-        visitorIdleTimer = this.later(() => socket.close(), VISITOR_IDLE_MS)
-      }
-      const offMessage = socket.onMessage((data) => {
-        if (typeof data !== 'string') return
-        refreshIdle()
-        const frame = parseFrame(data, 64 * 1024)
-        if (!frame || frame.t !== 'cmd' || typeof frame.id !== 'string') return
-        if (VISITOR_COMMANDS.has(frame.cmd)) {
-          this.toHost(host, frame.cmd, visitorId, frame.p, (result) => {
-            socket.send({ t: 'res', id: frame.id, ok: result.ok, ...(result.ok ? { data: result.data } : { error: result.error }) })
-          })
-        } else {
-          socket.send({ t: 'res', id: frame.id, ok: false, error: 'unsupported command' })
-        }
-      })
-      const offClose = socket.onClose(() => {
-        this.disposeTimer(visitorIdleTimer)
-        offMessage()
-        offClose()
-        host.visitors.delete(visitorId)
-        if (host.socket) this.toHost(host, 'visitor.gone', visitorId, undefined, () => {})
-        this.log('relay', `visitor ${visitorId} disconnected from ${host.code}`)
-      })
-    })
-  }
-
-  toHost(host, cmd, visitorId, p, onResult) {
-    const socket = host.socket
-    if (!socket) return onResult({ ok: false, error: '宿主机离线' })
-    const id = `c${++this.cmdSeq}`
-    host.pending.set(id, { onResult, timer: this.later(() => {
-      host.pending.delete(id)
-      onResult({ ok: false, error: '宿主机响应超时' })
-    }, 20_000) })
-    socket.send({ t: 'cmd', id, from: visitorId, cmd, ...(p === undefined ? {} : { p }) })
-  }
-
-  routeResult(host, frame) {
-    const entry = host.pending.get(frame.id)
-    if (!entry) return
-    host.pending.delete(frame.id)
-    this.disposeTimer(entry.timer)
-    entry.onResult({ ok: frame.ok === true, data: frame.data, error: frame.error })
-  }
-
-  routePush(host, frame) {
-    if (typeof frame.to !== 'string') return
-    const visitor = host.visitors.get(frame.to)
-    if (visitor) visitor.socket.send({ t: 'push', f: frame.f })
-  }
-
   detachAll() {
     this.closed = true
     for (const dispose of this.enterDisposers) { try { dispose() } catch { /* gone */ } }
@@ -1160,14 +1014,13 @@ try{document.querySelectorAll('[role=menu]').forEach(patch)}catch(e){}
 
   status() {
     return {
-      mode: this.mode,
       hosts: [...this.hosts.values()].map((host) => ({
         hostId: host.hostId,
         code: host.code,
         name: host.name,
         dsh: host.dsh,
         online: host.socket !== undefined,
-        visitors: this.mode === 'gui' ? host.splices.size : host.visitors.size,
+        visitors: host.splices.size,
         createdAt: host.createdAt,
       })),
     }

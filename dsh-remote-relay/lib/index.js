@@ -1,11 +1,10 @@
 /**
  * dsh-remote-relay — Cordis entry (both roles in one activation).
  *
- * Host role (default on): dials the configured relay origin (e.g.
+ * Host role (default off): dials the configured relay origin (e.g.
  * wss://dsh.skillpie.cn) over one outbound WebSocket and registers this
  * machine's 8-digit code. Visitors opening `https://<relay>/<code>/` use
- * this machine's real DSH Web GUI through the tunnel (`mode: 'gui'`,
- * default) or a lightweight read/control console (`mode: 'console'`).
+ * this machine's real DSH Web GUI through the tunnel.
  * With `direct: true` the same surface also mounts locally at `/<code>`
  * (LAN / loopback use and end-to-end testing without a relay).
  *
@@ -25,12 +24,10 @@
  */
 import os from 'node:os'
 import { HOST_UPGRADE_PATH, OWNER_API_PATH, PROTOCOL_VERSION, generateCode, generateId, isValidCode } from './protocol.js'
-import { HostEngine } from './engine.js'
 import { GuiBridge } from './bridge.js'
 import { RelayLink } from './remote.js'
 import { RelayCore, serveServiceWorker } from './relay-core.js'
 import { registerFileRoute, fileRouteKey } from './file-route.js'
-import { consoleHtml } from './console.js'
 import { createPipePair } from './pipe.js'
 
 const DEFAULT_RELAY_URL = 'wss://dsh.skillpie.cn'
@@ -59,18 +56,12 @@ export const Config = {
       const value = {}
       const bools = [
         ['enabled', false],
-        ['allowControl', true],
         ['direct', false],
       ]
       for (const [key, fallback] of bools) {
         const parsed = bool(input[key], fallback)
         if (parsed === null) issues.push(issue('expected a boolean', key))
         else value[key] = parsed
-      }
-      if (input.mode !== undefined) {
-        if (input.mode !== 'gui' && input.mode !== 'console') {
-          issues.push(issue("expected 'gui' or 'console'", 'mode'))
-        } else value.mode = input.mode
       }
       if (input.relayUrl !== undefined) {
         if (typeof input.relayUrl !== 'string' || !input.relayUrl.trim()) {
@@ -109,11 +100,6 @@ export const Config = {
           const relayEnabled = bool(input.relay.enabled, false)
           if (relayEnabled === null) issues.push(issue('expected a boolean', 'relay', 'enabled'))
           else relay.enabled = relayEnabled
-          if (input.relay.mode !== undefined) {
-            if (input.relay.mode !== 'gui' && input.relay.mode !== 'console') {
-              issues.push(issue("expected 'gui' or 'console'", 'relay', 'mode'))
-            } else relay.mode = input.relay.mode
-          }
           if (input.relay.maxVisitorsPerHost !== undefined) {
             const n = input.relay.maxVisitorsPerHost
             if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 64) {
@@ -139,12 +125,9 @@ export default {
     // 默认关闭：远程控制涉及向第三方中转站建立出站长连接并开放完整 GUI
     // 权限，必须由属主在设置页主动开启（开启时客户端会弹确认提示）。
     const enabled = cfg.enabled ?? false
-    const allowControl = cfg.allowControl ?? true
     const direct = cfg.direct ?? false
-    const mode = cfg.mode === 'console' ? 'console' : 'gui'
     const relayUrl = cfg.relayUrl ?? DEFAULT_RELAY_URL
     const relayFaceEnabled = cfg.relay?.enabled === true
-    const relayMode = cfg.relay?.mode === 'console' ? 'console' : 'gui'
     const maxVisitorsPerHost = cfg.relay?.maxVisitorsPerHost ?? 8
 
     const logRing = []
@@ -170,8 +153,7 @@ export default {
     const disposers = []
     ctx.effect(() => () => {
       state.link?.stop()
-      if (mode === 'gui') state.peer?.detach?.()
-      else state.peer?.close?.()
+      state.peer?.detach?.()
       for (const dispose of disposers.splice(0)) {
         try { dispose() } catch { /* best-effort teardown */ }
       }
@@ -234,27 +216,14 @@ export default {
       if (!services.webServer) return
       const webServer = services.webServer
 
-      // 3. Build the visitor-facing peer: the GUI bridge (gui mode) or the
-      //    lightweight command engine (console mode).
-      let peer
-      if (mode === 'gui') {
-        peer = new GuiBridge({
-          services: {
-            webServer: () => services.webServer,
-            connection: () => (typeof ctx.get === 'function' ? ctx.get('connection') : undefined),
-          },
-          log: logLine,
-        })
-      } else {
-        const engine = new HostEngine({
-          services: { sessionController: () => services.sessionController },
-          host: { get name() { return identity.name }, get dsh() { return identity.dsh }, get code() { return identity.code } },
-          log: logLine,
-        })
-        engine.allowControl = allowControl
-        disposers.push(engine.observeSessionEvents((name, handler) => ctx.on(name, handler)))
-        peer = engine
-      }
+      // 3. Build the visitor-facing peer: the GUI bridge (transparent splice).
+      const peer = new GuiBridge({
+        services: {
+          webServer: () => services.webServer,
+          connection: () => (typeof ctx.get === 'function' ? ctx.get('connection') : undefined),
+        },
+        log: logLine,
+      })
       state.peer = peer
 
       // 4. Outbound relay link.
@@ -272,7 +241,7 @@ export default {
         })
         state.link = link
         link.start()
-        logLine('boot', `dsh-remote-relay 已加载（远程码 ${identity.code}，模式 ${mode}）`)
+        logLine('boot', `dsh-remote-relay 已加载（远程码 ${identity.code}）`)
       } else {
         logLine('boot', `dsh-remote-relay 已加载（远程码 ${identity.code}，远程访问已关闭）`)
       }
@@ -305,10 +274,8 @@ export default {
         const [hostEnd, relayEnd] = createPipePair()
         const directCore = new RelayCore({
           webServer,
-          consoleHtml,
           log: logLine,
           maxVisitorsPerHost,
-          mode,
         })
         directCore.acceptHostSocket(relayEnd)
         // The pipe replaces RelayLink's transport, so it speaks the same
@@ -328,14 +295,14 @@ export default {
           directCore.detachAll()
           hostEnd.close()
         })
-        logLine('direct', `本机直连路由已挂载（/${identity.code}/，模式 ${mode}）`)
+        logLine('direct', `本机直连路由已挂载（/${identity.code}/）`)
       }
 
       // 7. Visitor restore worker: conceals the code from the address bar and
       //    keeps the bare origin reopening the tunnel (see concealScript). The
       //    worker also probes 8-digit code paths and swaps a 404 (unknown or
       //    offline-revoked code) for the code-entry dialog.
-      if (mode === 'gui' && (direct || relayFaceEnabled)) {
+      if (direct || relayFaceEnabled) {
         disposers.push(webServer.register({
           kind: 'exact',
           path: '/dsh-remote-relay-sw.js',
@@ -348,10 +315,8 @@ export default {
       if (relayFaceEnabled) {
         const relayCore = new RelayCore({
           webServer,
-          consoleHtml,
           log: logLine,
           maxVisitorsPerHost,
-          mode: relayMode,
         })
         state.relayCore = relayCore
         disposers.push(webServer.registerUpgrade({
@@ -359,7 +324,7 @@ export default {
           handler: (req, socket, head) => relayCore.acceptHostUpgrade(req, socket, head),
         }))
         disposers.push(() => relayCore.detachAll())
-        logLine('relay-face', `中转面已挂载（${HOST_UPGRADE_PATH}，模式 ${relayMode}）`)
+        logLine('relay-face', `中转面已挂载（${HOST_UPGRADE_PATH}）`)
       }
     }
 
@@ -426,33 +391,19 @@ export default {
           return { ok: true, enabled: next }
         }
         case 'set-control': {
-          const next = body.value === true
-          if (state.peer?.allowControl !== undefined) {
-            state.peer.allowControl = next
-            broadcastHostUpdate()
-          }
-          logLine('owner', `属主${next ? '允许' : '禁止'}访客控制会话`)
-          return { ok: true, allowControl: next }
+          // 遗留动作：控制开关随 console 模式移除；GUI 模式下持码即完整控制。
+          return { ok: true, allowControl: body.value === true }
         }
         default:
           throw new Error(`unknown action: ${action}`)
       }
     }
 
-    function broadcastHostUpdate() {
-      const peer = state.peer
-      if (!peer?.visitors) return
-      const frame = { t: 'host-updated', host: { name: identity.name, dsh: identity.dsh, allowControl: peer.allowControl } }
-      for (const visitorId of peer.visitors.keys()) peer.pushTo(visitorId, frame)
-    }
-
     function statusSnapshot() {
       const link = state.link
       return {
         protocol: PROTOCOL_VERSION,
-        mode,
         enabled: Boolean(link),
-        allowControl: state.peer?.allowControl ?? allowControl,
         direct,
         relayUrl,
         name: identity.name,
@@ -461,8 +412,6 @@ export default {
         relay: link ? link.status() : { connected: false, relayUrl },
         directUrl: direct && services.webServerOrigin ? `${services.webServerOrigin}/${identity.code}/` : undefined,
         relayUrlPublic: relayUrl.replace(/^ws/, 'http') + '/' + identity.code + '/',
-        visitors: state.peer?.status ? state.peer.status().visitors : [],
-        mode,
         relayFace: relayFaceEnabled ? (state.relayCore?.status() ?? { hosts: [] }) : undefined,
         log: logRing.slice(-80),
       }

@@ -2,8 +2,8 @@
  * dsh-remote-relay — outbound control link (host role).
  *
  * Dials `relayUrl + HOST_UPGRADE_PATH` over one WebSocket, registers the
- * 8-digit code and identity, and feeds every control frame to the shared
- * HostEngine. Reconnects with jittered backoff; mints/re-persists the token
+ * 8-digit code and identity, and feeds every splice frame to the GUI bridge.
+ * Reconnects with jittered backoff; mints/re-persists the token
  * whenever the relay hands one back (first registration, or after the relay
  * lost its registry).
  */

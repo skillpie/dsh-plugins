@@ -13,7 +13,6 @@ import { setTimeout as delay } from 'node:timers/promises'
 import WebSocket, { WebSocketServer } from 'ws'
 import { RelayCore, serveServiceWorker } from '../lib/relay-core.js'
 import { GuiBridge } from '../lib/bridge.js'
-import { consoleHtml } from '../lib/console.js'
 import { createPipePair } from '../lib/pipe.js'
 import { generateCode } from '../lib/protocol.js'
 import { registerFileRoute, fileRouteKey } from '../lib/file-route.js'
@@ -114,8 +113,8 @@ const relayWebServer = {
     return () => upgrades.delete(route.path)
   },
 }
-const core = new RelayCore({ webServer: relayWebServer, consoleHtml, log, maxVisitorsPerHost: 4, mode: 'gui' })
-// Mirror index.js production wiring: origin-level restore worker (gui mode).
+const core = new RelayCore({ webServer: relayWebServer, log, maxVisitorsPerHost: 4 })
+// Mirror index.js production wiring: origin-level restore worker.
 const offSw = relayWebServer.register({
   kind: 'exact',
   path: '/dsh-remote-relay-sw.js',

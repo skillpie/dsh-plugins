@@ -11,8 +11,8 @@
  *   2. GET /<code>/（无斜杠）→ 302 到 /<code>/；
  *   3. GET /dsh-remote-relay/api → 属主 API 存活（仅宿主角色直接可达时）。
  *
- * 注意: 旧版探针打 /<code>/ws（console 模式端点），gui 模式下必然
- * socket hang up——那是假警报，不要再用它判断 gui 模式健康。
+ * 注意: 旧版探针打 /<code>/ws（已移除的旧 console 端点），gui 模式下必然
+ * socket hang up——那是假警报，不要再用它判断健康。
  */
 import { get } from 'node:http'
 import { get as httpsGet } from 'node:https'

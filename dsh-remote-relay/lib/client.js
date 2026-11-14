@@ -35,9 +35,6 @@ window.__ModuleLoader__.load({
       online: '已连接',
       offline: '未连接',
       disabled: '远程控制已关闭',
-      visitors: '在线访客',
-      none: '暂无',
-      allowControl: '允许控制会话（关闭为只读）',
       regenerate: '重新生成远程码',
       log: '活动记录',
       loading: '正在读取状态…',
@@ -48,10 +45,6 @@ window.__ModuleLoader__.load({
       statusActive: '远程控制已开启',
       relayFaceHosts: '中转面已注册宿主机',
       offlineHost: '离线',
-      visitorAt: '接入于',
-      activeNow: '活跃',
-      activeMinAgo: '分钟前活跃',
-      viaRelay: '经中转接入',
       close: '关闭',
     }
     var en = {
@@ -67,9 +60,6 @@ window.__ModuleLoader__.load({
       online: 'connected',
       offline: 'not connected',
       disabled: 'Remote control is disabled',
-      visitors: 'Visitors online',
-      none: 'none',
-      allowControl: 'Allow session control (off = read-only)',
       regenerate: 'Regenerate remote code',
       log: 'Activity',
       loading: 'Loading status…',
@@ -80,10 +70,6 @@ window.__ModuleLoader__.load({
       statusActive: 'Remote control is on',
       relayFaceHosts: 'Relay face registered hosts',
       offlineHost: 'offline',
-      visitorAt: 'connected at',
-      activeNow: 'active',
-      activeMinAgo: 'min ago active',
-      viaRelay: 'via relay',
       close: 'Close',
     }
     var pageT = function (key) { return key }
@@ -307,29 +293,6 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function Toggle(props) {
-      var checked = props.checked
-      var onChange = props.onChange
-      return h('span', {
-        role: 'switch', 'aria-checked': checked ? 'true' : 'false', tabIndex: 0,
-        onClick: function () { onChange(!checked) },
-        onKeyDown: function (ev) { if (ev.key === 'Enter' || ev.key === ' ') onChange(!checked) },
-        style: {
-          width: 34, height: 20, borderRadius: 999, padding: 2, boxSizing: 'border-box',
-          background: checked ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-bg-layer-2, var(--dsw-alias-border-l1))',
-          display: 'inline-block', transition: 'background 0.15s', flex: 'none', cursor: 'pointer',
-        },
-      },
-        h('span', {
-          style: {
-            display: 'block', width: 16, height: 16, borderRadius: 999, background: '#ffffff',
-            transform: checked ? 'translateX(14px)' : 'translateX(0)', transition: 'transform 0.15s',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-          },
-        }),
-      )
-    }
-
     // 活动记录（调试用）：默认折叠，点标题展开/收起。
     // 带 hooks 的组件必须以 h(Component, props) 渲染，禁止当普通函数调用。
     function LogCard(props) {
@@ -434,52 +397,18 @@ window.__ModuleLoader__.load({
           h(LinkRow, { key: 'direct', t: t, label: t('directUrl'), url: status.directUrl }),
           status.enabled ? null : h('div', { style: { marginTop: 8, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('disabled')),
         ),
-        // Controls card（开关入口只有横幅按钮一处，避免两个入口重叠）
-        h('div', { style: cardStyle },
-          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
-            h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
-              h('span', null, t('allowControl')),
-              Toggle({ checked: status.allowControl, onChange: act({ action: 'set-control', value: !status.allowControl }) }),
-            ),
-          ),
-        ),
-        // Visitors card：GUI 模式宿主侧不感知单个访客（整条隧道透传），
-        // 主推形态下不渲染这张卡；console 模式列出访客（活跃度+来源）。
-        (status.mode === 'gui' && !status.visitors.length &&
-          !(status.relayFace && status.relayFace.hosts && status.relayFace.hosts.length))
-          ? null
-          : h('div', { style: cardStyle },
-          h('div', { style: labelStyle }, t('visitors') + '：' + (status.visitors.length ? String(status.visitors.length) : t('none'))),
-          status.visitors.length
-            ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }, status.visitors.map(function (v) {
-              // 活跃度：60 秒内有指令帧视为活跃（绿点）。
-              var idleMs = Date.now() - (v.lastActive || v.connectedAt)
-              var active = idleMs < 60_000
-              var idleText = active ? t('activeNow') : Math.max(1, Math.round(idleMs / 60000)) + ' ' + t('activeMinAgo')
-              var source = v.ip ? v.ip : t('viaRelay')
-              return h('div', { key: v.id, style: { fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' } },
-                h('span', { style: { width: 7, height: 7, borderRadius: 999, flex: 'none', background: active ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-border-l1)' } }),
-                h('code', { style: { fontFamily: 'var(--dsw-font-mono, monospace)' } }, v.id),
-                h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } }, source),
-                h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } }, idleText),
-                h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } },
-                  t('visitorAt') + ' ' + new Date(v.connectedAt).toLocaleTimeString() +
-                  (v.sessions && v.sessions.length ? ' · ' + v.sessions.length + ' 会话' : '')),
-              )
-            }))
-            : null,
-          status.relayFace && status.relayFace.hosts && status.relayFace.hosts.length
-            ? h('div', { style: { marginTop: 12 } },
-              h('div', { style: labelStyle }, t('relayFaceHosts')),
-              status.relayFace.hosts.map(function (host) {
-                return h('div', { key: host.hostId, style: { fontSize: 12, display: 'flex', gap: 8, marginBottom: 4 } },
-                  h('span', null, host.online ? '🟢' : '⚪'),
-                  h('span', null, host.name + ' · ' + host.code + (host.online ? '' : '（' + t('offlineHost') + '）')),
-                )
-              }),
+        // Relay-face hosts card（服务器部署面板用；宿主面无此数据）
+        (status.relayFace && status.relayFace.hosts && status.relayFace.hosts.length)
+          ? h('div', { style: cardStyle },
+          h('div', { style: labelStyle }, t('relayFaceHosts')),
+          status.relayFace.hosts.map(function (host) {
+            return h('div', { key: host.hostId, style: { fontSize: 12, display: 'flex', gap: 8, marginBottom: 4 } },
+              h('span', null, host.online ? '🟢' : '⚪'),
+              h('span', null, host.name + ' · ' + host.code + (host.online ? '' : '（' + t('offlineHost') + '）')),
             )
-            : null,
-        ),
+          }),
+          )
+          : null,
         // Log card（调试用途，默认折叠）
         h(LogCard, { t: t, log: status.log }),
         err ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-state-error-primary)' } }, t('actionFailed') + '：' + err) : null,

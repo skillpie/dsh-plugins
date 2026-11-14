@@ -4,20 +4,11 @@
  * Control channel (relay ↔ host, JSON text frames over one WebSocket):
  *   host → relay  { t:'hello', v, hostId, code, token, name, dsh }
  *                 { t:'hb' }                                  heartbeat, every 15s
- *                 { t:'res', id, ok, data?, error? }          command receipts
- *                 { t:'push', to, f }                          event push addressed to one visitor
  *   relay → host  { t:'hello', v, ok, token?, error? }         ack; token minted on first registration
  *                 { t:'hb' }                                   heartbeat echo
- *                 { t:'cmd', id, from, cmd, p? }               visitor command (from = visitor id)
  *
- * Visitor channel (relay ↔ browser, JSON text frames over /<code>/ws):
- *   relay → visitor { t:'welcome', v, visitor, host, sessions }
- *                   { t:'res', id, ok, data?, error? }
- *                   { t:'push', f }
- *   visitor → relay { t:'cmd', id, cmd, p? }
- *
- * Visitor command set lives in VISITOR_COMMANDS; 'visitor.hello' and
- * 'visitor.gone' are relay-internal and never offered to the console.
+ * GUI splice frames (binary-wrapped or JSON control) carry the transparent
+ * HTTP/WS tunnel; see relay-core.js and bridge.js for the frame shapes.
  */
 import { randomInt, randomUUID, createHash } from 'node:crypto'
 
@@ -31,21 +22,6 @@ export const HOST_UPGRADE_PATH = '/dsh-remote/host'
 
 /** Owner panel JSON API, same-origin and behind the web GUI's session auth. */
 export const OWNER_API_PATH = '/dsh-remote-relay/api'
-
-/** Commands the visitor console may issue. */
-export const VISITOR_COMMANDS = new Set([
-  'host.info',
-  'sessions.list',
-  'sessions.state',
-  'sessions.create',
-  'sessions.send',
-  'sessions.cancel',
-  'sessions.observe',
-  'sessions.unobserve',
-])
-
-/** Relay-internal commands bridged to the engine, invisible to the console. */
-export const INTERNAL_COMMANDS = new Set(['visitor.hello', 'visitor.gone'])
 
 /** An 8-digit code: 10000000..99999999, no leading zero. */
 export function generateCode() {
