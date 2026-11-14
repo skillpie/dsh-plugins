@@ -261,22 +261,6 @@ window.__ModuleLoader__.load({
       color: 'var(--dsw-alias-label-primary)',
     }
 
-    function StatusChip(props) {
-      var on = props.on
-      var text = props.text
-      return h('span', {
-        style: {
-          display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12,
-          color: on ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-secondary)',
-          border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 999,
-          padding: '2px 10px',
-        },
-      },
-        h('span', { style: { width: 7, height: 7, borderRadius: 999, background: on ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-border-l1)' } }),
-        text,
-      )
-    }
-
     function LinkRow(props) {
       var t = props.t
       var label = props.label
@@ -405,7 +389,6 @@ window.__ModuleLoader__.load({
       if (!status) {
         return h('div', { style: { padding: 24, color: 'var(--dsw-alias-label-secondary)', fontSize: 13 } }, t('loading'))
       }
-      var relayText = status.enabled ? (status.relay && status.relay.connected ? t('online') : t('offline')) : t('disabled')
       return h('div', {
         style: {
           minHeight: 0, boxSizing: 'border-box',
@@ -413,11 +396,6 @@ window.__ModuleLoader__.load({
           color: 'var(--dsw-alias-label-primary)', fontSize: 13,
         },
       },
-        // Header chips
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-          StatusChip({ on: status.enabled && status.relay && status.relay.connected, text: t('relay') + ': ' + relayText }),
-          status.direct ? StatusChip({ on: true, text: t('direct') }) : null,
-        ),
         // Status banner（开启/关闭 + 操作按钮；状态细节不再放标签，保持一行干净）
         h('div', {
           style: Object.assign({ display: 'flex', alignItems: 'center', gap: 10 }, cardStyle, { padding: '12px 16px' }),
@@ -522,7 +500,7 @@ window.__ModuleLoader__.load({
         h('div', {
           role: 'dialog', 'aria-modal': 'true', 'aria-label': t('title'),
           style: {
-            width: 'min(680px, calc(100vw - 64px))', maxHeight: 'calc(100vh - 96px)',
+            width: 'min(510px, calc(100vw - 64px))', maxHeight: 'calc(100vh - 96px)',
             display: 'flex', flexDirection: 'column',
             background: 'var(--dsw-alias-bg-overlay)',
             border: '1px solid var(--dsw-alias-border-l1)',
