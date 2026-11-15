@@ -179,16 +179,85 @@ window.__ModuleLoader__.load({
       var idleColor = 'var(--dsw-alias-label-secondary)'
       var baseColor = active ? 'var(--dsw-alias-state-warning-primary, #f59e0b)' : idleColor
       // ZCode 观感：图标与账号行同行、位于其右端。账号行本身是宿主占用的
-      // settingsArea（插件无法插入同排元素），这里用零高覆盖层把 28px 图标
-      // 按钮精确叠到账号行的右侧空白处（宽模式 trigger 高 42px + 上下 4px
-      // 外边距；收起模式 36x36、上 8px）。
-      var wrapperStyle = wide
-        ? { position: 'relative', height: 0, width: '100%', zIndex: 2, pointerEvents: 'none' }
-        : { position: 'relative', height: 0, width: '36px', margin: '0 auto', zIndex: 2, pointerEvents: 'none' }
-      var buttonStyle = wide
-        ? { position: 'absolute', top: 11, right: 12 }
-        : { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)' }
-      return h('div', { style: wrapperStyle },
+      // settingsArea（插件无法插入同排元素）。宿主槽契约固定为
+      // footerActions（本槽容器）与 settingsArea 相邻（SidebarRoot.tsx），
+      // 因此运行时测量账号行的真实几何，用 fixed 定位把按钮钉到它的右端——
+      // 不写死偏移，其他插件往本槽注册卡片（如额度卡）把账号行顶下去时，
+      // 图标始终跟随账号行，不会叠到别的插件内容上。
+      // 收起（rail）模式 56px 栏放不下并排图标，账号行又是侧栏最后一个元素
+      // （下方无空间，写 top+gap 会出视口），改为钉在头像按钮右下角的
+      // 20px 圆形徽标，带底色与阴影，不遮头像主体。
+      var wrapperRef = React.useRef(null)
+      var posState = React.useState(null)
+      var pos = posState[0]
+      var setPos = posState[1]
+      React.useLayoutEffect(function () {
+        var wrapper = wrapperRef.current
+        // 结构锚点：运行时 slot 框架会在 footerActions 内再包一层
+        // display:contents 容器（源码契约里没有这层），所以
+        // wrapper.parentElement 未必是 footerActions 本身。沿父链向上爬，
+        // 找到第一个「存在下一个兄弟元素」的祖先（即 footerActions），
+        // 其下一个兄弟元素就是 settingsArea（账号行）。
+        var seat = null
+        var node = wrapper
+        while (node && node !== document.body) {
+          node = node.parentElement
+          if (node && node.nextElementSibling) { seat = node.nextElementSibling; break }
+        }
+        // 守卫：锚不到结构正常的账号行就保持隐藏——宁可图标不出现，
+        // 也不能叠到其他插件内容上。
+        if (!seat || typeof seat.getBoundingClientRect !== 'function') return undefined
+        var seatRect = seat.getBoundingClientRect()
+        if (seatRect.width === 0 && seatRect.height === 0) return undefined
+        var measure = function () {
+          // 宽模式锚账号行整行（右端对齐）；收起模式锚头像按钮（徽标贴角）。
+          var anchor = seat
+          if (!wide) {
+            var ab = seat.querySelector('button')
+            if (ab && ab.getBoundingClientRect().width > 0) anchor = ab
+          }
+          var r = anchor.getBoundingClientRect()
+          if (r.width === 0 && r.height === 0) return
+          var next = wide
+            ? { left: r.right - 28 - 12, top: r.top + (r.height - 28) / 2 }
+            : { left: r.right - 15, top: r.bottom - 15 }
+          setPos(function (prev) {
+            return (prev && prev.left === next.left && prev.top === next.top) ? prev : next
+          })
+        }
+        measure()
+        // 收起/展开是 transform 过渡动画（railIn/railOut），不改变布局尺寸，
+        // ResizeObserver 不触发。effect 挂载瞬间的量取会停在动画中间帧，
+        // 所以挂载后跑 ~600ms 的逐帧重测覆盖动画全程；之后靠 RO + resize
+        // 管真实布局变化。setPos 内有等值短路，重复帧不会引发重渲染。
+        var frames = 0
+        var raf = 0
+        var tick = function () {
+          measure()
+          frames += 1
+          if (frames < 36) raf = requestAnimationFrame(tick)
+        }
+        raf = requestAnimationFrame(tick)
+        // 账号行自身尺寸、侧栏宽度（折叠动画）变化都触发重测。
+        var ro = new ResizeObserver(function () { measure() })
+        ro.observe(seat)
+        if (wrapper.parentElement) ro.observe(wrapper.parentElement)
+        window.addEventListener('resize', measure)
+        return function () {
+          if (raf) cancelAnimationFrame(raf)
+          ro.disconnect()
+          window.removeEventListener('resize', measure)
+        }
+      }, [wide])
+      var wrapperStyle = { position: 'relative', height: 0, width: 0, overflow: 'visible', pointerEvents: 'none' }
+      // 收起模式下按钮是头像右下角的小圆徽标；宽模式是账号行右端的方圆角图标。
+      var btnSize = wide ? 28 : 20
+      var iconSize = wide ? 16 : 12
+      var buttonStyle = {
+        position: 'fixed', zIndex: 3,
+        left: pos ? pos.left : -9999, top: pos ? pos.top : -9999,
+      }
+      return h('div', { ref: wrapperRef, style: wrapperStyle },
         h('button', {
           type: 'button',
           title: t('title'),
@@ -209,17 +278,32 @@ window.__ModuleLoader__.load({
           onFocus: function () { setHovered(true) },
           onBlur: function () { setHovered(false) },
           style: Object.assign({
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 28, height: 28,
-            borderRadius: 8,
-            border: '1px solid ' + (hovered ? 'var(--dsw-alias-border-l1)' : 'transparent'),
-            background: hovered ? 'var(--dsw-alias-bg-layer-1)' : 'transparent',
+            display: pos ? 'inline-flex' : 'none',
+            alignItems: 'center', justifyContent: 'center',
+            width: btnSize, height: btnSize,
+            borderRadius: wide ? 8 : 999,
+            // 徽标形态带实底和描边，避免与头像融为一体；宽模式悬浮在浅色
+            // 背景上，默认透明底即可。按钮本身不加阴影——阴影加在图标
+            // 笔画上（见下方图标包裹 span 的 drop-shadow，用户要求）。
+            border: '1px solid ' + (hovered || !wide ? 'var(--dsw-alias-border-l1)' : 'transparent'),
+            background: hovered
+              ? 'var(--dsw-alias-bg-layer-1)'
+              : (wide ? 'transparent' : 'var(--dsw-alias-bg-layer-1)'),
             color: hovered ? (active ? baseColor : 'var(--dsw-alias-label-primary)') : baseColor,
             cursor: 'pointer', flex: 'none',
             pointerEvents: 'auto',
           }, buttonStyle),
         },
-          h(RemoteIcon, { size: 16 }),
+          // 图标包一层带 drop-shadow 的 span：阴影跟随图标笔画的实际形状
+          //（filter 对子元素生效），而不是按钮方框的投影。
+          h('span', {
+            style: {
+              display: 'inline-flex',
+              filter: 'drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15))',
+            },
+          },
+            h(RemoteIcon, { size: iconSize }),
+          ),
         ),
       )
     }

@@ -69,6 +69,10 @@
 - SPA fallback(frontend-static)对未知子路径返回**裸 404**,仅 `/` 与 distIndex 的渲染走 `tapIndex`——插件想注入 `/<任意路径>` 的 404 场景,tapIndex 是死路;SW 内 fetch HEAD 探测 + `respondWith` 改写响应是插件侧通用解法(SW 内 fetch 不会重入自身 handler)。
 - nginx 反代后端响应默认**不触发** `error_page`,必须 `proxy_intercept_errors on`;nginx 的 location/rewrite 正则含 `{n}` 必须整体引号包裹(裸 `{` 被当块起始,`nginx -t` 报 directive not terminated);`error_page 404 = @named` 进 named location 后原 regex 捕获 `$1` 仍可用,可直接拼改写参数。
 - client 侧 MutationObserver 搬运 DOM(portal 进宿主树)时,查找器**不得把自己刚插入的标记当「已占用」跳过**:observer 回调是微任务,insert→失配→remove→再 insert 会自续成永不交还事件循环的死循环,渲染进程 99% CPU 整窗冻死;稳态回调必须是纯早退(自己的容器已就位且目标仍合法就 return),detach 只在容器存在时才动 DOM/state,修这类卡死先看渲染进程 ps CPU 而不是宿主日志。
+- 侧栏 `sidebar.footer.action` 是 list 槽,运行时 slot 框架会在 footerActions 内再包一层 display:contents 容器(源码契约没有);插件想与账号行(settingsArea)对齐只能沿父链爬到第一个「有 nextElementSibling」的祖先取其 sibling,运行时量几何 + fixed 定位,禁止写死偏移覆盖层(别的插件注册卡片会把账号行顶下去导致叠图标)。
+- 侧栏收起/展开是 transform 过渡(railIn/railOut),不触发 ResizeObserver;挂载时量一次几何会停在动画中间帧,需 effect 内 rAF 逐帧重测 ~600ms 覆盖动画,之后 RO + resize 管布局变化(setPos 等值短路防重渲染)。
+- 图标阴影加在 svg 笔画上:包一层 span 用 `filter: drop-shadow(...)`(跟随形状),按钮 box-shadow 是方框投影观感差;深浅用 rgba alpha 调(0.15 淡、0.3 深)。
+- owner GUI 无头验证铸 cookie:secret 在 ~/.dsh/.credentials.yaml `client-connection/browser-session` payload.secret;cookie 名 `dsh-auth-`+base64url(sha256(Host authority)),值 `v1.`+base64url(JSON{version,authority,issuedAt,expiresAt})+`.`+base64url(HMAC-SHA256(secret,body));launch token 是进程内 WeakMap 外部不可铸;agent-browser `cookies set` CLI 有 bug,用 eval `document.cookie=` 写入。
 
 ## npm 发布
 
@@ -77,7 +81,7 @@
 - scoped 包必须在 package.json 设 `publishConfig.access: "public"`,否则按私有包收费拒绝发布。
 - 本机默认 registry 是 npmmirror;官方源操作(publish/whoami/view 新包)必须显式 `--registry=https://registry.npmjs.org/`。
 - 发布成功 ≠ 立刻可装:官方索引异步(数分钟),**新包首次发布可能先挂 `0.0.0-stage` 空壳占位版本**(无任何文件,按名安装会报 declares no dsh.bundle);`npm view <包名> version` 返回真实版本前不要分发安装。
-- npmmirror 只读:发布后主动 `PUT https://registry-direct.npmmirror.com/<包>/sync?sync_upstream=true` 同步(URL 中 @→%40、/→%2F),验证 `registry.npmmirror.com/<包>` 的 dist-tags.latest 后再通知国内用户。
+- npmmirror 只读:发布后主动 `PUT https://registry-direct.npmmirror.com/<包>/sync?sync_upstream=true` 同步(URL 中 @→%40、/→%2F),验证 `registry.npmmirror.com/<包>` 的 dist-tags.latest 后再通知国内用户;镜像同步可能慢于脚本 3 分钟等待窗,脚本报「暂未翻正」后手动 `npm view` 复核再下结论。
 - 首次发布前查名:`npm view <包名>` 404 = 可用;npm scope(用户/组织)与用户名共享命名空间,先到先得,不可改名。
 - files 白名单决定 tarball 内容:必含 `cordis.patch.yml`(locale/icon/README 同理),node_modules/lockfile 永不进包;`npm pack --dry-run` 逐项核对。
 - 插件命名社区现状:`dsh-*` 裸前缀占 ~2/3 但重灾区(常用词几乎被占),`@scope/dsh-*` ~21%,`dsh-plugin-*` ~5%;官方自身全用 scope(`@deepseek-ai/dsh-*`),无硬性命名规定,建议 scope。
