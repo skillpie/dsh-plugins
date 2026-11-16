@@ -168,6 +168,17 @@ export default {
       ? Promise.resolve()
       : new Promise((resolve) => { webServerWaiter = resolve })
 
+    // Idempotent file-route mount: webServer.register throws on duplicate
+    // (kind, path), and both boot() and the runtime set-enabled action may
+    // call this — the flag keeps exactly one registration per server.
+    let fileRouteMounted = false
+    function ensureFileRoute(webServer) {
+      if (fileRouteMounted) return
+      fileRouteMounted = true
+      disposers.push(registerFileRoute({ webServer, key: fileRouteKey(identity.hostId), log: logLine }))
+      logLine('file-route', '访客文件下载路由已挂载（/dsh-remote-relay-file）')
+    }
+
     ctx.inject(['sessionController'], (child) => {
       services.sessionController = child.sessionController
     })
@@ -264,10 +275,10 @@ export default {
       //     remote browser with a save dialog (see lib/file-route.js).
       //     Host roles only; the key derives from the host id, which the
       //     relay also derives from the hello to stamp the visitor shim.
-      if (enabled || direct) {
-        disposers.push(registerFileRoute({ webServer, key: fileRouteKey(identity.hostId), log: logLine }))
-        logLine('file-route', '访客文件下载路由已挂载（/dsh-remote-relay-file）')
-      }
+      //     无条件挂载（1.2.7 起默认 enabled=false，属主面板运行时开启不会
+      //     重走 boot，按 enabled||direct 挂载会让「面板开启后访客下载」
+      //     永远 404）；路由自身有 key 门控，无密钥一律 403。
+      ensureFileRoute(webServer)
 
       // 6. Direct mode: the same surface on the local web server.
       if (direct) {
@@ -387,6 +398,8 @@ export default {
             state.link.stop()
             state.link = undefined
           }
+          // 运行时开启也要兜底挂文件下载路由（boot 时默认关、可能没挂）。
+          if (next && services.webServer) ensureFileRoute(services.webServer)
           logLine('owner', `属主${next ? '开启' : '关闭'}远程控制`)
           return { ok: true, enabled: next }
         }

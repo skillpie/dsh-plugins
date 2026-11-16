@@ -73,6 +73,7 @@
 - 侧栏收起/展开是 transform 过渡(railIn/railOut),不触发 ResizeObserver;挂载时量一次几何会停在动画中间帧,需 effect 内 rAF 逐帧重测 ~600ms 覆盖动画,之后 RO + resize 管布局变化(setPos 等值短路防重渲染)。
 - 图标阴影加在 svg 笔画上:包一层 span 用 `filter: drop-shadow(...)`(跟随形状),按钮 box-shadow 是方框投影观感差;深浅用 rgba alpha 调(0.15 淡、0.3 深)。
 - owner GUI 无头验证铸 cookie:secret 在 ~/.dsh/.credentials.yaml `client-connection/browser-session` payload.secret;cookie 名 `dsh-auth-`+base64url(sha256(Host authority)),值 `v1.`+base64url(JSON{version,authority,issuedAt,expiresAt})+`.`+base64url(HMAC-SHA256(secret,body));launch token 是进程内 WeakMap 外部不可铸;agent-browser `cookies set` CLI 有 bug,用 eval `document.cookie=` 写入。
+- 插件从 npm 安装后,`set_plugin off→on` 重载的是 profile node_modules 里的**实体副本**而非工作区源码——工作区改完直接 reload「验证无效」多半是这个:先 `diff`/`grep` profile 副本确认代码形态;临时同步可 cp 单文件进副本(1.2.19 实锤),彻底解决靠发版或重新 link 安装。
 
 ## npm 发布
 
@@ -85,6 +86,8 @@
 - 首次发布前查名:`npm view <包名>` 404 = 可用;npm scope(用户/组织)与用户名共享命名空间,先到先得,不可改名。
 - files 白名单决定 tarball 内容:必含 `cordis.patch.yml`(locale/icon/README 同理),node_modules/lockfile 永不进包;`npm pack --dry-run` 逐项核对。
 - 插件命名社区现状:`dsh-*` 裸前缀占 ~2/3 但重灾区(常用词几乎被占),`@scope/dsh-*` ~21%,`dsh-plugin-*` ~5%;官方自身全用 scope(`@deepseek-ai/dsh-*`),无硬性命名规定,建议 scope。
+- 脚本内双引号字符串中 `$VAR` 后紧跟全角标点(如 `$VERSION（`)会把多字节字符首字节吞进变量名 → `set -u` 下报 `VAR�: unbound variable` 崩溃且只在该分支首次执行时暴露;所有插值一律 `${VAR}`。
+- `npm publish` 输出 `+ pkg@ver` 仅表示 PUT 被接受;若随即网络/脚本中断,registry 可能停在 staged 态(重发报 E409 Cannot publish over previously staged version,几分钟内索引自会翻正,不要盲目升版本重发)。
 
 ## 禁止事项
 

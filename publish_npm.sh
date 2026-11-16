@@ -88,7 +88,7 @@ for i in $(seq 1 40); do
   if [ "$SEEN" = "$VERSION" ]; then echo "✅ 官方源已索引 latest=$SEEN"; break; fi
   [ "$SEEN" = "0.0.0-stage" ] && echo "⏳ 第 $i 次: 出现 stage 空壳占位（首次发布正常现象），继续等待…"
 done
-[ "$SEEN" = "$VERSION" ] || { echo "❌ 10 分钟内官方源未索引出 $VERSION（当前: $SEEN），稍后手动检查 npm view $PKG"; exit 1; }
+[ "$SEEN" = "$VERSION" ] || { echo "❌ 10 分钟内官方源未索引出 ${VERSION}（当前: ${SEEN}），稍后手动检查 npm view $PKG"; exit 1; }
 
 # ── 6. 触发 npmmirror 同步并验证（镜像只读，发布后需主动拉取）──────
 curl -sf -X PUT "https://registry-direct.npmmirror.com/$PKG_ENC/sync?sync_upstream=true" >/dev/null \
@@ -97,7 +97,7 @@ for i in $(seq 1 18); do
   sleep 10
   MV=$(curl -sf "https://registry.npmmirror.com/$PKG_ENC" 2>/dev/null \
        | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dist-tags.latest||'')}catch{console.log('')}})")
-  if [ "$MV" = "$VERSION" ]; then echo "✅ 镜像已同步 latest=$MV，国内可按名安装"; break; fi
+  if [ "$MV" = "$VERSION" ]; then echo "✅ 镜像已同步 latest=${MV}，国内可按名安装"; break; fi
   echo "⏳ 第 $i 次: 镜像 latest=${MV:-未同步}，继续等待…"
 done
 [ "$MV" = "$VERSION" ] || echo "⚠️ 镜像暂未翻正，可稍后手动触发: curl -X PUT https://registry-direct.npmmirror.com/$PKG_ENC/sync?sync_upstream=true"

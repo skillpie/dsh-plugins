@@ -608,11 +608,13 @@ function bind(btn,zh,trigger){
       setTimeout(function(){t.textContent=zh?'下载文件':'Download file'},50);
     }).catch(function(err){
       busy=false;
-      // 404 means the deliverable card outlived its file (chat history keeps
-      // cards after the workspace copy is cleaned up) — say that, not a
-      // generic failure.
+      // 404 has two causes: the deliverable card outlived its file (chat
+      // history keeps cards after the workspace copy is cleaned up), or the
+      // host-side download route is missing entirely (older plugin versions
+      // only mounted it at boot when remote access was already enabled — the
+      // empty SPA-fallback body is the tell). Say which, not a generic failure.
       var notFound=String(err&&err.message||'').indexOf('404')>-1;
-      t.textContent=notFound?(zh?'文件已不存在(可能已被清理)':'File no longer exists'):(zh?'下载失败,请重试':'Download failed');
+      t.textContent=notFound?(zh?'文件已不存在,或宿主插件较旧不支持下载(可能已被清理)':'File no longer exists, or the host plugin predates download support'):(zh?'下载失败,请重试':'Download failed');
       setTimeout(function(){t.textContent=zh?'下载文件':'Download file'},1800);
     });
   });
