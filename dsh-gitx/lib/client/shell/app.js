@@ -980,9 +980,10 @@ function GitApp(props) {
   var autoWrite = function (request, options) {
     var opts = options || {}
     return runWithProgress('ai.commitAuto', request).then(function (value) {
-      setToast({ seq: Date.now(), text: value?.empty === true ? t('commit.nothing')
-        : value?.error || value?.cancelled ? t('ai.auto.partial')
-        : autoModeText(value) })
+      // 提交了但推送/同步没完成 = 需要处理的事,进常驻错误条;成功的确认才用 toast。
+      if (value?.empty === true) setToast({ seq: Date.now(), text: t('commit.nothing') })
+      else if (value?.error || value?.cancelled) setError(value?.error?.message || t('ai.auto.partial'))
+      else setToast({ seq: Date.now(), text: autoModeText(value) })
       if (opts.after !== undefined) opts.after()
       return value
     }).catch(function (failure) {
@@ -1005,9 +1006,9 @@ function GitApp(props) {
       var value = job.state === 'complete' ? job.result?.value : null
       if (value?.empty === true) return
       if (job.state === 'complete' && job.result?.ok === true) {
-        if (value?.error) setAiNotice(value.error.message)
+        if (value?.error) setError(value.error.message)
         else setToast({ seq: Date.now(), text: autoModeText(value) })
-      } else setAiNotice(job.result?.error?.message || t('ai.auto.failed'))
+      } else setError(job.result?.error?.message || t('ai.auto.failed'))
     }).catch(function () {})
   }, [repo === null ? null : repo.root])
 

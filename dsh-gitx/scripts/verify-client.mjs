@@ -1283,6 +1283,55 @@ console.log('\n--- the commit popover closes once the commit lands ---')
   check('the failure is reported', hasText(header, 'pre-commit hook failed'), textOf(header).slice(-300))
 }
 
+console.log('\n--- the commit popover auto path (empty message) hands off to the host job ---')
+{
+  // 留空提交信息 + 点弹窗主按钮 = header commitAuto 自动链:prepare 拿上下文后
+  // 启动宿主 ai.commitAuto 分离任务。这条路径曾漏测——「提交了但没推送」的
+  // 生产疑案就发生在这里,必须钉死 mode 逐字传进 job 参数。
+  const oneFile = { ...STATUS.files[2] }
+  const popoverOpen = (current) => walk(current).some((node) => node.props?.['data-popover'] === 'commit')
+  let header = await renderChips(healthyHandlers({
+    status: () => ({ ...STATUS, total: 1, files: [oneFile] }),
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: 0, behind: 0 }),
+    'ai.commitAuto': () => ({ mode: 'push', message: 'feat: auto via popover', commitApplied: true, commit: { ok: true, message: 'committed' } }),
+  }))
+  changesChip(header)
+    .props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) } })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  // 不输入任何提交信息,直接点主按钮。
+  findAll(header, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  const start = mounted.rpc.calls.find((call) => call.method === 'operationStart' && call.payload?.method === 'ai.commitAuto')
+  check('the empty popover commit prepared an AI context',
+    mounted.rpc.calls.some((call) => call.method === 'ai.prepareCommitMessage'))
+  check('the empty popover commit started the host auto job with mode=push',
+    start !== undefined && start.payload?.parameters?.mode === 'push' && typeof start.payload?.parameters?.contextId === 'string',
+    JSON.stringify(start?.payload?.parameters ?? null))
+  check('the popover closes once the auto job reports success', !popoverOpen(header),
+    JSON.stringify(walk(header).map((n) => n.props?.['data-popover']).filter(Boolean)))
+  check('the auto outcome is still reported after the popover closes',
+    walk(header).some((node) => String(node.props?.className ?? '').includes('dshgit-notice')),
+    textOf(header).slice(-200))
+
+  // 键盘路径:Cmd+Enter 曾绑死 commit-only(mode 'commit'),弹窗里按快捷键
+  // 会「只提交不推送」而主按钮写着提交并推送。必须与主按钮同源。
+  header = await renderChips(healthyHandlers({
+    status: () => ({ ...STATUS, total: 1, files: [oneFile] }),
+    branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: 0, behind: 0 }),
+    'ai.commitAuto': () => ({ mode: 'push', message: 'feat: auto via shortcut', commitApplied: true, commit: { ok: true, message: 'committed' } }),
+  }))
+  changesChip(header)
+    .props.onClick({ currentTarget: { getBoundingClientRect: () => ({ right: 900, bottom: 40 }) } })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  findAll(header, 'textarea').find((node) => node.props.placeholder === t('commit.placeholderMessage'))
+    .props.onKeyDown({ isComposing: false, keyCode: 0, ctrlKey: false, metaKey: true, key: 'Enter', repeat: false, preventDefault() {}, stopPropagation() {} })
+  header = await flush(GitApp, { connection: mounted.rpc, t })
+  const shortcutStart = mounted.rpc.calls.find((call) => call.method === 'operationStart' && call.payload?.method === 'ai.commitAuto')
+  check('Cmd+Enter on the popover composer mirrors the primary (mode=push)',
+    shortcutStart?.payload?.parameters?.mode === 'push',
+    JSON.stringify(shortcutStart?.payload?.parameters ?? null))
+}
+
 console.log('\n--- workbench Commit explains missing text and clears a mixed change list ---')
 {
   let committed = false
@@ -1307,6 +1356,12 @@ console.log('\n--- workbench Commit explains missing text and clears a mixed cha
     mounted.rpc.calls.some((call) => call.method === 'ai.prepareCommitMessage') &&
       mounted.rpc.calls.some((call) => call.method === 'operationStart' && call.payload?.method === 'ai.commitAuto'),
     mounted.rpc.calls.map((call) => call.method).join(','))
+  // 提交并推送 = mode 'push'：宿主 job 里提交后必须接力推送。曾出过「提交了但没推送」，
+  // 宿主冒烟已证明 mode='push' 会真实推送，这里钉死客户端必须把 mode 带进 job 参数。
+  const autoStart = mounted.rpc.calls.find((call) => call.method === 'operationStart' && call.payload?.method === 'ai.commitAuto')
+  check('the auto job request carries mode=push and a context id',
+    autoStart?.payload?.parameters?.mode === 'push' && typeof autoStart?.payload?.parameters?.contextId === 'string',
+    JSON.stringify(autoStart?.payload?.parameters ?? null))
   check('the change rows clear after the auto commit',
     findWhere(full, (props) => props['data-change-group'] !== undefined).length === 0)
 

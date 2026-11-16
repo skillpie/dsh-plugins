@@ -1070,7 +1070,7 @@ function GitStatusChips(props) {
       .then(function (value) {
         if (!active()) return value
         if (value?.empty === true) { setAiNotice(value.reason || t('commit.nothing')) }
-        else if (value?.error || value?.cancelled) succeed(t('ai.auto.partial'), value?.error?.message || null)
+        else if (value?.error || value?.cancelled) fail(value?.error?.message || t('ai.auto.partial'), 'ai.commitAuto')
         else succeed(autoModeLabel(value), value?.message || null)
         if (typeof opts.after === 'function') opts.after()
         return value

@@ -1046,7 +1046,10 @@ export function createRpc(deps) {
         if (!fresh.files.some(file => file.staged)) await writeStep('write.stage', {})
         commitValue = await writeStep('write.commit', commitRequest)
       }
-      if (mode === 'commit') return { ok: true, value: { mode, message, commitApplied: true, commit: commitValue } }
+      if (mode === 'commit') {
+        console.error(`[gitx] ai.commitAuto mode=commit committed ${repo.root}`)
+        return { ok: true, value: { mode, message, commitApplied: true, commit: commitValue } }
+      }
       const partial = step => ({ ok: true, value: { mode, message, commitApplied: true, cancelled: signal.aborted ? step : undefined,
         error: signal.aborted ? undefined : { code: 'git/ai-partial', message: step === 'pull' ? '提交已完成，但同步远端未完成' : '提交已完成，但推送未完成' } } })
       if (mode === 'sync') {
@@ -1054,6 +1057,7 @@ export function createRpc(deps) {
         try { await writeStep('write.pull', { ffOnly: true }) }
         catch (error) {
           if (signal.aborted) return partial('pull')
+          console.error(`[gitx] ai.commitAuto mode=sync pull FAILED after commit: ${error.message} ${repo.root}`)
           return { ok: true, value: { mode, message, commitApplied: true, error: { code: error.code || 'git/ai-partial', message: `提交已完成，但拉取远端失败：${error.message}` } } }
         }
       }
@@ -1063,12 +1067,16 @@ export function createRpc(deps) {
         await writeStep('write.push', fresh.branch?.upstream ? {} : { setUpstream: true })
       } catch (error) {
         if (signal.aborted) return partial('push')
+        console.error(`[gitx] ai.commitAuto mode=${mode} push FAILED after commit: ${error.message} ${repo.root}`)
         return { ok: true, value: { mode, message, commitApplied: true, error: { code: error.code || 'git/ai-partial', message: `提交已完成，但推送失败：${error.message}` } } }
       }
+      console.error(`[gitx] ai.commitAuto mode=${mode} committed and pushed ${repo.root}`)
       return { ok: true, value: { mode, message, commitApplied: true } }
     } catch (error) {
       if (signal.aborted) return { ok: false, error: { code: 'git/ai-cancelled', message: '自动提交已取消' } }
-      return { ok: false, error: { code: 'git/ai-failed', message: redact(error instanceof Error ? error.message : String(error)) } }
+      const detail = error instanceof Error ? error.message : String(error)
+      console.error(`[gitx] ai.commitAuto mode=${mode} FAILED: ${detail} ${repo.root}`)
+      return { ok: false, error: { code: 'git/ai-failed', message: redact(detail) } }
     }
   }
 

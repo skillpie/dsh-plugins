@@ -229,6 +229,12 @@ function CommitPanel(props) {
     setValidation(null)
     action()
   }
+  // Cmd+Enter 必须与主按钮同行为:曾绑死 commit-only,弹窗里按快捷键会
+  // 「只提交不推送」,而主按钮写着提交并推送——用户以为推送坏了。
+  var submitPrimary = function () {
+    if (props.syncAction === null) submit(props.onCommitPush)
+    else props.syncAction.run()
+  }
 
   /** A file row, with actions that appear on hover or keyboard focus. */
   var row = function (file, section, style) {
@@ -296,7 +302,7 @@ function CommitPanel(props) {
             if (event.isComposing || event.nativeEvent?.isComposing || event.keyCode === 229) return
             if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
               event.preventDefault(); event.stopPropagation?.()
-              if (!event.repeat) submit(props.onCommit)
+              if (!event.repeat) submitPrimary()
             }
           },
         }),
@@ -323,8 +329,7 @@ function CommitPanel(props) {
           key: 'commit', t: t, shortcut: props.syncAction === null, pending: props.busy === true,
           label: props.busy ? t(progressKey) : props.syncAction === null ? t('action.commitAndPush') : props.syncAction.label,
           disabled: props.busy || hasConflicts || (props.syncAction === null && (!canCommit || props.status?.branch?.detached === true)),
-          onPrimary: props.syncAction === null
-            ? function () { submit(props.onCommitPush) } : props.syncAction.run,
+          onPrimary: submitPrimary,
           options: props.syncAction !== null ? [] : [
             { id: 'sync', label: t('action.commitAndSync'),
               disabled: props.busy || hasConflicts || !canCommit || !props.status?.branch?.upstream,
