@@ -972,12 +972,17 @@ function GitApp(props) {
    * ai.commitAuto 后台接力:提交→(拉取/)推送由宿主分离任务执行,窗口关掉只停
    * 进度轮询,任务继续跑完。CommitComposer 通过 onAutoCommit 调到这里。
    */
+  // ai.commitAuto 完成提示:带生成的提交信息(长文本由 toast 折叠、悬停看全)。
+  var autoModeText = function (value) {
+    var label = t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit')
+    return typeof value?.message === 'string' && value.message.trim() !== '' ? label + '\n' + value.message.trim() : label
+  }
   var autoWrite = function (request, options) {
     var opts = options || {}
     return runWithProgress('ai.commitAuto', request).then(function (value) {
       setToast({ seq: Date.now(), text: value?.empty === true ? t('commit.nothing')
         : value?.error || value?.cancelled ? t('ai.auto.partial')
-        : t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit') })
+        : autoModeText(value) })
       if (opts.after !== undefined) opts.after()
       return value
     }).catch(function (failure) {
@@ -1001,7 +1006,7 @@ function GitApp(props) {
       if (value?.empty === true) return
       if (job.state === 'complete' && job.result?.ok === true) {
         if (value?.error) setAiNotice(value.error.message)
-        else setToast({ seq: Date.now(), text: t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit') })
+        else setToast({ seq: Date.now(), text: autoModeText(value) })
       } else setAiNotice(job.result?.error?.message || t('ai.auto.failed'))
     }).catch(function () {})
   }, [repo === null ? null : repo.root])

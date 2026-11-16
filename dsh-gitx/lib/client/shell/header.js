@@ -376,6 +376,10 @@ function GitStatusChips(props) {
     aiLockRelease.current?.(); aiLockRelease.current = null
     aiRunningRef.current = false; setAiBusy(false)
   }
+  // ai.commitAuto 完成提示文案(按 mode 选键)。
+  var autoModeLabel = function (value) {
+    return t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit')
+  }
   // 用户显式取消(弹窗里点 ✨)才连宿主 job 一起取消。
   var cancelAutoGeneration = function () {
     var job = aiJobRef.current
@@ -1067,7 +1071,7 @@ function GitStatusChips(props) {
         if (!active()) return value
         if (value?.empty === true) { setAiNotice(value.reason || t('commit.nothing')) }
         else if (value?.error || value?.cancelled) succeed(t('ai.auto.partial'), value?.error?.message || null)
-        else succeed(t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit'))
+        else succeed(autoModeLabel(value), value?.message || null)
         if (typeof opts.after === 'function') opts.after()
         return value
       })
@@ -1093,7 +1097,7 @@ function GitStatusChips(props) {
       if (value?.empty === true) return
       if (job.state === 'complete' && job.result?.ok === true) {
         if (value?.error) fail(value.error.message)
-        else succeed(t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit'))
+        else succeed(autoModeLabel(value), value?.message || null)
       } else fail(job.result?.error?.message || t('ai.auto.failed'))
     }).catch(function () {})
   }, [repo?.root, props.sessionId])
