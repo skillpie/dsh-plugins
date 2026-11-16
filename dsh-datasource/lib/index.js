@@ -291,7 +291,7 @@ function buildToolDefinitions(dba) {
       parameters: {
         connectionId: { type: 'string', description: 'Connection id from db_list_connections. Optional when the conversation has exactly one selected database; only selected databases are allowed.' },
         sql: { type: 'string', required: true, description: 'One read-only SQL statement.' },
-        limit: { type: 'number', description: 'Maximum rows to return (default 200, capped by plugin config).' },
+        limit: { type: 'number', description: 'Maximum rows to return (default 200; capped by the connection\'s maxRows when set, otherwise the plugin config).' },
       },
       output: {
         schema: {

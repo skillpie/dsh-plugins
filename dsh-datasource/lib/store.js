@@ -90,6 +90,16 @@ export function normalizeConnection(input, existing = null) {
   } else if (typeof existing?.notes === 'string' && existing.notes.trim()) {
     out.notes = existing.notes
   }
+  // 单次查询最大行数：正整数按连接覆盖全局默认（service 回落到 config.maxRows）；
+  // 空串 / null 表示显式清除，跟随全局默认。
+  const rawMaxRows = input.maxRows !== undefined ? input.maxRows : existing?.maxRows
+  if (rawMaxRows !== undefined && rawMaxRows !== null && rawMaxRows !== '') {
+    const n = typeof rawMaxRows === 'number' ? rawMaxRows : Number.parseInt(String(rawMaxRows), 10)
+    if (!Number.isInteger(n) || n <= 0) {
+      throw new Error('最大行数必须是正整数 / maxRows must be a positive integer')
+    }
+    out.maxRows = n
+  }
 
   if (kind === 'sqlite') {
     const file = text(input.file) ?? existing?.file

@@ -138,7 +138,11 @@ window.__ModuleLoader__.load({
       notesHint: "人工维护的查数口径与陷阱（租户过滤、单号规则、跨表关联、统计口径…），随连接保存，助手写 SQL 前会先读这里。",
       notesPlaceholder: "例如：\n- 统计 GMV 一律用 orders.status <> 'cancelled'，退款单另算\n- tenant_id 必须带，否则全表扫描\n- biz_no 是业务单号，id 才是主键",
       notesSaved: "已保存",
-      exportCsv: "导出 CSV"
+      exportCsv: "导出 CSV",
+      maxRows: "单次最大行数",
+      maxRowsPlaceholder: "默认 200",
+      maxRowsHint: "AI 单次查询与表格浏览最多返回的行数；留空使用全局默认 200。",
+      needMaxRows: "最大行数必须是正整数"
     };
     var en = {
       title: "DataSource",
@@ -267,7 +271,11 @@ window.__ModuleLoader__.load({
       notesHint: "Human-maintained query rules and pitfalls (tenant filters, ID formats, joins, statistics conventions…) stored with the connection; the assistant reads it before writing SQL.",
       notesPlaceholder: "Examples:\n- GMV always excludes orders.status = 'cancelled'\n- tenant_id is mandatory, otherwise the query scans the full table\n- biz_no is the business ID; id is the primary key",
       notesSaved: "Saved",
-      exportCsv: "Export CSV"
+      exportCsv: "Export CSV",
+      maxRows: "Max rows per query",
+      maxRowsPlaceholder: "default 200",
+      maxRowsHint: "Maximum rows the assistant or the table browser fetches at once; leave blank for the global default (200).",
+      needMaxRows: "Max rows must be a positive integer"
     };
 
     function interpolate(text, params) {
@@ -960,6 +968,8 @@ window.__ModuleLoader__.load({
       user: "",
       password: "",
       ssl: false,
+      // 单次查询最大行数；留空跟随全局默认（200）。
+      maxRows: "",
       // 新连接默认只读（安全缺省）；需要写操作时在表单里显式关闭。
       readOnly: true
     };
@@ -976,6 +986,7 @@ window.__ModuleLoader__.load({
         user: connection.user || "",
         password: "",
         ssl: connection.ssl === true,
+        maxRows: connection.maxRows ? String(connection.maxRows) : "",
         readOnly: connection.readOnly === true
       };
     }
@@ -1005,6 +1016,9 @@ window.__ModuleLoader__.load({
           name: form.name.trim(),
           readOnly: form.readOnly
         };
+        // maxRows 对所有连接类型生效；清空发送 null，显式移除按连接覆盖。
+        var maxRowsText = String(form.maxRows == null ? "" : form.maxRows).trim();
+        connection.maxRows = maxRowsText ? Number(maxRowsText) : null;
         if (form.kind === "sqlite") {
           connection.file = form.file.trim();
         } else {
@@ -1022,6 +1036,11 @@ window.__ModuleLoader__.load({
         if (!form.name.trim()) return t("needConnectionName");
         if (form.kind === "sqlite" && !form.file.trim()) return t("needFile");
         if (form.kind !== "sqlite" && !form.database.trim()) return t("needDatabase");
+        var maxRowsText = String(form.maxRows == null ? "" : form.maxRows).trim();
+        if (maxRowsText) {
+          var n = Number(maxRowsText);
+          if (!Number.isInteger(n) || n <= 0) return t("needMaxRows");
+        }
         return null;
       }
 
@@ -1128,6 +1147,11 @@ window.__ModuleLoader__.load({
                 h("input", { type: "checkbox", checked: form.ssl, onChange: function (event) { update("ssl", event.target.checked); } }),
                 t("ssl")
               )
+            ),
+            h("div", { className: "dshdb-formrow" },
+              h("span", { className: "dshdb-label" }, t("maxRows")),
+              h("input", { className: "dshdb-input", value: form.maxRows, inputMode: "numeric", placeholder: t("maxRowsPlaceholder"), onChange: function (event) { update("maxRows", event.target.value); } }),
+              h("span", { className: "dshdb-hintline" }, t("maxRowsHint"))
             ),
             error ? h("div", { className: "dshdb-error" }, error) : null,
             testResult ? h("div", { className: "dshdb-testmsg " + (testResult.ok ? "ok" : "bad") }, testResult.text) : null
@@ -1375,7 +1399,7 @@ window.__ModuleLoader__.load({
         setSqlResult(null);
         var readOnly = isReadOnlySql(text);
         var body = readOnly
-          ? { action: "query", id: activeId, sql: text, limit: Number(overview?.config?.maxRows) || 200 }
+          ? { action: "query", id: activeId, sql: text, limit: Number(activeConnection && activeConnection.maxRows) || Number(overview?.config?.maxRows) || 200 }
           : { action: "execute", id: activeId, sql: text };
         api(body).then(function (data) {
           setSqlResult({ readOnly: readOnly, data: data });

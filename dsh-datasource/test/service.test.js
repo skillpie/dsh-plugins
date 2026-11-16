@@ -29,6 +29,46 @@ test('normalizeConnection validates and redacts secrets', () => {
   assert.throws(() => normalizeConnection({ kind: 'access', name: 'x' }), /kind must be/)
 })
 
+test('normalizeConnection stores, keeps and clears per-connection maxRows', () => {
+  // 新连接带 maxRows：字符串数字也会归一化为正整数。
+  const saved = normalizeConnection({ kind: 'sqlite', name: 'r', file: '/tmp/a.db', maxRows: '500' })
+  assert.equal(saved.maxRows, 500)
+  // 非法值拒绝：非正整数。
+  assert.throws(() => normalizeConnection({ kind: 'sqlite', name: 'r', file: '/tmp/a.db', maxRows: 0 }), /maxRows/)
+  assert.throws(() => normalizeConnection({ kind: 'sqlite', name: 'r', file: '/tmp/a.db', maxRows: 'abc' }), /maxRows/)
+  // 更新时 patch 省略 maxRows → 保留旧值；显式空串/null → 清除（跟随全局默认）。
+  const kept = normalizeConnection({ name: 'r2' }, saved)
+  assert.equal(kept.maxRows, 500)
+  const cleared = normalizeConnection({ name: 'r2', maxRows: '' }, saved)
+  assert.equal(cleared.maxRows, undefined)
+  const clearedToo = normalizeConnection({ name: 'r2', maxRows: null }, saved)
+  assert.equal(clearedToo.maxRows, undefined)
+  // publicConnection 不剥离 maxRows，浏览器面板需要回显。
+  assert.equal(publicConnection(saved).maxRows, 500)
+})
+
+test('query and rows honour the per-connection maxRows over the global config', async () => {
+  const { home, dba } = await makeDba({ maxRows: 200 })
+  try {
+    const demo = (await dba.listConnections()).connections[0]
+    // 全局 200、连接 2：请求更大的 limit 也被钳到 2。
+    await dba.updateConnection(demo.id, { maxRows: 2 })
+    const capped = await dba.query(demo.id, 'SELECT id FROM users', { limit: 50 })
+    assert.equal(capped.rows.length, 2)
+    assert.equal(capped.truncated, true)
+    const page = await dba.rows(demo.id, 'users', { limit: 50 })
+    assert.equal(page.rows.length, 2)
+    assert.equal(page.limit, 2)
+    // 清除连接覆盖 → 回落全局 200。
+    await dba.updateConnection(demo.id, { maxRows: null })
+    const restored = await dba.query(demo.id, 'SELECT id FROM users', { limit: 50 })
+    assert.ok(restored.rows.length > 2)
+  } finally {
+    await dba.dispose()
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
 test('demo database is created, browsable and queryable', async () => {
   const { home, dba } = await makeDba()
   try {

@@ -48,6 +48,12 @@ function clampLimit(value, fallback, max) {
   return Math.min(Math.max(n, 1), max)
 }
 
+/** Per-connection row ceiling: the connection's maxRows wins, else the global one. */
+function maxRowsCap(connection, globalMaxRows) {
+  const n = connection?.maxRows
+  return Number.isInteger(n) && n > 0 ? n : globalMaxRows
+}
+
 /** `YYYYMMDD-HHMMSS` suffix for export file names. */
 function exportTimestamp(now = new Date()) {
   const pad = (value) => String(value).padStart(2, '0')
@@ -454,7 +460,7 @@ export class DbaService {
     if (options.sessionId) await this.assertSessionConnection(options.sessionId, id, options.cwd)
     const connection = await this.connection(id)
     if (!table) throw new Error('请选择一张表 / choose a table')
-    const limit = clampLimit(options.limit, 50, this.config.maxRows)
+    const limit = clampLimit(options.limit, 50, maxRowsCap(connection, this.config.maxRows))
     const offset = Math.max(0, Number.isFinite(Number(options.offset)) ? Math.floor(Number(options.offset)) : 0)
     const adapter = await this.#adapter(connection)
     const result = await adapter.fetchRows(String(table), { limit, offset })
@@ -507,7 +513,9 @@ export class DbaService {
   async query(id, sql, options = {}) {
     if (options.sessionId) await this.assertSessionConnection(options.sessionId, id, options.cwd)
     const connection = await this.connection(id)
-    const limit = clampLimit(options.limit, this.config.maxRows, this.config.maxRows)
+    // 行数上限：连接自带的 maxRows 优先，未设置时回落到全局 config.maxRows。
+    const cap = maxRowsCap(connection, this.config.maxRows)
+    const limit = clampLimit(options.limit, cap, cap)
     const adapter = await this.#adapter(connection)
     const source = options.source
     const started = Date.now()
