@@ -1292,16 +1292,20 @@ console.log('\n--- workbench Commit explains missing text and clears a mixed cha
     branchTracking: () => ({ ref: 'main', upstream: 'origin/main', ahead: committed ? 1 : 0, behind: 0 }),
     'write.stage': () => ({ ok: true, message: 'staged' }),
     'write.commit': () => { committed = true; return { ok: true, message: 'committed' } },
+    // 留空提交信息的自动链路：客户端 prepare 后启动宿主分离任务 ai.commitAuto，
+    // 生成→提交→推送全部发生在那个 job 里；桩在这里一次性回报成功。
+    'ai.commitAuto': () => { committed = true; return { mode: 'push', message: 'feat: auto', commitApplied: true, commit: { ok: true, message: 'committed' } } },
   }))
   findAll(full, 'button').find((node) => String(node.props.className).includes('dshgit-commit-primary')).props.onClick()
   full = await flush(GitApp, { connection: mounted.rpc, t })
   // Empty message + AI enabled (the fixture config always is): the primary
-  // (提交并推送) asks the Host for a message and proceeds with it. The old
-  // hard-required toast only exists when the profile has no model service
-  // (`aiEnabled: false`), which this fixed config cannot render.
+  // (提交并推送) prepares a context and hands the whole flow to the Host's
+  // detached `ai.commitAuto` job. The old in-page generate→commit chain
+  // (ai.commitMessage + write.commit) is gone for this path; the ✨ button
+  // still uses it, and its own tests cover that below.
   check('an empty message is auto-generated and the commit still lands',
-    mounted.rpc.calls.some((call) => call.method === 'ai.commitMessage') &&
-      mounted.rpc.calls.some((call) => call.method === 'write.commit'),
+    mounted.rpc.calls.some((call) => call.method === 'ai.prepareCommitMessage') &&
+      mounted.rpc.calls.some((call) => call.method === 'operationStart' && call.payload?.method === 'ai.commitAuto'),
     mounted.rpc.calls.map((call) => call.method).join(','))
   check('the change rows clear after the auto commit',
     findWhere(full, (props) => props['data-change-group'] !== undefined).length === 0)

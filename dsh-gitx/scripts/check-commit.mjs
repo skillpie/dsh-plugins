@@ -1,5 +1,5 @@
 /** Manual release check: real Git repositories, entirely under the OS temp dir. */
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat, realpath } from 'node:fs/promises'
 import { tmpdir, release } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -17,7 +17,10 @@ const files = countArg ? Number(countArg.slice(8)) : 12000
 if (!Number.isInteger(files) || files < 1000 || files > 50000) throw new Error('--files must be between 1000 and 50000')
 const gitPath = await resolveGitPath()
 if (!gitPath) throw new Error('Git is required')
-const root = await mkdtemp(join(tmpdir(), 'dsh-commit-check-'))
+// os.tmpdir() 在 macOS 返回 /var/...（/private/var 的符号链接），而 git
+// rev-parse --show-toplevel 报物理路径；fixture 必须先 realpath，否则 jobFor
+// 等按 resolve(root) 比较的地方永远对不上。
+const root = await mkdtemp(join(await realpath(tmpdir()), 'dsh-commit-check-'))
 const hooks = join(root, '.git', 'hooks')
 const env = { GIT_INDEX_FILE: undefined, GIT_DIR: undefined, GIT_WORK_TREE: undefined, GIT_COMMON_DIR: undefined,
   GIT_CONFIG_COUNT: '0', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }

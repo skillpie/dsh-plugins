@@ -1,6 +1,6 @@
 /** Real Git scope/budget regression checks; no external model requests. */
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, writeFile, readFile, rename, unlink, copyFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, rename, unlink, copyFile, realpath, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
@@ -13,7 +13,7 @@ import { AI_CONTEXT_LIMITS, aiExcludeRules, commitMessageContext, commitContextI
 import { readChunks } from '../lib/git/changeChunks.js'
 import { createCommitContextCache } from '../lib/git/aiContextCache.js'
 
-const root = await mkdtemp(join(tmpdir(), 'dsh-ai-check-')), gitPath = await resolveGitPath()
+const root = await mkdtemp(join(await realpath(tmpdir()), 'dsh-ai-check-')), gitPath = await resolveGitPath()
 assert(gitPath)
 for (const key of ['GIT_INDEX_FILE', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR']) delete process.env[key]
 process.env.GIT_CONFIG_GLOBAL = process.platform === 'win32' ? 'NUL' : '/dev/null'
@@ -241,7 +241,7 @@ await generate({ paths: [tiny] })
 assert(captured.diff.includes('EDITABLE_DEFAULT_RULE'), 'Deleting a visible default must remove that exclusion')
 console.log('PASS editable defaults have no duplicate hidden rules')
 
-const worktree = join(await mkdtemp(join(tmpdir(), 'dsh-ai-worktree-')), 'checkout')
+const worktree = join(await mkdtemp(join(await realpath(tmpdir()), 'dsh-ai-worktree-')), 'checkout')
 await run(['worktree', 'add', '-b', 'ai-context-worktree', worktree])
 const { session: worktreeRepo } = await registry.open(worktree)
 const worktreeIndex = await commitContextIndexPath(worktreeRepo)
@@ -253,7 +253,7 @@ assert.equal(await commitContextIndexPath(repo), join(root, '.git/index'))
 console.log('PASS linked worktree preparation uses the correct index and isolated status snapshot')
 
 async function checkCacheBoundaries() {
-  const root = await mkdtemp(join(tmpdir(), 'dsh-ai-cache-boundaries-'))
+  const root = await mkdtemp(join(await realpath(tmpdir()), 'dsh-ai-cache-boundaries-'))
   const run = async args => {
     const result = await git({ gitPath, cwd: root, args, timeoutMs: 30000 })
     assert.equal(result.code, 0, result.stderr); return result.stdout
@@ -292,6 +292,11 @@ async function checkCacheBoundaries() {
   const selected = await cache.prepare(repo, scope, options)
   const before = await readFile(join(root, '.git/index')), entries = await run(['ls-files', '--stage', '-v', '-z'])
   await writeFile(join(root, 'b.js'), 'export const a = 1;\n')
+  // writeFile 只改 mtime；若新 mtime 与 index 缓存的时间落在同一时钟刻度，
+  // status 刷新不会改写 index，下面的原始字节断言就偶发失败。显式把 mtime
+  // 拨到过去，让刷新必然写入不同的 stat 数据。
+  const stale = new Date(Date.now() - 60000)
+  await utimes(join(root, 'b.js'), stale, stale)
   // Simulate another editor's ordinary status refresh; the plugin's Git runner
   // deliberately disables optional locks and cannot reproduce that refresh.
   await promisify(execFile)(gitPath, ['status', '--porcelain'], { cwd: root, windowsHide: true, timeout: 30000,

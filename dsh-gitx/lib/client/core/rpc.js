@@ -97,7 +97,9 @@ function callRpc(connection, method, payload, signal) {
   if (getWorkspaceNavigation() && (method.startsWith('write.') || method === 'operationStart' || method === 'initRepository' || method === 'updateChangelist')) {
     return Promise.reject(new Error('工作区正在切换，请等待切换完成'))
   }
-  if (isCommitMessageBusy(payload?.root) && (method.startsWith('write.') || method === 'operationStart')) {
+  // ai.commitAuto is the background handoff of the generation that IS holding
+  // the lock — without this exemption the start call would reject itself.
+  if (isCommitMessageBusy(payload?.root) && (method.startsWith('write.') || (method === 'operationStart' && payload?.method !== 'ai.commitAuto'))) {
     return Promise.reject(new Error('AI 正在生成提交信息，请先取消或等待完成'))
   }
   return connection.rpc.call(RPC_CHANNEL, RPC_ENDPOINT, { method: method, payload: withSession(payload) }, signal)

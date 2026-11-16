@@ -389,12 +389,21 @@ function CommitComposer(props) {
   React.useEffect(function () {
     return subscribeCommitPrefs(function (next) { prefsState[1](next) })
   }, [])
-  var aiRef = React.useRef({ busy: false, id: 0, controller: null, release: null })
+  var aiRef = React.useRef({ busy: false, id: 0, controller: null, release: null, job: null })
   blocked = blocked || aiBusy
   var cancelAi = function () {
     aiRef.current.id++; aiRef.current.controller?.abort(); aiRef.current.controller = null
+    // 只中止页内生成并放锁；宿主 job 是分离任务(关窗/关弹窗都要继续跑)，
+    // 这里绝不取消它——弹窗卸载也会走到这里。
     aiRef.current.release?.(); aiRef.current.release = null
     aiRef.current.busy = false; setAiBusy(false)
+  }
+  // 用户显式取消(点 ✨)才连宿主 job 一起取消。
+  var cancelGeneration = function () {
+    var job = aiRef.current.job
+    aiRef.current.job = null
+    if (job && job.id && job.state === 'running') props.run('operationCancel', { root: props.repo.root, id: job.id }, { silent: true, silentError: true }).catch(function () {})
+    cancelAi()
   }
   var draftRef = React.useRef(props.message)
   draftRef.current = props.message
@@ -409,7 +418,11 @@ function CommitComposer(props) {
   }), props.status?.branch?.oid])
   React.useEffect(function () {
     cancelAi()
-    return function () { aiRef.current.id++; aiRef.current.controller?.abort(); aiRef.current.release?.(); aiRef.current.release = null; aiRef.current.busy = false }
+    return function () {
+      // 卸载/换作用域不取消宿主 job(分离任务继续跑完并回报结果)。
+      aiRef.current.id++; aiRef.current.controller?.abort()
+      aiRef.current.release?.(); aiRef.current.release = null; aiRef.current.busy = false
+    }
   }, [props.repo.root, props.run, aiEnabled, aiScopeKey])
   var commitCount = lists ? selectedPaths.length : changedFiles.length
   var stagedCount = changedFiles.filter(isStaged).length
@@ -481,7 +494,9 @@ function CommitComposer(props) {
     }
     if (aiRef.current.busy) return
     setValidation(null)
-    generate(function (text) { commit(mode, text) })
+    // 宿主支持后台接力时,提交+推送作为分离任务执行,关窗后继续;否则退回页内链路。
+    if (typeof props.onAutoCommit === 'function') autoCommit(mode)
+    else generate(function (text) { commit(mode, text) })
   }
   // The trigger for the pill: the same Smart Commit the keyboard shortcut
   // runs, so the two paths can never diverge in what they stage.
@@ -544,6 +559,71 @@ function CommitComposer(props) {
       .finally(settle)
   }
 
+  // 后台接力版「留空自动生成」:生成在页内(拿 contextId、提前暴露可用性/空作用
+  // 域),提交→(拉取/)推送移交宿主分离任务。锁全程持有(宿主任务不受影响,页内
+  // 写入被拒),关窗只是停掉进度轮询,onAutoCommit 的 after/onError 只在还开着时回调。
+  var autoCommit = function (mode) {
+    if (!aiEnabled || aiRef.current.busy || blocked || (lists && !commitCount)) return
+    var release = acquireCommitMessage(props.repo.root)
+    if (!release) return
+    aiRef.current.release = release
+    aiRef.current.busy = true
+    var controller = new AbortController(); aiRef.current.controller = controller
+    setAiBusy(true)
+    var id = ++aiRef.current.id
+    props.setAiNotice(null)
+    var settle = function () {
+      if (aiRef.current.id !== id) return
+      aiRef.current.busy = false; aiRef.current.controller = null; aiRef.current.job = null
+      var pending = aiRef.current.release
+      aiRef.current.release = null
+      if (pending) pending()
+      setAiBusy(false)
+    }
+    var scopeParameters = {}
+    var scope = lists ? props.changelists.flush().then(function (data) {
+      var paths = props.changelists.pathsFor(data)
+      if (!paths.length) throw new Error(t('commit.nothing'))
+      return { paths: paths, changelistVersion: data.version }
+    }) : Promise.resolve({})
+    scope.then(function (parameters) {
+      // flush 结果要在 prepare 之后的第二个回调里随 job 传给宿主，而那里拿不到
+      // 本回调的形参，先寄存在外层变量。
+      scopeParameters = parameters
+      if (id !== aiRef.current.id) return null
+      return props.run('ai.prepareCommitMessage', Object.assign({ root: props.repo.root }, parameters), { silent: true, silentError: true, signal: controller.signal })
+    }).then(function (context) {
+      if (id !== aiRef.current.id) return null
+      if (!context || context.available === false) {
+        props.setAiNotice(context?.message || t('ai.unavailable'))
+        return null
+      }
+      if (context.empty === true) {
+        props.setAiNotice(context.reason || '没有可提交的改动')
+        return null
+      }
+      aiRef.current.job = { root: props.repo.root, state: 'running' }
+      // `parameters`（lists 模式下的 {paths, changelistVersion}）必须随 job
+      // 传给宿主：ai.commitAuto 的 validate 用同一 payload 重算指纹，缺了
+      // paths/changelistVersion 会与 prepare 时的 key 不符，必报「仓库或提交
+      // 范围已变化，请重新生成提交信息」。
+      var request = Object.assign({ mode: mode, contextId: context.id, sessionId: getWindowState().sessionId }, scopeParameters, withCommitPrefs({}))
+      return props.onAutoCommit(request, {
+        after: function () { if (id === aiRef.current.id) afterAutoCommit() },
+        onJob: function (job) { if (aiRef.current.job) aiRef.current.job = job },
+        onError: function (failure) { props.setAiNotice(failure.message) },
+      })
+    }).catch(function (failure) {
+      if (id === aiRef.current.id && !controller.signal.aborted) props.setAiNotice(failure.message)
+    }).finally(settle)
+  }
+  var afterAutoCommit = function () {
+    cancelAi()
+    props.setMessage('')
+    props.afterWrite()
+    setWindowState({ refreshToken: getWindowState().refreshToken + 1 })
+  }
+
   return h('div', { className: 'dshgit-card dshgit-commit-composer' }, [
     // The AI trigger lives inside the field's top-right corner, so it reads
     // as "fill this box" instead of as a second commit-adjacent action.
@@ -572,7 +652,7 @@ function CommitComposer(props) {
           'aria-busy': aiBusy,
           type: 'button',
           className: 'dshgit-commit-ai',
-          onClick: aiBusy ? cancelAi : generate,
+          onClick: aiBusy ? cancelGeneration : generate,
           title: t(aiBusy ? 'ai.cancelGeneration' : 'action.generateMessage'), 'aria-label': t(aiBusy ? 'ai.cancelGeneration' : 'action.generateMessage'),
         },
         aiBusy ? h(CommitAiLoading, { key: 'busy' })

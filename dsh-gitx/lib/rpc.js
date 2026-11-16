@@ -997,6 +997,81 @@ export function createRpc(deps) {
     }
   }
 
+  // Detached auto-commit pipeline: generate → commit → (pull/) push inside one
+  // background job. The job owns its AbortController, so closing the panel or
+  // the whole window only stops progress polling — generation and the git
+  // writes keep running host-side. The client resolves the AI context first
+  // (ai.prepareCommitMessage) and hands over `contextId`; fingerprint
+  // validation here refuses to commit a scope that changed meanwhile.
+  methods['ai.commitAuto'] = async (payload, signal, repo, job) => {
+    const readiness = llm?.available?.({ sessionId: payload?.sessionId }) ?? { available: false, reason: '没有模型服务' }
+    if (readiness.available !== true) return { ok: false, error: { code: 'git/ai-unavailable', message: readiness.reason } }
+    const mode = ['commit', 'push', 'sync'].includes(payload?.mode) ? payload.mode : 'commit'
+    const contextOptions = { signal, excludePatterns: config.get().aiExcludePatterns }
+    try {
+      if (typeof payload?.contextId !== 'string' || !payload.contextId) throw new Error('AI 上下文已过期，请重新生成提交信息')
+      const entry = await commitContexts.read(payload.contextId, repo, payload, contextOptions)
+      const scope = entry.context
+      if (scope.empty) return { ok: true, value: { mode, message: '', empty: true } }
+      const setPhase = (phase, detail) => { if (job) { job.phase = phase; job.phaseDetail = detail || '' } }
+      setPhase('ai.generate')
+      const message = await llm.generateCommitMessage({
+        sessionId: payload?.sessionId,
+        diff: redact(scope.diff),
+        files: scope.files.map(redact),
+        recentSubjects: [],
+        hint: typeof payload?.hint === 'string' ? truncate(redact(payload.hint), 2000) : undefined,
+        signal,
+      })
+      if (!message || !message.trim()) throw new Error('未能生成有效的提交信息，请手动填写后重试')
+      await commitContexts.validate(entry, repo, payload, contextOptions)
+      // Write each step through the same write.* envelopes used by the panel so
+      // path safety, index locks and cache invalidation behave identically.
+      const writeStep = async (method, request) => {
+        const result = await methods[method](request, signal, repo)
+        if (result?.ok !== true) {
+          const failure = new Error(result?.error?.message || '操作失败')
+          failure.code = result?.error?.code
+          throw failure
+        }
+        return result.value
+      }
+      setPhase('ai.commit')
+      const commitRequest = { message, signoff: payload?.signoff === true || undefined, noVerify: payload?.noVerify === true || undefined }
+      let commitValue
+      if (Array.isArray(payload?.paths) && payload.paths.length > 0) {
+        commitValue = await writeStep('write.commitPaths', { ...commitRequest, paths: payload.paths, changelistVersion: payload?.changelistVersion })
+      } else {
+        const fresh = await repo.status({ signal, force: true, details: false })
+        if (!fresh.files.some(file => file.staged)) await writeStep('write.stage', {})
+        commitValue = await writeStep('write.commit', commitRequest)
+      }
+      if (mode === 'commit') return { ok: true, value: { mode, message, commitApplied: true, commit: commitValue } }
+      const partial = step => ({ ok: true, value: { mode, message, commitApplied: true, cancelled: signal.aborted ? step : undefined,
+        error: signal.aborted ? undefined : { code: 'git/ai-partial', message: step === 'pull' ? '提交已完成，但同步远端未完成' : '提交已完成，但推送未完成' } } })
+      if (mode === 'sync') {
+        setPhase('ai.pull')
+        try { await writeStep('write.pull', { ffOnly: true }) }
+        catch (error) {
+          if (signal.aborted) return partial('pull')
+          return { ok: true, value: { mode, message, commitApplied: true, error: { code: error.code || 'git/ai-partial', message: `提交已完成，但拉取远端失败：${error.message}` } } }
+        }
+      }
+      setPhase('ai.push')
+      try {
+        const fresh = await repo.status({ signal, force: true, details: false })
+        await writeStep('write.push', fresh.branch?.upstream ? {} : { setUpstream: true })
+      } catch (error) {
+        if (signal.aborted) return partial('push')
+        return { ok: true, value: { mode, message, commitApplied: true, error: { code: error.code || 'git/ai-partial', message: `提交已完成，但推送失败：${error.message}` } } }
+      }
+      return { ok: true, value: { mode, message, commitApplied: true } }
+    } catch (error) {
+      if (signal.aborted) return { ok: false, error: { code: 'git/ai-cancelled', message: '自动提交已取消' } }
+      return { ok: false, error: { code: 'git/ai-failed', message: redact(error instanceof Error ? error.message : String(error)) } }
+    }
+  }
+
   methods['ai.rewriteMessage'] = withRepo(async (repo, payload, signal) => {
     const readiness = llm?.available?.({ sessionId: payload.sessionId }) ?? { available: false, reason: '没有模型服务' }
     if (!readiness.available) return { available: false, message: readiness.reason }
@@ -1099,8 +1174,8 @@ export function createRpc(deps) {
   // Separate capability name: older Hosts must refuse this flow rather than
   // silently changing their global defaultRepo after cloning.
   methods.cloneWorkspace = methods.clone
-  const backgroundMethods = new Set(['clone', 'cloneWorkspace', 'lfsMigrationPreview', 'write.lfsTransfer', 'write.lfsMigrate', 'write.lfsRestore', 'write.fetch', 'write.push', 'write.pull', 'write.commit', 'write.commitPaths'])
-  const publicJob = job => ({ id: job.id, requestId: job.requestId, root: job.root, method: job.method, state: job.state, startedAt: job.startedAt, command: job.command, step: job.step, progress: job.progress, phase: job.phase, phaseDetail: job.phaseDetail, result: job.result })
+  const backgroundMethods = new Set(['clone', 'cloneWorkspace', 'lfsMigrationPreview', 'write.lfsTransfer', 'write.lfsMigrate', 'write.lfsRestore', 'write.fetch', 'write.push', 'write.pull', 'write.commit', 'write.commitPaths', 'ai.commitAuto'])
+  const publicJob = job => ({ id: job.id, requestId: job.requestId, root: job.root, method: job.method, state: job.state, startedAt: job.startedAt, endedAt: job.endedAt, command: job.command, step: job.step, progress: job.progress, phase: job.phase, phaseDetail: job.phaseDetail, result: job.result })
   methods.operationStart = async (payload, signal) => {
     if (!backgroundMethods.has(payload.method)) return { ok: false, error: { code: 'git/bad-request', message: '此操作不支持后台执行' } }
     const resolved = ['clone', 'cloneWorkspace'].includes(payload.method) && typeof payload.parameters?.directory === 'string' && isAbsolute(payload.parameters.directory)
@@ -1128,6 +1203,7 @@ export function createRpc(deps) {
       const command = args[0] === '--no-optional-locks' ? args.slice(1) : args
       switch (payload.method) {
         case 'write.commit': case 'write.commitPaths': return command[0] === 'commit' || (command[0] === '-c' && command[2] === 'commit')
+        case 'ai.commitAuto': return command[0] === 'commit' || command[0] === 'push' || (command[0] === '-c' && command[2] === 'commit')
         case 'clone': case 'cloneWorkspace': return command[0] === 'clone'
         case 'write.fetch': return command[0] === 'fetch'
         case 'write.push': return command[0] === 'push'
@@ -1150,13 +1226,13 @@ export function createRpc(deps) {
     })
     jobs.set(id, job)
     Promise.resolve().then(() => methods[payload.method]({ ...(payload.parameters || {}), root: resolved.repo.root }, controller.signal,
-      payload.method.startsWith('write.') ? resolved.repo : undefined)).then(result => {
+      payload.method.startsWith('write.') || payload.method === 'ai.commitAuto' ? resolved.repo : undefined, job)).then(result => {
       if (result?.error) result.error = redactDiagnostics(result.error)
       // Cancelling a slow post-commit hook may still leave a verified, restored
       // commit. Confirmed success must reach the UI so it never retries it.
-      const committed = ['write.commit', 'write.commitPaths'].includes(payload.method) && result.ok
+      const committed = ['write.commit', 'write.commitPaths', 'ai.commitAuto'].includes(payload.method) && result.ok
       job.result = result; job.state = committed ? 'complete' : controller.signal.aborted ? 'cancelled' : result.ok ? 'complete' : 'failed'
-    }).catch(error => { job.result = { ok: false, error: { message: redact(error.message), details: { recovery: error.recovery } } }; job.state = controller.signal.aborted ? 'cancelled' : 'failed' }).finally(stop)
+    }).catch(error => { job.result = { ok: false, error: { message: redact(error.message), details: { recovery: error.recovery } } }; job.state = controller.signal.aborted ? 'cancelled' : 'failed' }).finally(() => { job.endedAt = Date.now(); stop() })
     return { ok: true, value: publicJob(job) }
   }
   const jobFor = async payload => {

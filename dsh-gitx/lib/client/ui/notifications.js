@@ -210,7 +210,9 @@ function ChipNotice(props) {
  */
 function OperationProgress(props) {
   var job = props.job
-  var commit = ['write.commit', 'write.commitPaths'].includes(job.method)
+  // ai.commitAuto:自动生成→提交→推送的分离任务,阶段文案(ai.generate 等)与
+  // git 阶段共用同一 label 管线。
+  var commit = ['write.commit', 'write.commitPaths', 'ai.commitAuto'].includes(job.method)
   var label = commit && job.phase ? props.t(job.phase) + (job.phaseDetail ? ' · ' + job.phaseDetail : '') : job.command || props.t('lfs.running')
   var elapsed = Number.isFinite(job.startedAt) ? Math.max(0, Math.floor((Date.now() - job.startedAt) / 1000)) : 0
   return h(NoticeSurface, { className: 'dshgit-progress', placement: props.placement, role: 'status', 'aria-label': props.t(commit ? 'commit.progress' : 'lfs.progress'), title: [label, job.command, job.progress].filter(Boolean).join('\n') }, [

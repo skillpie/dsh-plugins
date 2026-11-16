@@ -366,14 +366,30 @@ function GitStatusChips(props) {
   var aiRequestRef = React.useRef(0)
   var aiRunningRef = React.useRef(false)
   var aiController = React.useRef(null), aiLockRelease = React.useRef(null)
+  var aiJobRef = React.useRef(null)
+  // 重开窗口的完结提醒去重(每个 job 只报一次)。
+  var autoNotifiedRef = React.useRef(new Set())
   var cancelAi = function () {
     aiRequestRef.current++; aiController.current?.abort(); aiController.current = null
+    // 只中止页内生成并放锁；宿主 job 是分离任务(关窗/关弹窗都要继续跑)，
+    // 这里绝不取消它——显式取消走 cancelAutoGeneration。
     aiLockRelease.current?.(); aiLockRelease.current = null
     aiRunningRef.current = false; setAiBusy(false)
   }
+  // 用户显式取消(弹窗里点 ✨)才连宿主 job 一起取消。
+  var cancelAutoGeneration = function () {
+    var job = aiJobRef.current
+    aiJobRef.current = null
+    if (job && job.id && job.state === 'running' && repo?.root) call('operationCancel', { root: repo.root, id: job.id }, { silent: true, silentError: true }).catch(function () {})
+    cancelAi()
+  }
   React.useEffect(function () {
     cancelAi()
-    return function () { aiController.current?.abort(); aiLockRelease.current?.(); aiLockRelease.current = null; aiRequestRef.current++; aiRunningRef.current = false }
+    return function () {
+      // 卸载/换仓库不取消宿主 job(分离任务继续跑完并回报结果)。
+      aiController.current?.abort()
+      aiLockRelease.current?.(); aiLockRelease.current = null; aiRequestRef.current++; aiRunningRef.current = false
+    }
   }, [repo?.root, props.sessionId])
   var aiState = React.useState(null)
   var aiNotice = aiState[0]
@@ -982,14 +998,105 @@ function GitStatusChips(props) {
   }
 
   /**
-   * 提交入口:提交信息留空时先让 AI 生成,成稿后按所选方式继续提交。
-   * 占位文案「留空将自动生成」由这里兑现;AI 生成失败时走 setAiNotice,不提交。
+   * 提交入口:提交信息留空时先让 AI 生成,再把「提交→(拉取/)推送」整段移交宿主
+   * 后台任务执行。生成段留在页内是为了提前暴露「模型不可用/空作用域」并把
+   * contextId 交给宿主;之后的 git 写入全部发生在宿主分离任务里——关掉窗口
+   * 只是停掉进度轮询,生成结果已就绪、提交与推送会继续跑完。
    */
   var commitAuto = function (mode) {
     if (message.trim() !== '') { commit(mode); return }
     if (aiRunningRef.current || writeRef.current) return
-    generateMessage(function (text) { commit(mode, text) })
+    var release = acquireCommitMessage(repo.root)
+    if (!release) return
+    aiLockRelease.current = release
+    aiRunningRef.current = true
+    var controller = new AbortController(); aiController.current = controller
+    setAiBusy(true)
+    var requestId = ++aiRequestRef.current
+    setAiNotice(null)
+    var settle = function () {
+      if (requestId !== aiRequestRef.current) return
+      aiRunningRef.current = false; aiController.current = null
+      var pending = aiLockRelease.current
+      aiLockRelease.current = null
+      if (pending) pending()
+      setAiBusy(false)
+    }
+    call('ai.prepareCommitMessage', { root: repo.root }, { silent: true, silentError: true, signal: controller.signal })
+      .then(function (context) {
+        if (requestId !== aiRequestRef.current) return null
+        if (!context || context.available === false) { setAiNotice(context?.message || t('ai.unavailable')); return null }
+        if (context.empty === true) { setAiNotice(context.reason || t('commit.nothing')); return null }
+        aiJobRef.current = { root: repo.root, state: 'running' }
+        return autoCommitRequest({ mode: mode, contextId: context.id, sessionId: props.sessionId }, {
+          after: function () {
+            if (requestId !== aiRequestRef.current) return
+            cancelAi(); setMessage(''); closePopover()
+            refresh({ force: true })
+            setWindowState({ refreshToken: getWindowState().refreshToken + 1 })
+          },
+          onError: function (failure) { setAiNotice(failure.message) },
+          onJob: function (job) { if (aiJobRef.current) aiJobRef.current = job },
+        })
+      })
+      .catch(function (failure) { if (requestId === aiRequestRef.current && !controller.signal.aborted) setAiNotice(failure.message) })
+      .finally(settle)
   }
+
+  /**
+   * 启动宿主 ai.commitAuto 分离任务并跟随进度。页面开着时轮询 operationStatus
+   * 更新横幅;关窗后轮询停,宿主任务不受影响。也作为 CommitComposer 的
+   * onAutoCommit 提供给改动列表面板。
+   */
+  var autoCommitRequest = function (parameters, options) {
+    var opts = options || {}
+    setAiNotice(null)
+    var epoch = contextEpochRef.current
+    var active = function () { return contextEpochRef.current === epoch }
+    return call('operationStart', { root: repo.root, method: 'ai.commitAuto', parameters: withExplicitSession(parameters, props.sessionId) })
+      .then(function (job) {
+        if (typeof opts.onJob === 'function') opts.onJob(job)
+        if (active()) headerJob[1](job)
+        return watchOperation(call, job, {
+          alive: active,
+          onUpdate: function (value) { if (typeof opts.onJob === 'function') opts.onJob(value); if (active()) headerJob[1](value) },
+          message: function (state) { return t('lfs.' + state) },
+        })
+      })
+      .then(function (value) {
+        if (!active()) return value
+        if (value?.empty === true) { setAiNotice(value.reason || t('commit.nothing')) }
+        else if (value?.error || value?.cancelled) succeed(t('ai.auto.partial'), value?.error?.message || null)
+        else succeed(t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit'))
+        if (typeof opts.after === 'function') opts.after()
+        return value
+      })
+      .catch(function (failure) {
+        if (active()) fail(failure.message, 'ai.commitAuto')
+        if (typeof opts.onError === 'function') opts.onError(failure)
+        return null
+      })
+  }
+
+  // 重开窗口提醒:上一个窗口发起的 ai.commitAuto 宿主任务可能已经完成或失败。
+  React.useEffect(function () {
+    if (repo === null) return
+    var epoch = contextEpochRef.current
+    call('operationStatus', { root: repo.root }, { silent: true, silentError: true }).then(function (job) {
+      if (contextEpochRef.current !== epoch) return
+      if (job?.method !== 'ai.commitAuto' || job.state === 'running') return
+      if (!job.endedAt || Date.now() - job.endedAt > 10 * 60_000) return
+      var key = job.root + '#' + job.id
+      if (autoNotifiedRef.current.has(key)) return
+      autoNotifiedRef.current.add(key)
+      var value = job.state === 'complete' ? job.result?.value : null
+      if (value?.empty === true) return
+      if (job.state === 'complete' && job.result?.ok === true) {
+        if (value?.error) fail(value.error.message)
+        else succeed(t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit'))
+      } else fail(job.result?.error?.message || t('ai.auto.failed'))
+    }).catch(function () {})
+  }, [repo?.root, props.sessionId])
 
   // --- chip values -----------------------------------------------------
 
@@ -1327,10 +1434,11 @@ function GitStatusChips(props) {
           message: headerChangelists.mode === 'lists' ? headerChangelists.message : message,
           setMessage: headerChangelists.mode === 'lists' ? headerChangelists.setMessage : function (value) { messageLatestRef.current = value; setMessage(value) },
           busy: busy,
-          aiBusy: aiBusy, onCancelGenerate: cancelAi,
+          aiBusy: aiBusy, onCancelGenerate: cancelAutoGeneration,
           busyMethod: busyMethod,
           aiNotice: aiNotice,
           onGenerate: generateMessage,
+          onAutoCommit: autoCommitRequest,
           onCommit: function () { commitAuto('commit') },
           onCommitPush: function () { commitAuto('push') },
           onCommitSync: function () { commitAuto('sync') },
@@ -1475,7 +1583,8 @@ function GitStatusChips(props) {
             selectedPath: viewerPath,
             message: headerChangelists.mode === 'lists' ? headerChangelists.message : message,
             setMessage: headerChangelists.mode === 'lists' ? headerChangelists.setMessage : function (value) { messageLatestRef.current = value; setMessage(value) },
-            busy: busy, aiBusy: aiBusy, onCancelGenerate: cancelAi, busyMethod: busyMethod, aiNotice: aiNotice, onGenerate: generateMessage,
+            busy: busy, aiBusy: aiBusy, onCancelGenerate: cancelAutoGeneration, busyMethod: busyMethod, aiNotice: aiNotice, onGenerate: generateMessage,
+            onAutoCommit: autoCommitRequest,
             onCommit: function () { commitAuto('commit') }, onCommitPush: function () { commitAuto('push') },
             onCommitSync: function () { commitAuto('sync') }, syncAction: null, onWrite: write,
             onOpenFile: function (next) { setViewerPath(next) },

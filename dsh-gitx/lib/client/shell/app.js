@@ -314,6 +314,8 @@ function GitApp(props) {
   var busy = busyState[0] + (useCommitMessageBusy(repo?.root) ? 1 : 0)
   var setBusy = busyState[1]
   var pendingWriteRef = React.useRef(false)
+  // 重开窗口的 ai.commitAuto 完结提醒去重(每个 job 只报一次)。
+  var autoNotifiedRef = React.useRef(new Set())
   var writeMethodState = React.useState(null)
   var writeMethod = writeMethodState[0]
   var setWriteMethod = writeMethodState[1]
@@ -956,15 +958,53 @@ function GitApp(props) {
   )
 
   var runWithProgress = function (method, payload) {
-    if (!['clone', 'write.fetch', 'write.push', 'write.pull', 'write.lfsTransfer', 'write.commit', 'write.commitPaths'].includes(method)) return run(method, payload, { silentError: true })
+    if (!['clone', 'write.fetch', 'write.push', 'write.pull', 'write.lfsTransfer', 'write.commit', 'write.commitPaths', 'ai.commitAuto'].includes(method)) return run(method, payload, { silentError: true })
     setBusy(function (count) { return count + 1 })
-    if (['write.commit', 'write.commitPaths'].includes(method)) setError(null)
+    if (['write.commit', 'write.commitPaths', 'ai.commitAuto'].includes(method)) setError(null)
     var owner = method === 'clone' ? payload.directory : repo.root
     var call = function (name, body) { return run(name, body, { silent: true, silentError: true }) }
     return call('operationStart', { root: owner, method: method, parameters: payload }).then(function (job) {
       return watchOperation(call, job, { alive: function () { return alive.current }, onUpdate: backgroundJob[1], message: function (state) { return t('lfs.' + state) } })
     }).finally(function () { setBusy(function (count) { return Math.max(0, count - 1) }) })
   }
+
+  /**
+   * ai.commitAuto 后台接力:提交→(拉取/)推送由宿主分离任务执行,窗口关掉只停
+   * 进度轮询,任务继续跑完。CommitComposer 通过 onAutoCommit 调到这里。
+   */
+  var autoWrite = function (request, options) {
+    var opts = options || {}
+    return runWithProgress('ai.commitAuto', request).then(function (value) {
+      setToast({ seq: Date.now(), text: value?.empty === true ? t('commit.nothing')
+        : value?.error || value?.cancelled ? t('ai.auto.partial')
+        : t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit') })
+      if (opts.after !== undefined) opts.after()
+      return value
+    }).catch(function (failure) {
+      if (opts.onError !== undefined) opts.onError(failure)
+      else setAiNotice(failure.message)
+      return null
+    })
+  }
+
+  // 重开窗口提醒:上一个窗口发起的 ai.commitAuto 宿主任务可能已经完成或失败。
+  React.useEffect(function () {
+    if (repo === null) return
+    run('operationStatus', { root: repo.root }, { silent: true, silentError: true }).then(function (job) {
+      if (!alive.current) return
+      if (job?.method !== 'ai.commitAuto' || job.state === 'running') return
+      if (!job.endedAt || Date.now() - job.endedAt > 10 * 60_000) return
+      var key = job.root + '#' + job.id
+      if (autoNotifiedRef.current.has(key)) return
+      autoNotifiedRef.current.add(key)
+      var value = job.state === 'complete' ? job.result?.value : null
+      if (value?.empty === true) return
+      if (job.state === 'complete' && job.result?.ok === true) {
+        if (value?.error) setAiNotice(value.error.message)
+        else setToast({ seq: Date.now(), text: t(value?.mode === 'sync' ? 'ai.auto.sync' : value?.mode === 'push' ? 'ai.auto.push' : 'ai.auto.commit') })
+      } else setAiNotice(job.result?.error?.message || t('ai.auto.failed'))
+    }).catch(function () {})
+  }, [repo === null ? null : repo.root])
 
   var createStash = function () {
     if (busy > 0 || status === null || (status.files || []).length === 0) return
@@ -1800,6 +1840,7 @@ function GitApp(props) {
               changelists: changelistModel,
               busy: busy > 0, busyMethod: writeMethod, status: status, tracking: tracking,
               onWrite: performWrite, afterWrite: afterWrite, run: run, repo: repo,
+              onAutoCommit: autoWrite,
               aiNotice: aiNotice, setAiNotice: setAiNotice, sidebar: true, t: t })) : null,
         ])
       : null,
