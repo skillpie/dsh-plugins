@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "TokenBank",
+    "title": "TokenBank Free Models",
     "description": "TokenBank gateway bridge: register, balance, deposits and recharge."
   },
   "probeFailed": "This API key does not work upstream",

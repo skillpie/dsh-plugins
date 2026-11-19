@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "TokenBank",
+    "title": "TokenBank免费模型",
     "description": "TokenBank 网关桥：注册送 Key、余额、密钥托管与充值。"
   },
   "probeFailed": "该 API Key 无法在上游正常使用",
