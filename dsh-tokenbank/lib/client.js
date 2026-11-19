@@ -611,7 +611,7 @@ window.__ModuleLoader__.load({
       var data = st[0]
       var portal = (data && data.portalUrl) || 'https://bank.skillpie.cn'
       var anchor = snap.anchor || { right: window.innerWidth - 16, top: window.innerHeight - 80 }
-      var panelWidth = 320
+      var panelWidth = 256
       return h('div', { style: { position: 'fixed', inset: 0, zIndex: 1999 } },
         h('div', { style: { position: 'absolute', inset: 0 }, onClick: close }),
         h('div', {
