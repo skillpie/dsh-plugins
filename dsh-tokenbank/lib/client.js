@@ -54,6 +54,7 @@ window.__ModuleLoader__.load({
       displayName: '昵称（可选）',
       code: '邮箱验证码',
       sendCode: '发送验证码',
+      codeInvalid: '验证码无效或已过期,请重新发送',
       codeSent: '已发送，请查收邮箱',
       captcha: '图形验证码',
       captchaCode: '输入图中字符',
@@ -141,6 +142,7 @@ window.__ModuleLoader__.load({
       displayName: 'Display name (optional)',
       code: 'Email code',
       sendCode: 'Send code',
+      codeInvalid: 'Code invalid or expired — please resend',
       codeSent: 'Sent — check your inbox',
       captcha: 'Captcha',
       captchaCode: 'Type the characters',
@@ -1068,14 +1070,13 @@ window.__ModuleLoader__.load({
 
       React.useEffect(function () {
         if (mode === 'login') refreshCaptcha()
+        sent[1](false)
       }, [mode, refreshCaptcha])
 
       var submit = React.useCallback(async function () {
         busy[1](true); error[1]('')
         try {
           if (mode === 'register') {
-            await api('send-code', { email: email[0] })
-            sent[1](true)
             await api('register', {
               email: email[0], code: code[0], password: password[0],
               displayName: displayName[0], savePassword: savePassword[0],
@@ -1089,7 +1090,9 @@ window.__ModuleLoader__.load({
           }
           await onAuthed()
         } catch (err) {
-          error[1](String(err.message || err))
+          var msg = String(err.message || err)
+          if (mode === 'register' && /validation/i.test(msg)) msg = t('codeInvalid')
+          error[1](msg)
           if (mode === 'login') refreshCaptcha()
         } finally {
           busy[1](false)

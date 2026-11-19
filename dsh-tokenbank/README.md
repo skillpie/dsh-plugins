@@ -20,6 +20,16 @@ DeepSeek Harness(DSH)插件:一键用上 [TokenBank](https://bank.skillpie.cn) �
 - **低余额提醒**:会话里模型因余额不足报错时,弹窗引导去充值。
 - **安全**:门户会话与身份持久化在 DSH 凭据记录 `dsh-tokenbank/identity`;可选记住密码用于静默重登;插件 HTTP API 仅限宿主同源访问。
 
+## 截图
+
+| 账户弹窗 | 一键托管(设置 → 模型) |
+|---|---|
+| ![账户弹窗](docs/screenshots/account-popup.webp) | ![一键托管](docs/screenshots/settings-deposit.webp) |
+
+| 门户·账户总览 | 门户·交易行情 |
+|---|---|
+| ![账户总览](docs/screenshots/portal-overview.webp) | ![交易行情](docs/screenshots/portal-market.webp) |
+
 ## 安装
 
 ```sh
