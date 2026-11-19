@@ -425,9 +425,18 @@ window.__ModuleLoader__.load({
       return String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
     }
     /** 当前档位提示:用户固定的四组文案。 */
-    var RECHARGE_HINTS = { 1000: '约 3846万 TOKEN ｜ 192 次对话', 5000: '约 1.9亿 TOKEN ｜ 962 次对话', 10000: '约 3.8亿 TOKEN ｜ 1,923 次对话', 30000: '约 12亿 TOKEN ｜ 5,769 次对话' }
-    function rechargeHint(fen) {
-      return RECHARGE_HINTS[fen] || ''
+    var RECHARGE_HINTS = { 1000: 38460000, 5000: 192300000, 10000: 384600000, 30000: 1154000000 }
+    function pickedCredit(fen) {
+      var list = packs && packs[0] || []
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].fen === fen && typeof list[i].creditNano === 'number') return list[i].creditNano
+      }
+      return undefined
+    }
+    function rechargeHint(fen, creditNano) {
+      var tokens = RECHARGE_HINTS[fen]
+      var usd = (creditNano ? creditNano / 1e9 : (fen / 100 / 6.5)).toFixed(2)
+      return '获得 $' + usd + ' ≈ ' + humanTokens(tokens) + ' TOKEN'
     }
 
     /** 词元数 → "1.2亿"/"3.4万"/"5000"。 */
@@ -455,7 +464,7 @@ window.__ModuleLoader__.load({
             if (!list || !list.length || !price || price <= 0) return
             packs[1](list.map(function (pk) {
               var nano = Number(pk.credit_nano_usd || 0) + Number(pk.bonus_nano_usd || 0)
-              return { fen: Number(pk.cny_fen), usd: nano / 1e9, tokens: nano / price }
+              return { fen: Number(pk.cny_fen), usd: nano / 1e9, tokens: nano / price, creditNano: nano }
             }).filter(function (pk) { return pk.fen !== 50000 }))
           }).catch(function () {})
         return function () { stopped = true }
@@ -521,7 +530,7 @@ window.__ModuleLoader__.load({
           ]).map(function (pk) {
             var label
             if (pk.usd !== undefined) {
-              label = '¥' + (pk.fen / 100) + '（$' + pk.usd.toFixed(2) + '）'
+              label = '¥' + (pk.fen / 100)
             } else {
               label = '¥' + (pk.fen / 100)
             }
@@ -530,7 +539,7 @@ window.__ModuleLoader__.load({
               style: Object.assign({}, buttonStyle, {
                 flex: '1 1 calc(50% - 6px)', justifyContent: 'center',
                 fontWeight: picked[0] === pk.fen ? 700 : 400,
-                borderColor: picked[0] === pk.fen ? '#ff4f1f' : undefined,
+                borderColor: picked[0] === pk.fen ? '#ff4f1f' : 'var(--dsw-alias-border-l2, #c9ccd1)',
                 color: picked[0] === pk.fen ? '#ff4f1f' : undefined,
               }),
               onClick: function () { picked[1](pk.fen) },
@@ -542,7 +551,7 @@ window.__ModuleLoader__.load({
           err[0] ? h('span', { style: { color: '#d54941' } }, err[0]) : null,
         ) : null,
         h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', textAlign: 'center' } },
-          rechargeHint(picked[0])),
+          rechargeHint(picked[0], pickedCredit(picked[0]))),
         h('div', {
           style: {
             padding: 10, borderRadius: 8,
@@ -558,7 +567,7 @@ window.__ModuleLoader__.load({
                 '$1 = ¥6.50',
                 h('span', { style: { background: '#ff4f1f', color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 11, fontWeight: 700 } }, '最优惠'))),
             h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-              h('span', null, 'OpenAI/Anthropic/Gemini'),
+              h('span', null, 'OpenAI/Anthropic'),
               h('span', null, '$1 = ¥7.25 ~ 7.45')),
             h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
               h('span', null, '国内中转站均价'),
@@ -620,8 +629,15 @@ window.__ModuleLoader__.load({
             right: Math.max(8, window.innerWidth - anchor.right),
             bottom: window.innerHeight - anchor.top + 8,
             maxHeight: 420, overflow: 'auto',
-            background: 'var(--dsw-alias-bg-base)', color: 'var(--dsw-alias-label-primary)',
-            borderRadius: 12, padding: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+            /* 与模型选择器菜单(MenuSurface)完全一致的材质 */
+            background: 'var(--dsw-menu-surface-fill)',
+            backdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            WebkitBackdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            color: 'var(--dsw-alias-label-primary)',
+            borderRadius: 'var(--dsw-radius-md, 10px)', padding: 14,
+            border: 0,
+            '--dsw-elevation-stroke-color': 'var(--dsw-alias-border-l1)',
+            boxShadow: 'var(--dsw-elevation-prominent)',
             border: '1px solid var(--dsw-alias-border-l1)',
           },
           onClick: function (e) { e.stopPropagation() },
@@ -636,14 +652,14 @@ window.__ModuleLoader__.load({
             h('span', { style: { flex: 1 } }),
             data && data.loggedIn ? h('button', {
               type: 'button', title: pageT('depositManageTip'),
-              style: Object.assign({}, buttonStyle, { height: 24, padding: '0 10px', fontSize: 12 }),
+              style: Object.assign({}, buttonStyle, { height: 24, padding: '0 10px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
               onClick: function () { tbStore.set({ authOpen: false }); openSettingsPage() },
             }, pageT('depositManage')) : null,
             data && data.loggedIn ? h('button', {
               type: 'button', title: pageT('logout'), 'aria-label': pageT('logout'),
               style: logoutArm[0]
                 ? Object.assign({}, buttonStyle, { height: 24, padding: '0 8px', fontSize: 11, color: '#d03050', borderColor: '#d03050', borderWidth: 1, borderStyle: 'solid' })
-                : { height: 24, minWidth: 24, padding: 0, border: '1px solid rgba(208,48,80,0.45)', borderRadius: 6, background: 'transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#d03050' },
+                : { height: 24, minWidth: 24, padding: 0, border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#d03050' },
               onClick: async function () {
                 if (!logoutArm[0]) { logoutArm[1](true); return }
                 await api('logout').catch(function () {})
@@ -670,7 +686,7 @@ window.__ModuleLoader__.load({
                     data.account && typeof data.account.balance_nano_usd === 'number'
                       ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—'),
                   h('span', { style: { display: 'inline-flex', gap: 6 } },
-                    h('button', {
+                    checkin[0].done && !(data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9) ? null : h('button', {
                       type: 'button', disabled: checkin[0].busy || checkin[0].done,
                       style: Object.assign({}, buttonStyle, {
                         height: 26, padding: '0 12px', fontSize: 12,
@@ -696,7 +712,7 @@ window.__ModuleLoader__.load({
                         }
                       },
                     }, checkin[0].done ? pageT('checkinDone') : pageT('checkin')),
-                    (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9)
+                    (checkin[0].done || (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9))
                       ? h('button', {
                           type: 'button',
                           style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
