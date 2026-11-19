@@ -691,11 +691,13 @@ window.__ModuleLoader__.load({
                         }
                       },
                     }, checkin[0].done ? pageT('checkinDone') : pageT('checkin')),
-                    h('button', {
-                      type: 'button',
-                      style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
-                      onClick: function () { rechargeOpen[1](function (v) { return !v }) },
-                    }, pageT('recharge')),
+                    (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9)
+                      ? h('button', {
+                          type: 'button',
+                          style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
+                          onClick: function () { rechargeOpen[1](function (v) { return !v }) },
+                        }, pageT('recharge'))
+                      : null,
                   ),
                 ),
                 rechargeOpen[0] ? h(InlineRecharge, {
