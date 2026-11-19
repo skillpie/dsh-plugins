@@ -1,0 +1,32 @@
+{
+  "meta": {
+    "title": "TokenBank",
+    "description": "TokenBank gateway bridge: register, balance, deposits and recharge."
+  },
+  "probeFailed": "This API key does not work upstream",
+  "probeInconclusive": "Upstream probe inconclusive; deposited anyway",
+  "probeRejected": "{n} key(s) failed the live probe and were dropped",
+  "notifyOk": "OK",
+  "depositHint": "One-click deposit: host your API key on TokenBank to convert its temporary quota into permanent balance — ideal when the weekly reset is close and quota remains unused.",
+  "learnMore": "About TokenBank →",
+  "freeModelsEntry": "TokenBank free models",
+  "addFreeModels": "Get free models",
+  "composerEntry": "TokenBank account",
+  "reload": "Reload",
+  "openSite": "Open website",
+  "recharge": "Recharge",
+  "rechargePay": "Pay",
+  "rechargeDone": "Recharge successful",
+  "rechargePending": "No payment detected yet; if you already paid, retry or refresh later",
+  "depositManage": "Manage keys",
+  "rechargeWaiting": "Waiting for payment…",
+  "rechargeOpenPay": "Open payment page",
+  "rechargeCancel": "Cancel",
+  "goSwitch": "Switch now",
+  "depositManageTip": "Deposit your API key into TokenBank — remaining temporary quota transfers to permanent credit. Useful when the weekly reset is near.",
+  "checkin": "Check in",
+  "checkinDone": "Checked in",
+  "checkinOk": "Check-in success",
+  "checkinStreak": "{n}-day streak",
+  "meta.detail": "docs/DETAIL.md"
+}

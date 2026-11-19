@@ -1,0 +1,9 @@
+# dsh-tokenbank bundle patch.
+#
+# One dual-face row: the host half serves POST /dsh-tokenbank/api (portal
+# proxy: register/login/me/deposits/recharge + session-error watcher), the
+# client half registers the sidebar panel and main view.
+- insert:
+    - id: dsh-tokenbank
+      name: "dsh-tokenbank"
+      config: {}

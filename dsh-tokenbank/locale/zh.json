@@ -1,0 +1,32 @@
+{
+  "meta": {
+    "title": "TokenBank",
+    "description": "TokenBank 网关桥：注册送 Key、余额、密钥托管与充值。"
+  },
+  "probeFailed": "该 API Key 无法在上游正常使用",
+  "probeInconclusive": "上游探活未出结论,已放行托管",
+  "probeRejected": "{n} 个 Key 探活失败已被剔除",
+  "notifyOk": "知道了",
+  "depositHint": "一键托管:把你的 API Key 托管到 TokenBank,临时额度自动转移为永久额度保留使用。适用于周重置快到了还没用完等情况。",
+  "learnMore": "了解 TokenBank →",
+  "freeModelsEntry": "TokenBank 免费模型",
+  "addFreeModels": "获取免费模型",
+  "composerEntry": "TokenBank 账户",
+  "reload": "刷新",
+  "openSite": "打开官网",
+  "recharge": "充值",
+  "rechargePay": "去支付",
+  "rechargeDone": "充值成功,余额已到账",
+  "rechargePending": "尚未检测到支付结果,如已完成支付请稍后重试或刷新",
+  "depositManage": "托管",
+  "rechargeWaiting": "等待支付中…",
+  "rechargeOpenPay": "打开支付页",
+  "rechargeCancel": "取消",
+  "goSwitch": "去切换",
+  "depositManageTip": "把你的 API Key 托管到 TokenBank,临时额度自动转移为永久额度保留使用。适用于周重置快到了还没用完等情况。",
+  "checkin": "签到",
+  "checkinDone": "已签到",
+  "checkinOk": "签到成功",
+  "checkinStreak": "已连签 {n} 天",
+  "meta.detail": "docs/DETAIL.zh.md"
+}
