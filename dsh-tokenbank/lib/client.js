@@ -426,13 +426,6 @@ window.__ModuleLoader__.load({
     }
     /** 当前档位提示:用户固定的四组文案。 */
     var RECHARGE_HINTS = { 1000: 38460000, 5000: 192300000, 10000: 384600000, 30000: 1154000000 }
-    function pickedCredit(fen) {
-      var list = packs && packs[0] || []
-      for (var i = 0; i < list.length; i++) {
-        if (list[i].fen === fen && typeof list[i].creditNano === 'number') return list[i].creditNano
-      }
-      return undefined
-    }
     function rechargeHint(fen, creditNano) {
       var tokens = RECHARGE_HINTS[fen]
       var usd = (creditNano ? creditNano / 1e9 : (fen / 100 / 6.5)).toFixed(2)
@@ -452,6 +445,13 @@ window.__ModuleLoader__.load({
       var busy = React.useState(false)
       var err = React.useState('')
       var packs = React.useState(null) // [{fen, usd, tokens}]
+      function pickedCredit(fen) {
+        var list = packs && packs[0] || []
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].fen === fen && typeof list[i].creditNano === 'number') return list[i].creditNano
+        }
+        return undefined
+      }
       React.useEffect(function () {
         var stopped = false
         Promise.all([api('recharge-config').catch(function () { return null }), api('wordcoin-market').catch(function () { return null })])
