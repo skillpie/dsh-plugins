@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "TokenBank免费模型",
-    "description": "TokenBank 网关桥：注册送 Key、余额、密钥托管与充值。"
+    "description": "DSH 免费模型：一键注册 TokenBank 领免费 APIKey 送 $5 体验金，免费 GLM 模型直接进模型列表；自带余额查询、API Key 密钥托管（临时额度转永久）、每日签到、充值入口（支付宝），获取免费模型无需自建中转。致敬 dsh-our-free-model。官网 https://bank.skillpie.cn"
   },
   "probeFailed": "该 API Key 无法在上游正常使用",
   "probeInconclusive": "上游探活未出结论,已放行托管",
