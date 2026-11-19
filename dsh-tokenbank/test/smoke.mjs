@@ -15,7 +15,7 @@ import assert from 'node:assert/strict'
 import { __dispatchForTests, Config } from '../lib/index.js'
 import * as tb from '../lib/tb.js'
 
-const PORT = 18317
+const PORT = 18317 + (Number(process.env.SMOKE_PORT_OFFSET)||0)
 const BASE = `http://127.0.0.1:${PORT}`
 
 /* ── stub token-bank portal ──────────────────────────────────────────── */

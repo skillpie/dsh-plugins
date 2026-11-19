@@ -595,11 +595,16 @@ window.__ModuleLoader__.load({
         api('status').then(function (data) {
           if (!stopped) { st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl }) }
         }).catch(function () {})
-        api('checkin-status').then(function (res) {
-          var ci = res && res.checkin
-          if (!stopped && ci && ci.enabled && ci.checked_today) checkin[1]({ busy: false, done: true })
-        }).catch(function () {})
-        return function () { stopped = true }
+        var pull = function () {
+          api('checkin-status').then(function (res) {
+            var ci = res && res.checkin
+            if (!stopped && ci && ci.enabled && ci.checked_today) checkin[1]({ busy: false, done: true })
+            else if (!stopped && ci && ci.enabled) checkin[1]({ busy: false, done: false })
+          }).catch(function () {})
+        }
+        pull()
+        var timer = setInterval(pull, 60000)
+        return function () { stopped = true; clearInterval(timer) }
       }, [snap.authOpen])
       if (!snap.authOpen || !runtimeCtx) return null
       var close = function () { tbStore.set({ authOpen: false }) }
