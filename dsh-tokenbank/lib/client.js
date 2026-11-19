@@ -616,7 +616,7 @@ window.__ModuleLoader__.load({
         h('div', { style: { position: 'absolute', inset: 0 }, onClick: close }),
         h('div', {
           style: {
-            position: 'fixed', width: panelWidth, maxWidth: '92vw',
+            position: 'fixed', width: panelWidth, maxWidth: 'calc(100vw - 16px)',
             right: Math.max(8, window.innerWidth - anchor.right),
             bottom: window.innerHeight - anchor.top + 8,
             maxHeight: 420, overflow: 'auto',
