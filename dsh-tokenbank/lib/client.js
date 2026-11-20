@@ -610,6 +610,7 @@ window.__ModuleLoader__.load({
       var rechargeOpen = React.useState(false)
       var logoutArm = React.useState(false)
       var innerToast = React.useState(null)
+      var checkinFlash = React.useState(null) // 签到成功闪现文案(复用获取免费模型按钮样式,2s 回原样)
       var checkin = React.useState({ busy: false, done: false })
       React.useEffect(function () {
         if (!snap.authOpen) logoutArm[1](false)
@@ -715,7 +716,8 @@ window.__ModuleLoader__.load({
                             var fresh = await api('status').catch(function () { return null })
                             if (fresh) { st[1](fresh); tbStore.set({ loggedIn: Boolean(fresh.loggedIn), portalUrl: fresh.portalUrl }) }
                             var streakText = ci.streak > 1 ? '（' + pageT('checkinStreak').replace('{n}', String(ci.streak)) + '）' : ''
-                            innerToast[1]({ text: pageT('checkinOk') + streakText })
+                            checkinFlash[1](pageT('checkinOk') + streakText)
+                            window.setTimeout(function () { checkinFlash[1](null) }, 2000)
                           }
                         } catch (e9) {
                           checkin[1]({ busy: false, done: false })
@@ -779,7 +781,11 @@ window.__ModuleLoader__.load({
                       tbStore.set({ notify: { kind: 'error', title: String(err.message || err), detail: '' } })
                     }
                   },
-                }, pageT('addFreeModels')) : null,
+                }, pageT('addFreeModels'))
+                  : checkinFlash[0] ? h('button', {
+                      type: 'button', tabIndex: -1,
+                      style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', cursor: 'default', opacity: 0.85 }),
+                    }, checkinFlash[0]) : null,
               )
             : h(AuthCard, {
                 mode: snap.authMode,
