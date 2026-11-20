@@ -429,7 +429,8 @@ window.__ModuleLoader__.load({
     function rechargeHint(fen, creditNano) {
       var tokens = RECHARGE_HINTS[fen]
       var usd = (creditNano ? creditNano / 1e9 : (fen / 100 / 6.5)).toFixed(2)
-      return '获得 $' + usd + ' ≈ ' + humanTokens(tokens) + ' TOKEN'
+      var turns = Math.round(tokens / 2000) // 旧口径:1 轮对话 ≈ 2000 TOKEN
+      return '获得 $' + usd + ' ≈ ' + humanTokens(turns) + ' 轮对话'
     }
 
     /** 词元数 → "1.2亿"/"3.4万"/"5000"。 */
@@ -561,17 +562,31 @@ window.__ModuleLoader__.load({
         },
           h('div', { style: { fontWeight: 700, fontSize: 13, marginBottom: 6 } }, '价格对比'),
           h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 } },
-            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-              h('span', { style: { fontWeight: 700 } }, 'TokenBank'),
-              h('span', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
-                '$1 = ¥6.50',
-                h('span', { style: { background: '#ff4f1f', color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 11, fontWeight: 700 } }, '最优惠'))),
-            h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-              h('span', null, 'OpenAI/Anthropic'),
-              h('span', null, '$1 = ¥7.25 ~ 7.45')),
-            h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-              h('span', null, '国内中转站均价'),
-              h('span', null, '$1 = ¥7.80 ~ 8.50'))),
+            (function () {
+              // 三家统一按当前所选档位的 CNY 面额折算可买 TOKEN(各家单价不同):
+              // TokenBank 用真实 credit(含赠送),OpenAI/Anthropic 与中转站按其 $ 单价换算
+              var cny = picked[0] / 100
+              // TokenBank 官方口径:¥100 = 3.8亿 TOKEN(RECHARGE_HINTS 锚点,与提示行一致)
+              var tbTokens = RECHARGE_HINTS[picked[0]] || Math.round(cny * 3.846e6) // 兜底:¥1≈384.6万 TOKEN
+              // 同样的人民币,其他厂商按其 $ 单价折算出美元,再按 TokenBank 单价折 TOKEN:
+              // tokens = (cny / price_cny_per_usd) * (tbTokens / usd_of_this_pack)
+              var usdOfPack = cny / 6.5
+              var vendorTokens = (cny / 7.25) / usdOfPack * tbTokens   // $1=¥7.25
+              var relayTokens = (cny / 7.8) / usdOfPack * tbTokens     // 中转站 $1≈¥7.8
+              return [
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                  h('span', { style: { fontWeight: 700 } }, 'TokenBank'),
+                  h('span', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+                    h('span', { style: { background: '#ff4f1f', color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 11, fontWeight: 700 } }, '最优惠'),
+                    humanTokens(tbTokens) + ' TOKEN')),
+                h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+                  h('span', null, 'OpenAI/Anthropic'),
+                  h('span', null, humanTokens(vendorTokens) + ' TOKEN')),
+                h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+                  h('span', null, '国内中转站均价'),
+                  h('span', null, humanTokens(relayTokens) + ' TOKEN')),
+              ]
+            })()),
           ),
         h('button', {
           type: 'button', style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center' }),
