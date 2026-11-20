@@ -403,6 +403,13 @@ async function dispatch(ctx, state, cfg, body) {
       } catch {
         list = await tb.listGatewayModels(baseUrl, key)
       }
+      // 只保留网关实际可调的模型:/v1/models 由有可用上游凭证的分组聚合而来,
+      // 门户目录会把无凭证分组的模型也列出来,直接加进模型列表只会调用报错。
+      let callable = new Set()
+      try {
+        for (const m of await tb.listGatewayModels(baseUrl, key)) callable.add(m.id)
+      } catch { /* 网关失败时不过滤,退回门户目录 */ }
+      if (callable.size > 0) list = list.filter((m) => callable.has(m.id))
       return { ok: true, models: list, protocol: groupProtocol || undefined, accessKey: key }
     }
     case 'low-balance':

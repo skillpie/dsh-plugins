@@ -128,7 +128,7 @@ const portal = createServer((req, res) => {
       res.writeHead(401).end('{}'); return
     }
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ data: [{ id: 'free-model-a' }, { id: 'free-model-b' }] }))
+    res.end(JSON.stringify({ data: [{ id: 'glm-5.3-flash' }, { id: 'glm-5.3' }, { id: 'no-cred-model' }] }))
     return
   }
   respond(404000, null)
@@ -236,7 +236,7 @@ try {
   assert.equal(models.protocol, 'anthropic-messages')
   assert.equal(models.accessKey, 'sk-signup-key')
   const fallback = await dispatch({ action: 'gateway-models', noPortal: true })
-  assert.deepEqual(fallback.models.map((m) => m.id), ['free-model-a', 'free-model-b'])
+  assert.deepEqual(fallback.models.map((m) => m.id), ['glm-5.3-flash', 'glm-5.3', 'no-cred-model'])
   const low = await dispatch({ action: 'low-balance' })
   assert.equal(low.event.message, '余额不足')
 
