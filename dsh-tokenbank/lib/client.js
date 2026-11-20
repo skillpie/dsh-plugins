@@ -47,9 +47,6 @@ window.__ModuleLoader__.load({
       rechargeCancel: '取消',
       composerEntry: 'TokenBank 账户',
       officialSite: 'TokenBank 官网',
-      claimFree: '领取免费TOKEN',
-      freeToken: '免费模型',
-      modelLinked: '已接入 {n} 个模型，去切换',
       loading: '正在连接 TokenBank…',
       balance: '余额',
       totalEarned: '累计收益',
@@ -142,9 +139,6 @@ window.__ModuleLoader__.load({
       rechargeCancel: 'Cancel',
       composerEntry: 'TokenBank account',
       officialSite: 'TokenBank website',
-      claimFree: 'Claim free TOKEN',
-      freeToken: 'FREE',
-      modelLinked: 'Linked {n} models, tap to switch',
       loading: 'Connecting to TokenBank…',
       balance: 'Balance',
       totalEarned: 'Total earned',
@@ -329,6 +323,33 @@ window.__ModuleLoader__.load({
     }
 
     /** 输入框工具行、模型选择器左侧的紧凑入口按钮。 */
+    function ComposerEntry() {
+      var snap = useTbStore()
+      React.useEffect(function () {
+        var stopped = false
+        api('status').then(function (data) {
+          if (!stopped) tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl })
+        }).catch(function () {})
+        return function () { stopped = true }
+      }, [])
+      var onClick = function () {
+        tbStore.set({ authOpen: true, authMode: 'register', anchor: null })
+      }
+      return h('button', {
+        type: 'button',
+        title: pageT('composerEntry'), 'aria-label': pageT('composerEntry'),
+        onClick: onClick,
+        style: {
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+          height: 29, minWidth: 29, padding: '0 2px', borderRadius: 7,
+          border: 'none', background: 'transparent',
+          cursor: 'pointer', position: 'relative',
+        },
+      },
+        h(TokenBankLogo, { size: 18 }),
+      )
+    }
+
     /** shell.overlay 轻提示:portal 到 document.body,压过设置页抽屉层级。 */
     function NotifyOverlay() {
       var snap = useTbStore()
@@ -589,8 +610,9 @@ window.__ModuleLoader__.load({
     function SidebarCard() {
       var snap = useTbStore()
       var st = React.useState(null)
+      var flash = React.useState(null)
+      var sLogoutArm = React.useState(false)
       var boxRef = React.useRef(null)
-      var sLogoutArm = React.useState(false) // 两段式退出确认(参考弹窗:首次点变红描边,再点才退出)
       React.useEffect(function () {
         var stopped = false
         api('status').then(function (data) {
@@ -601,27 +623,17 @@ window.__ModuleLoader__.load({
         }, 60000)
         return function () { stopped = true; clearInterval(timer) }
       }, [])
-      React.useEffect(function () {
-        var stopped = false
-        api('status').then(function (d) {
-          if (stopped) return
-          st[1](d)
-          tbStore.set({ loggedIn: Boolean(d.loggedIn), portalUrl: d.portalUrl })
-        }).catch(function () {})
-        return function () { stopped = true }
-      }, [snap.loggedIn, snap.authOpen])
-      var openGlobal = function (mode, opts) {
-        tbStore.set({ authOpen: true, authMode: mode || snap.authMode || 'login', anchor: null, startRecharge: Boolean(opts && opts.recharge) })
+      var openPanel = function (mode, extra) {
+        tbStore.set(Object.assign({ authOpen: true, authMode: mode || snap.authMode || 'login', anchor: null }, extra || {}))
       }
-      var flash = React.useState(null) // {text, models} —「已接入 n 个模型,点击去切换」
       var addModels = async function () {
-        if (flash[0]) return
+        var d = data
         try {
-          var d0 = st[0]
-          if (!d0 || !d0.accessKey) throw new Error(pageT('loading'))
-          var models = await api('gateway-models', { accessKey: d0.accessKey })
-          var list = Array.isArray(models) ? models : (models.models || models.list || [])
-          await addProviderToModels(runtimeCtx, d0.baseURL || d0.portalUrl || portal, { accessKey: d0.accessKey, list: list, protocol: models.protocol })
+          if (!d || !d.loggedIn) d = await api('status')
+          if (!d || !d.loggedIn) { openPanel('login'); return }
+          var models = await api('gateway-models', { accessKey: d.accessKey })
+          var list = (models && models.models) || []
+          await addProviderToModels(runtimeCtx, d.baseURL || d.portalUrl || 'https://bank.skillpie.cn', { accessKey: d.accessKey, list: list, protocol: models.protocol })
           flash[1]({ text: pageT('modelLinked').replace('{n}', String(list.length)), models: true })
           window.setTimeout(function () { flash[1](null) }, 3000)
         } catch (err) {
@@ -629,7 +641,6 @@ window.__ModuleLoader__.load({
         }
       }
       var data = st[0]
-      var portal = (data && data.portalUrl) || 'https://bank.skillpie.cn'
       var loggedIn = snap.loggedIn
       if (!runtimeCtx) return null
       var smallBtn = Object.assign({}, buttonStyle, { height: 24, padding: '0 8px', fontSize: 12 })
@@ -639,95 +650,65 @@ window.__ModuleLoader__.load({
           margin: '4px 10px 8px', display: 'flex', flexDirection: 'column', gap: 6, width: 'calc(100% - 20px)', boxSizing: 'border-box', alignSelf: 'stretch'
         },
       },
-        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 } },
-          h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 4 } },
-            h('span', {
-              className: 'tb-wordmark',
-              style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 14, letterSpacing: 0.5, color: '#ff4f1f', position: 'relative', top: -1, cursor: 'pointer' },
-              onClick: function () { openGlobal('register') },
-            }, 'TOKENBANK'),
-            h('a', { href: (data && data.portalUrl) || 'https://bank.skillpie.cn', target: '_blank', rel: 'noopener noreferrer', title: pageT('officialSite'), style: { display: 'inline-flex', color: 'var(--dsw-alias-label-secondary, #888)', textDecoration: 'none' } },
-              h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-                h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
-                h('path', { d: 'M15 3h6v6' }),
-                h('path', { d: 'M10 14L21 3' })))),
-          loggedIn
-            ? h('button', {
-              type: 'button', title: pageT('logout'), 'aria-label': pageT('logout'),
-              style: sLogoutArm[0]
-                ? Object.assign({}, buttonStyle, { height: 20, padding: '0 6px', fontSize: 11, color: '#d03050', borderColor: '#d03050', borderWidth: 1, borderStyle: 'solid' })
-                : { border: 'none', background: 'transparent', cursor: 'pointer', padding: 2, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#d03050' },
-              onClick: async function () {
-                if (!sLogoutArm[0]) { sLogoutArm[1](true); return }
-                await api('logout').catch(function () {})
-                sLogoutArm[1](false)
-                st[1](null)
-                tbStore.set({ loggedIn: false })
-              },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+          h('span', { className: 'tb-wordmark', style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 14, letterSpacing: 0.5, color: '#ff4f1f', position: 'relative', top: -1 } }, 'TOKENBANK'),
+          h('a', { href: (data && data.portalUrl) || 'https://bank.skillpie.cn', target: '_blank', rel: 'noopener noreferrer', title: pageT('officialSite'), style: { display: 'inline-flex', color: 'var(--dsw-alias-label-secondary, #888)', textDecoration: 'none' } },
+            h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+              h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+              h('path', { d: 'M15 3h6v6' }),
+              h('path', { d: 'M10 14L21 3' }))),
+          loggedIn ? h('button', {
+            type: 'button', title: pageT('logout'), 'aria-label': pageT('logout'),
+            style: sLogoutArm[0]
+              ? Object.assign({}, buttonStyle, { height: 20, padding: '0 6px', fontSize: 11, color: '#d03050', borderColor: '#d03050', borderWidth: 1, borderStyle: 'solid', marginLeft: 'auto' })
+              : { border: 'none', background: 'transparent', cursor: 'pointer', padding: 2, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#d03050', marginLeft: 'auto' },
+            onClick: async function () {
+              if (!sLogoutArm[0]) { sLogoutArm[1](true); return }
+              await api('logout').catch(function () {})
+              sLogoutArm[1](false)
+              st[1](null)
+              tbStore.set({ loggedIn: false })
             },
-              h('svg', { viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-                h('path', { d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' }),
-                h('path', { d: 'M16 17l5-5-5-5' }),
-                h('path', { d: 'M21 12H9' })))
-            : h('button', {
-              type: 'button',
-              style: { fontSize: 10, lineHeight: 1, padding: '3px 7px', borderRadius: 999, border: 'none', cursor: 'pointer', color: '#fff', background: '#ff4f1f', fontWeight: 600, letterSpacing: 0.3 },
-              onClick: function () { openGlobal('register') },
-            }, pageT('freeToken')),
-        loggedIn ? h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 } },
-          h('span', { style: { fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 } },
+          },
+            h('svg', { viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+              h('path', { d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' }),
+              h('path', { d: 'M16 17l5-5-5-5' }),
+              h('path', { d: 'M21 12H9' }))) : null),
+        loggedIn ? h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6 } },
+          h('span', { style: { fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
             (data && data.user && (data.user.display_name || data.user.name)) || data.email || ''),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 } }, data.email || ''),
-          h('span', { style: { fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flexShrink: 0 } },
-            data && data.account && typeof data.account.balance_nano_usd === 'number'
-              ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—'),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, data.email || ''),
         ) : null,
         loggedIn
           ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
-              h('button', { type: 'button', style: Object.assign({}, smallBtn, { borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)', flex: 1, justifyContent: 'center', whiteSpace: 'nowrap' }),
+              h('span', { style: { fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flex: 1 } },
+                data && data.account && typeof data.account.balance_nano_usd === 'number'
+                  ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—'),
+              h('button', { type: 'button', style: Object.assign({}, smallBtn, { borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
                 onClick: function () { openSettingsPage() } }, pageT('depositManage')),
-              h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 24, padding: '0 8px', fontSize: 12, flex: 1, justifyContent: 'center', whiteSpace: 'nowrap' }),
-                onClick: function () { openGlobal('login', { recharge: true }) } }, pageT('recharge')))
-          : null,
+              h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 24, padding: '0 8px', fontSize: 12 }),
+                onClick: function () { openPanel('login', { startRecharge: true }) } }, pageT('recharge')))
+          : h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('balance') + ': —'),
         loggedIn
-          ? flash[0] ? h('button', { type: 'button', tabIndex: -1,
-              style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%', cursor: 'pointer', opacity: 0.9 }),
-              onClick: flash[0].models ? function () {
-                flash[1](null)
-                window.setTimeout(function () {
-                  var triggers = document.querySelectorAll('button[aria-haspopup="menu"]')
-                  for (var q = 0; q < triggers.length; q++) {
-                    var lb = triggers[q].getAttribute('aria-label') || ''
-                    if (/选择模型|Select model/.test(lb)) { triggers[q].click(); return }
-                  }
-                }, 80)
-              } : undefined,
-            }, flash[0].text) : h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%' }),
-              onClick: addModels }, pageT('addFreeModels'))
-          : null,
-      ))
-    }
-
-    /** 按邮箱域名猜 webmail 首页;未知域名兜底 mail.<domain>。 */
-    function mailHomeUrl(emailAddr) {
-      var domain = String(emailAddr || '').split('@')[1]
-      if (!domain) return null
-      var d = domain.toLowerCase()
-      var table = [
-        [/^(qq|foxmail)\.com$/, 'https://mail.qq.com'],
-        [/^163\.com$/, 'https://mail.163.com'],
-        [/^126\.com$/, 'https://mail.126.com'],
-        [/^gmail\.com$/, 'https://mail.google.com'],
-        [/^(outlook|hotmail|live)\.(com|cn)$/, 'https://outlook.live.com'],
-        [/^icloud\.com$/, 'https://www.icloud.com/mail'],
-        [/^sina\.com$/, 'https://mail.sina.com.cn'],
-        [/^sohu\.com$/, 'https://mail.sohu.com'],
-        [/^aliyun\.com$/, 'https://mail.aliyun.com'],
-        [/^yeah\.net$/, 'https://mail.yeah.net'],
-        [/^139\.com$/, 'https://mail.10086.cn'],
-      ]
-      for (var i = 0; i < table.length; i++) if (table[i][0].test(d)) return table[i][1]
-      return 'https://mail.' + d
+          ? flash[0]
+            ? h('button', { type: 'button', tabIndex: -1,
+                style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%', cursor: 'pointer', opacity: 0.9 }),
+                onClick: flash[0].models ? function () {
+                  flash[1](null)
+                  window.setTimeout(function () {
+                    var triggers = document.querySelectorAll('button[aria-haspopup="menu"]')
+                    for (var q = 0; q < triggers.length; q++) {
+                      var lb = triggers[q].getAttribute('aria-label') || ''
+                      if (/选择模型|Select model/.test(lb)) { triggers[q].click(); return }
+                    }
+                  }, 80)
+                } : undefined,
+              }, flash[0].text)
+            : h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%' }),
+                onClick: addModels }, pageT('addFreeModels'))
+          : h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%' }),
+              onClick: function () { openPanel('register') } }, pageT('register')),
+      )
     }
 
     /** shell.overlay 账户/注册弹窗:登录态展示余额与快捷操作,未登录展示表单。 */
@@ -741,8 +722,10 @@ window.__ModuleLoader__.load({
       var checkin = React.useState({ busy: false, done: false })
       var depTip = React.useState(null) // 说明板块:hover 哪个按钮就显示哪段说明('deposit'|'recharge'|'models')
       React.useEffect(function () {
-        if (!snap.authOpen) { logoutArm[1](false); return }
-        rechargeOpen[1](Boolean(snap.startRecharge)) // 打开时同步「直达充值」标记(侧栏充值入口)
+        if (!snap.authOpen) logoutArm[1](false)
+      }, [snap.authOpen])
+      React.useEffect(function () {
+        if (snap.authOpen) rechargeOpen[1](Boolean(snap.startRecharge))
       }, [snap.authOpen])
       React.useEffect(function () {
         if (!snap.authOpen) return
@@ -762,20 +745,17 @@ window.__ModuleLoader__.load({
         return function () { stopped = true; clearInterval(timer) }
       }, [snap.authOpen])
       if (!snap.authOpen || !runtimeCtx) return null
-      var close = function () { tbStore.set({ authOpen: false }) }
+      var close = function () { tbStore.set({ authOpen: false, startRecharge: false }) }
       var data = st[0]
       var portal = (data && data.portalUrl) || 'https://bank.skillpie.cn'
-      var anchor = snap.anchor || null // null = 全局居中弹窗(侧栏入口)
-      var panelWidth = 320
+      var anchor = snap.anchor || { right: window.innerWidth - 16, top: window.innerHeight - 80 }
+      var panelWidth = 256
       return h('div', { style: { position: 'fixed', inset: 0, zIndex: 1999 } },
-        h('div', { style: { position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)' }, onClick: close }),
+        h('div', { style: { position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)' }, onClick: close }),
         h('div', {
           style: {
             position: 'fixed', width: panelWidth, maxWidth: 'calc(100vw - 16px)',
-            left: anchor ? undefined : '50%', top: anchor ? undefined : '50%',
-            transform: anchor ? undefined : 'translate(-50%, -50%)',
-            right: anchor ? Math.max(8, window.innerWidth - anchor.right) : undefined,
-            bottom: anchor ? window.innerHeight - anchor.top + 8 : undefined,
+            left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
             maxHeight: 520, overflow: 'auto',
             /* 与模型选择器菜单(MenuSurface)完全一致的材质 */
             background: 'var(--dsw-menu-surface-fill)',
@@ -946,9 +926,8 @@ window.__ModuleLoader__.load({
                 onAuthed: async function () {
                   tbStore.set({ authOpen: false })
                   try {
-                    var fresh = await api('status')
-                    if (fresh) tbStore.set({ loggedIn: Boolean(fresh.loggedIn), portalUrl: fresh.portalUrl })
                     if (!runtimeCtx.remote || !runtimeCtx.remote.settings) return
+                    var fresh = await api('status')
                     if (fresh && fresh.accessKey) {
                       var models = await api('gateway-models', { accessKey: fresh.accessKey })
                       var list = Array.isArray(models) ? models : (models.models || models.list || [])
@@ -1348,10 +1327,6 @@ window.__ModuleLoader__.load({
                   try {
                     await api('send-code', { email: email[0] })
                     sent[1](true)
-                    var mailUrl = mailHomeUrl(email[0])
-                    if (mailUrl) api('open-external', { url: mailUrl }).catch(function (e) {
-                      tbStore.set({ notify: { kind: 'error', title: 'open ' + mailUrl + ' failed: ' + String(e.message || e), detail: '' } })
-                    })
                   } catch (err) { error[1](String(err.message || err)) }
                   busy[1](false)
                 },
@@ -1470,6 +1445,9 @@ window.__ModuleLoader__.load({
 
         /* ── 模块②③④:选择器入口 + 弹层 + 设置页托管/状态 ── */
         runtimeCtx = ctx
+
+        // 输入框工具行、模型选择器左侧的紧凑入口按钮(弹账户/注册窗)
+        // 对话框输入框入口已移除,侧栏块是唯一入口
 
         // 侧栏底部长驻块(sidebar.footer.action 是 list 槽,渲染为追加项)
         ctx.slots.inject('sidebar.footer.action', function () {
