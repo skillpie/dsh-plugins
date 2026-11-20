@@ -28,9 +28,11 @@ window.__ModuleLoader__.load({
       openPortal: '打开完整门户',
       openSite: '打开官网',
       addFreeModels: '获取免费模型',
+      freeModelsTip: '免费使用主流收费模型，点击后自动获取，模型列表 TokenBank 中的模型任意使用。',
       modelLinked: '已接入 {n} 个模型，去切换',
       reload: '刷新',
       recharge: '充值',
+      rechargeTip: '全网最低价：￥10 ≈ 3846万 TOKEN，比官方与中转站省 10%~25%；支付宝直付秒到账，余额永不过期。',
       depositManage: '托管',
       depositManageTip: '把你的 API Key 托管到 TokenBank，临时额度自动转移为永久额度保留使用。适用于周重置快到了还没用完等情况。',
       checkin: '签到',
@@ -117,6 +119,8 @@ window.__ModuleLoader__.load({
       openPortal: 'Open full portal',
       openSite: 'Open website',
       addFreeModels: 'Get free models',
+      freeModelsTip: 'Use paid-tier models for free — one click links them, and every TokenBank model in the list is available.',
+      rechargeTip: 'Best price anywhere: $1 for ¥6.50 — 10%~25% cheaper than official APIs and relays. Pay with Alipay, credited instantly, credit never expires.',
       modelLinked: '{n} models linked, tap to switch',
       reload: 'Reload',
       recharge: 'Recharge',
@@ -522,11 +526,7 @@ window.__ModuleLoader__.load({
         busy[1](false)
       }
       return h('div', {
-        style: {
-          display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
-          borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)',
-          background: 'var(--dsw-alias-bg-layer-1, #f7f7f8)',
-        },
+        style: { display: 'flex', flexDirection: 'column', gap: 8, padding: 0 },
       },
         h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
           (packs[0] || [
@@ -614,7 +614,7 @@ window.__ModuleLoader__.load({
       var innerToast = React.useState(null)
       var checkinFlash = React.useState(null) // 签到成功闪现文案(复用获取免费模型按钮样式,2s 回原样)
       var checkin = React.useState({ busy: false, done: false })
-      var depTip = React.useState(false) // 托管按钮 tooltip:mouseenter 立即显示(原生 title 有 ~1s 延迟)
+      var depTip = React.useState(null) // 说明板块:hover 哪个按钮就显示哪段说明('deposit'|'recharge'|'models')
       React.useEffect(function () {
         if (!snap.authOpen) logoutArm[1](false)
       }, [snap.authOpen])
@@ -690,12 +690,20 @@ window.__ModuleLoader__.load({
               )) : null,
           ),
           data && data.loggedIn
-            ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+            ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 }, onMouseLeave: function () { depTip[1](null) } },
                 h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 } },
                   h('span', { style: { fontSize: 13, fontWeight: 600 } },
                     (data.user && (data.user.display_name || data.user.name)) || data.email || ''),
                   h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, data.email || ''),
                 ),
+                depTip[0] ? h('div', {
+                  style: {
+                    padding: '8px 10px', borderRadius: 8, fontSize: 12, lineHeight: 1.6,
+                    background: 'var(--dsw-alias-bg-layer-1, #f7f7f8)',
+                    color: 'var(--dsw-alias-label-secondary, #888)',
+                    border: '1px solid var(--dsw-alias-border-l1)',
+                  },
+                }, pageT(depTip[0] === 'recharge' ? 'rechargeTip' : depTip[0] === 'models' ? 'freeModelsTip' : 'depositManageTip')) : null,
                 h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 } },
                   h('div', { style: { fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } },
                     data.account && typeof data.account.balance_nano_usd === 'number'
@@ -731,27 +739,19 @@ window.__ModuleLoader__.load({
                     data && data.loggedIn ? h('button', {
                       type: 'button', 'aria-label': pageT('depositManageTip'),
                       style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
-                      onMouseEnter: function () { depTip[1](true) },
-                      onMouseLeave: function () { depTip[1](false) },
-                      onClick: function () { depTip[1](false); tbStore.set({ authOpen: false }); openSettingsPage() },
+                      onMouseEnter: function () { if (!rechargeOpen[0]) depTip[1]('deposit') },
+                      onClick: function () { depTip[1](null); tbStore.set({ authOpen: false }); openSettingsPage() },
                     }, pageT('depositManage')) : null,
                     (checkin[0].done || (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9))
                       ? h('button', {
                           type: 'button',
                           style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
-                          onClick: function () { rechargeOpen[1](function (v) { return !v }) },
+                          onMouseEnter: function () { if (!rechargeOpen[0]) depTip[1]('recharge') },
+                          onClick: function () { depTip[1](null); rechargeOpen[1](function (v) { return !v }) },
                         }, pageT('recharge'))
                       : null,
                   ),
                 ),
-                depTip[0] ? h('div', {
-                  style: {
-                    padding: '8px 10px', borderRadius: 8, fontSize: 12, lineHeight: 1.6,
-                    background: 'var(--dsw-alias-bg-layer-1, #f7f7f8)',
-                    color: 'var(--dsw-alias-label-secondary, #888)',
-                    border: '1px solid var(--dsw-alias-border-l1)',
-                  },
-                }, pageT('depositManageTip')) : null,
                 rechargeOpen[0] ? h(InlineRecharge, {
                   onPaid: async function () {
                     rechargeOpen[1](false)
@@ -798,6 +798,7 @@ window.__ModuleLoader__.load({
                       } : undefined,
                     }, checkinFlash[0].text) : h('button', {
                   type: 'button', style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center' }),
+                  onMouseEnter: function () { if (!rechargeOpen[0]) depTip[1]('models') },
                   onClick: async function () {
                     try {
                       var models = await api('gateway-models', { accessKey: data.accessKey })
