@@ -578,8 +578,8 @@ window.__ModuleLoader__.load({
                 h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
                   h('span', { style: { fontWeight: 700 } }, 'TokenBank'),
                   h('span', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
-                    h('span', { style: { background: '#ff4f1f', color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 11, fontWeight: 700 } }, '最优惠'),
-                    humanTokens(tbTokens) + ' TOKEN')),
+                    humanTokens(tbTokens) + ' TOKEN',
+                    h('span', { style: { background: '#ff4f1f', color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 11, fontWeight: 700 } }, '最优惠'))),
                 h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
                   h('span', null, 'OpenAI/Anthropic 等'),
                   h('span', null, humanTokens(vendorTokens) + ' TOKEN')),
@@ -697,7 +697,7 @@ window.__ModuleLoader__.load({
                     data.account && typeof data.account.balance_nano_usd === 'number'
                       ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—'),
                   h('span', { style: { display: 'inline-flex', gap: 6 } },
-                    checkin[0].done && !(data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9) ? null : h('button', {
+                    (checkin[0].done || (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9)) ? null : h('button', {
                       type: 'button', disabled: checkin[0].busy || checkin[0].done,
                       style: Object.assign({}, buttonStyle, {
                         height: 26, padding: '0 12px', fontSize: 12,
