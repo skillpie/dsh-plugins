@@ -337,6 +337,18 @@ async function dispatch(ctx, state, cfg, body) {
       const identity = await requireLive()
       return { ok: true, order: await tb.createRechargeOrder(baseUrl, identity.sessionToken, body.body ?? {}) }
     }
+    case 'open-external': {
+      // 用系统默认浏览器打开外部 URL(仅 http/https,给发送验证码后跳邮箱首页用)
+      const raw = String(body.url ?? '')
+      let u
+      try { u = new URL(raw) } catch { throw new Error('invalid url') }
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('invalid url')
+      const opener = process.platform === 'darwin' ? 'open' : process.platform === 'linux' ? 'xdg-open' : 'cmd'
+      const args = process.platform === 'win32' ? ['/c', 'start', '', u.toString()] : [u.toString()]
+      const { execFile } = await import('node:child_process')
+      await new Promise((resolve, reject) => execFile(opener, args, (err) => (err ? reject(err) : resolve())))
+      return { ok: true }
+    }
     case 'recharge-open-pay': {
       // WebView 拦新窗口且拦 blob 跳转:落地 HTML 到临时文件,用系统默认浏览器打开
       const identity = await requireLive()
