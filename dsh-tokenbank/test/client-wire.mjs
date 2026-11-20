@@ -20,7 +20,7 @@ globalThis.window = { __ModuleLoader__: { load(m) { const r = (n) => ({ react: R
 // eslint-disable-next-line no-eval
 eval(code)
 out.apply(ctx)
-for (const want of ['sidebar.footer.action', 'shell.overlay', 'settings.models.provider-card', 'settings.models.footer'])
+for (const want of ['conversation.input.right', 'shell.overlay', 'settings.models.provider-card', 'settings.models.footer'])
   assert(slotNames.includes(want), 'missing inject: ' + want)
 assert(regs.filter((n) => n === 'shell.overlay').length === 3, 'shell.overlay 需要 notify/auth/lowbalance 三个注册')
 console.log('dsh-tokenbank client-wire: OK')

@@ -28,6 +28,7 @@ window.__ModuleLoader__.load({
       openPortal: '打开完整门户',
       openSite: '打开官网',
       addFreeModels: '获取免费模型',
+      getModels: '获取模型',
       freeModelsTip: '免费使用主流收费模型，点击后自动获取，模型列表 TokenBank 中的模型任意使用。',
       modelLinked: '已接入 {n} 个模型',
       reload: '刷新',
@@ -121,6 +122,7 @@ window.__ModuleLoader__.load({
       openPortal: 'Open full portal',
       openSite: 'Open website',
       addFreeModels: 'Get free models',
+      getModels: 'Get models',
       freeModelsTip: 'Use paid-tier models for free — one click links them, and every TokenBank model in the list is available.',
       rechargeTip: 'Best price anywhere: $1 for ¥6.50 — 10%~25% cheaper than official APIs and relays. Pay with Alipay, credited instantly, credit never expires.',
       modelLinked: '{n} models linked',
@@ -334,21 +336,60 @@ window.__ModuleLoader__.load({
         }).catch(function () {})
         return function () { stopped = true }
       }, [])
-      var onClick = function () {
-        tbStore.set({ authOpen: true, authMode: 'register', anchor: null })
+      var onClick = function (e) {
+        var rect = e && e.currentTarget && e.currentTarget.getBoundingClientRect()
+        tbStore.set({
+          authOpen: true, authMode: 'register',
+          anchor: rect ? { right: rect.right, top: rect.top } : null,
+        })
       }
+      var st = React.useState(null)
+      React.useEffect(function () {
+        var stopped = false
+        api('status').then(function (data) {
+          if (!stopped) { st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl }) }
+        }).catch(function () {})
+        return function () { stopped = true }
+      }, [])
+      // 登录态变化(弹窗登录/退出)时刷新余额展示
+      React.useEffect(function () {
+        var stopped = false
+        if (!snap.loggedIn) return
+        api('status').then(function (data) {
+          if (!stopped) st[1](data)
+        }).catch(function () {})
+        return function () { stopped = true }
+      }, [snap.loggedIn, snap.authOpen])
+      var data = st[0]
       return h('button', {
         type: 'button',
+        id: 'tb-entry-btn',
+        className: snap.authOpen ? 'tb-entry-open' : '',
         title: pageT('composerEntry'), 'aria-label': pageT('composerEntry'),
         onClick: onClick,
-        style: {
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-          height: 29, minWidth: 29, padding: '0 2px', borderRadius: 7,
-          border: 'none', background: 'transparent',
-          cursor: 'pointer', position: 'relative',
-        },
+        style: snap.loggedIn
+          ? {
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              height: 29, padding: '0 8px', borderRadius: 7, boxSizing: 'border-box',
+              border: 'none', background: 'transparent',
+              cursor: 'pointer', position: 'relative',
+            }
+          : {
+              display: 'inline-flex', alignItems: 'center', cursor: 'pointer', position: 'relative',
+              border: 'none', background: 'transparent', padding: 0, boxSizing: 'border-box',
+            },
       },
-        h(TokenBankLogo, { size: 18 }),
+        snap.loggedIn
+          ? h('span', { style: { fontSize: 13, fontVariantNumeric: 'tabular-nums', color: 'var(--dsw-alias-label-secondary, #888)' } },
+              data && data.account && typeof data.account.balance_nano_usd === 'number'
+                ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '')
+          : h('span', {
+              style: { fontSize: 12, lineHeight: '25px', padding: '0 10px', borderRadius: 999, color: '#fff', background: '#ff4f1f', fontWeight: 600, letterSpacing: 0.3 },
+            }, pageT('freeToken')),
+        snap.loggedIn
+          ? h('svg', { viewBox: '0 0 24 24', className: 'tb-entry-chevron', width: 14, height: 14, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: { color: 'var(--dsw-alias-label-tertiary, #a0a3a8)', flex: 'none' } },
+              h('path', { d: 'm6 9 6 6 6-6' }))
+          : null,
       )
     }
 
@@ -615,6 +656,14 @@ window.__ModuleLoader__.load({
       var flash = React.useState(null)
       var sLogoutArm = React.useState(false)
       var sLogoutTimer = { ref: null }
+      var freeModelsUsed = React.useState(false)
+      // 登录态变化时同步一次性入口标记(退出已清 localStorage,重登后重新出现)
+      React.useEffect(function () {
+        if (!snap.loggedIn) return
+        try {
+          freeModelsUsed[1](window.localStorage.getItem('tb-free-models-used') === '1')
+        } catch (e) {}
+      }, [snap.loggedIn])
       var boxRef = React.useRef(null)
       React.useEffect(function () {
         var stopped = false
@@ -636,14 +685,6 @@ window.__ModuleLoader__.load({
       }, [snap.loggedIn, snap.authOpen])
       var openPanel = function (mode, extra) {
         tbStore.set(Object.assign({ authOpen: true, authMode: mode || snap.authMode || 'login', anchor: null }, extra || {}))
-      }
-      // 余额行右侧的低调图标按钮(悬停有 title 提示)
-      var iconBtn = function (label, paths, onClick) {
-        return h('button', { type: 'button', title: label, 'aria-label': label,
-          style: { border: 'none', background: 'transparent', cursor: 'pointer', padding: 3, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--dsw-alias-label-secondary, #666)' },
-          onClick: onClick },
-          h('svg', { viewBox: '0 0 24 24', width: 14, height: 14, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-            paths.map(function (d) { return h('path', { d: d }) })))
       }
       // 找到宿主模型选择器触发按钮并点开(带重试:刚接入的 provider 需要等一拍渲染)
       var openModelSwitcher = function (tries) {
@@ -674,78 +715,34 @@ window.__ModuleLoader__.load({
       var loggedIn = snap.loggedIn
       if (!runtimeCtx) return null
       var smallBtn = Object.assign({}, buttonStyle, { height: 24, padding: '0 8px', fontSize: 12 })
+      // 弱化的文字链按钮:无框无底色,次级灰字,悬停才显主色
+      var quietLinkStyle = {
+        border: 'none', background: 'transparent', cursor: 'pointer', padding: '2px 4px',
+        fontSize: 12, lineHeight: '20px', borderRadius: 6,
+        color: 'var(--dsw-alias-label-secondary, #888)',
+      }
       return h('div', {
         ref: boxRef,
+        // 整个长驻板块作为可点击区域:点击任意位置打开账户弹窗(托管等子按钮单独 stopPropagation)
+        onClick: function () { openPanel('register') },
         style: {
+          cursor: 'pointer',
           margin: '4px 10px 8px', display: 'flex', flexDirection: 'column', gap: 6, width: 'calc(100% - 20px)', boxSizing: 'border-box', alignSelf: 'stretch'
         },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
           h('span', {
             className: 'tb-wordmark',
-            style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 14, letterSpacing: 0.5, color: '#ff4f1f', position: 'relative', top: -1, cursor: 'pointer' },
-            onClick: function () { window.open((data && data.portalUrl) || 'https://bank.skillpie.cn', '_blank', 'noopener') },
+            style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 14, letterSpacing: 0.5, color: '#111111', position: 'relative', top: -1 },
           }, 'TOKENBANK'),
-          h('a', { href: (data && data.portalUrl) || 'https://bank.skillpie.cn', target: '_blank', rel: 'noopener noreferrer', title: pageT('officialSite'), style: { display: 'inline-flex', color: 'var(--dsw-alias-label-secondary, #888)', textDecoration: 'none' } },
-            h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-              h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
-              h('path', { d: 'M15 3h6v6' }),
-              h('path', { d: 'M10 14L21 3' }))),
-          loggedIn ? h('button', {
-            type: 'button', title: pageT('logout'), 'aria-label': pageT('logout'),
-            style: sLogoutArm[0]
-              ? Object.assign({}, buttonStyle, { height: 20, padding: '0 6px', fontSize: 11, color: '#d03050', borderColor: '#d03050', borderWidth: 1, borderStyle: 'solid', marginLeft: 'auto' })
-              : { border: 'none', background: 'transparent', cursor: 'pointer', padding: 2, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#d03050', marginLeft: 'auto' },
-            onClick: async function () {
-              if (!sLogoutArm[0]) {
-                sLogoutArm[1](true)
-                // 10 秒不确认自动归位,避免按钮一直停在「退出登录?」态
-                clearTimeout(sLogoutTimer.ref)
-                sLogoutTimer.ref = setTimeout(function () { sLogoutArm[1](false) }, 5000)
-                return
-              }
-              clearTimeout(sLogoutTimer.ref)
-              await api('logout').catch(function () {})
-              sLogoutArm[1](false)
-              st[1](null)
-              tbStore.set({ loggedIn: false })
-            },
-          },
-            h('svg', { viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-              h('path', { d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' }),
-              h('path', { d: 'M16 17l5-5-5-5' }),
-              h('path', { d: 'M21 12H9' })))
-            : h('button', {
+          loggedIn ? h('span', { style: { flex: 1 } }) : h('button', {
               type: 'button',
               style: { fontSize: 10, lineHeight: 1, padding: '3px 7px', borderRadius: 999, border: 'none', cursor: 'pointer', color: '#fff', background: '#ff4f1f', fontWeight: 600, letterSpacing: 0.3, marginLeft: 'auto' },
               onClick: function () { openPanel('register') },
-            }, pageT('freeToken'))),
-        loggedIn ? h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6 } },
-          h('span', { style: { fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-            (data && data.user && (data.user.display_name || data.user.name)) || (data && data.email) || ''),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, data.email || ''),
-        ) : null,
-        loggedIn
-          ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 2 } },
-              h('span', { style: { fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flex: 1 } },
-                data && data.account && typeof data.account.balance_nano_usd === 'number'
-                  ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—'),
-              iconBtn(pageT('addFreeModels'), [
-                'M20 12v9H4v-9',
-                'M2 7h20v5H2z',
-                'M12 22V7',
-                'M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z',
-                'M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z',
-              ], addModels),
-              iconBtn(pageT('depositManage'), [
-                'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
-              ], function () { openSettingsPage() }),
-              iconBtn(pageT('recharge'), [
-                'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
-                'M12 8v8',
-                'M8 12h8',
-              ], function () { openPanel('login', { startRecharge: true }) }))
-          : null,
+            }, pageT('freeToken')),
+          loggedIn ? h('span', { style: { fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } },
+            data && data.account && typeof data.account.balance_nano_usd === 'number'
+              ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—') : null),
         loggedIn && flash[0]
           ? h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', textAlign: 'center' } }, flash[0].text)
           : null,
@@ -780,6 +777,12 @@ window.__ModuleLoader__.load({
       var checkinFlash = React.useState(null) // 签到成功闪现文案(复用获取免费模型按钮样式,2s 回原样)
       var checkin = React.useState({ busy: false, done: false })
       var depTip = React.useState(null) // 说明板块:hover 哪个按钮就显示哪段说明('deposit'|'recharge'|'models')
+      var tipSeen = React.useState({}) // 引导提示已看标记:每个按钮登录后仅第一次 hover 展示,后续不再弹
+      var showTipOnce = function (key) {
+        if (rechargeOpen[0] || tipSeen[0][key]) return
+        var next = Object.assign({}, tipSeen[0]); next[key] = true
+        tipSeen[1](next); depTip[1](key)
+      }
       React.useEffect(function () {
         if (!snap.authOpen) logoutArm[1](false)
       }, [snap.authOpen])
@@ -810,12 +813,13 @@ window.__ModuleLoader__.load({
       var anchor = snap.anchor || { right: window.innerWidth - 16, top: window.innerHeight - 80 }
       var panelWidth = 256
       return h('div', { style: { position: 'fixed', inset: 0, zIndex: 1999 } },
-        h('div', { style: { position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)' }, onClick: close }),
+        h('div', { style: { position: 'fixed', inset: 0, zIndex: -1 }, onClick: close }),
         h('div', {
           style: {
             position: 'fixed', width: panelWidth, maxWidth: 'calc(100vw - 16px)',
-            left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-            maxHeight: 520, overflow: 'auto',
+            right: Math.max(8, window.innerWidth - anchor.right),
+            bottom: Math.max(8, window.innerHeight - anchor.top + 8),
+            maxHeight: 420, overflow: 'auto',
             /* 与模型选择器菜单(MenuSurface)完全一致的材质 */
             background: 'var(--dsw-menu-surface-fill)',
             backdropFilter: 'var(--dsw-menu-backdrop-filter)',
@@ -835,18 +839,29 @@ window.__ModuleLoader__.load({
               href: portal, target: '_blank', rel: 'noopener noreferrer',
               style: { display: 'inline-flex', alignItems: 'center', cursor: 'pointer', textDecoration: 'none' },
               'aria-label': 'TokenBank',
-            }, h('span', { className: 'tb-wordmark', style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 17, fontWeight: 400, letterSpacing: 0.5, lineHeight: 1, color: '#111111' } }, 'TOKENBANK')),
+            }, h('span', { className: 'tb-wordmark', style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 17, fontWeight: 400, letterSpacing: 0.5, lineHeight: 1, color: '#111111', position: 'relative', top: -1, left: -1 } }, 'TOKENBANK')),
+            // 标题右侧紧贴的「打开外部」灰色小按钮:新开 TokenBank 官网
+            h('a', {
+              href: portal, target: '_blank', rel: 'noopener noreferrer',
+              title: pageT('openSite'), 'aria-label': pageT('openSite'),
+              style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 17, height: 17, borderRadius: 5, marginLeft: -4, position: 'relative', top: 1, color: 'var(--dsw-alias-label-secondary, #888)', background: 'transparent', border: 'none', outline: 'none', cursor: 'pointer', textDecoration: 'none' },
+            },
+              h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' },
+                h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+                h('polyline', { points: '15 3 21 3 21 9' }),
+                h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }))),
             h('span', { style: { flex: 1 } }),
             data && data.loggedIn ? h('button', {
               type: 'button', title: pageT('logout'), 'aria-label': pageT('logout'),
               style: logoutArm[0]
                 ? Object.assign({}, buttonStyle, { height: 24, padding: '0 8px', fontSize: 11, color: '#d03050', borderColor: '#d03050', borderWidth: 1, borderStyle: 'solid' })
-                : { height: 24, minWidth: 24, padding: 0, border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#d03050' },
+                : { height: 24, minWidth: 24, padding: 0, border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--dsw-alias-label-secondary, #999)' },
               onClick: async function () {
                 if (!logoutArm[0]) { logoutArm[1](true); return }
                 await api('logout').catch(function () {})
                 logoutArm[1](false)
                 st[1](null)
+                try { window.localStorage.removeItem('tb-free-models-used') } catch (e) {}
                 tbStore.set({ loggedIn: false })
               },
             },
@@ -880,8 +895,9 @@ window.__ModuleLoader__.load({
                       type: 'button', disabled: checkin[0].busy || checkin[0].done,
                       style: Object.assign({}, buttonStyle, {
                         height: 26, padding: '0 12px', fontSize: 12,
+                        // 边框色与「托管」按钮同口径（border-l2 浅灰弱化），已签到转绿保留
                         color: checkin[0].done ? '#22a04a' : undefined,
-                        borderColor: checkin[0].done ? '#22a04a' : undefined,
+                        borderColor: checkin[0].done ? '#22a04a' : 'var(--dsw-alias-border-l2, #c9ccd1)',
                       }),
                       onClick: async function () {
                         if (checkin[0].done || checkin[0].busy) return
@@ -906,14 +922,14 @@ window.__ModuleLoader__.load({
                     data && data.loggedIn ? h('button', {
                       type: 'button', 'aria-label': pageT('depositManageTip'),
                       style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
-                      onMouseEnter: function () { if (!rechargeOpen[0]) depTip[1]('deposit') },
+                      onMouseEnter: function () { showTipOnce('deposit') },
                       onClick: function () { depTip[1](null); tbStore.set({ authOpen: false }); openSettingsPage() },
                     }, pageT('depositManage')) : null,
                     (checkin[0].done || (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9))
                       ? h('button', {
                           type: 'button',
                           style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
-                          onMouseEnter: function () { if (!rechargeOpen[0]) depTip[1]('recharge') },
+                          onMouseEnter: function () { showTipOnce('recharge') },
                           onClick: function () { depTip[1](null); rechargeOpen[1](function (v) { return !v }) },
                         }, pageT('recharge'))
                       : null,
@@ -965,7 +981,7 @@ window.__ModuleLoader__.load({
                       } : undefined,
                     }, checkinFlash[0].text) : h('button', {
                   type: 'button', style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center' }),
-                  onMouseEnter: function () { if (!rechargeOpen[0]) depTip[1]('models') },
+                  onMouseEnter: function () { showTipOnce('models') },
                   onClick: async function () {
                     try {
                       var models = await api('gateway-models', { accessKey: data.accessKey })
@@ -973,6 +989,15 @@ window.__ModuleLoader__.load({
                       await addProviderToModels(runtimeCtx, data.baseURL || portal, { accessKey: data.accessKey, list: list, protocol: models.protocol })
                       checkinFlash[1]({ text: pageT('modelLinked').replace('{n}', String(list.length)), models: true })
                       window.setTimeout(function () { checkinFlash[1](null) }, 3000)
+                      // 模型接入成功即关弹窗,自动弹出宿主模型选择器(与签到闪现按钮同款时序)
+                      tbStore.set({ authOpen: false })
+                      window.setTimeout(function () {
+                        var triggers = document.querySelectorAll('button[aria-haspopup="menu"]')
+                        for (var q = 0; q < triggers.length; q++) {
+                          var lb = triggers[q].getAttribute('aria-label') || ''
+                          if (/选择模型|Select model/.test(lb)) { triggers[q].click(); return }
+                        }
+                      }, 80)
                     } catch (err) {
                       tbStore.set({ notify: { kind: 'error', title: String(err.message || err), detail: '' } })
                     }
@@ -985,6 +1010,8 @@ window.__ModuleLoader__.load({
                 onAuthed: async function () {
                   tbStore.set({ authOpen: false })
                   try {
+                    var me = await api('status').catch(function () { return null })
+                    if (me) tbStore.set({ loggedIn: Boolean(me.loggedIn), portalUrl: me.portalUrl })
                     if (!runtimeCtx.remote || !runtimeCtx.remote.settings) return
                     var fresh = await api('status')
                     if (fresh && fresh.accessKey) {
@@ -1495,6 +1522,14 @@ window.__ModuleLoader__.load({
         var wmCss = document.createElement('style')
         wmCss.textContent = "@font-face{font-family:'FrizonLocal';src:url(data:font/woff;base64," + FRIZON_WOFF + ") format('woff')}body[data-ds-dark-theme] .tb-wordmark{color:#ffffff!important}"
         document.head.appendChild(wmCss)
+        // 入口按钮 hover 形态:灰底 + 箭头反转(与模型选择器 hover 一致)
+        var entryCss = document.createElement('style')
+        entryCss.textContent = '#tb-entry-btn:hover{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05))!important;margin:1px 0;height:27px!important}.tb-entry-open .tb-entry-chevron{transition:transform .15s ease;transform:rotate(180deg)}'
+        document.head.appendChild(entryCss)
+        ctx.effect(function () {
+          return function () { if (entryCss.parentNode) entryCss.parentNode.removeChild(entryCss) }
+        }, 'dsh-tokenbank: entry hover style')
+
       }
       ctx.effect(function () {
           return ctx.locale.register(NS, { zh: zh, en: en })
@@ -1508,15 +1543,13 @@ window.__ModuleLoader__.load({
         runtimeCtx = ctx
 
         // 输入框工具行、模型选择器左侧的紧凑入口按钮(弹账户/注册窗)
-        // 对话框输入框入口已移除,侧栏块是唯一入口
-
-        // 侧栏底部长驻块(sidebar.footer.action 是 list 槽,渲染为追加项)
-        ctx.slots.inject('sidebar.footer.action', function () {
+        ctx.slots.inject('conversation.input.right', function () {
           return ctx.slots.register({
-            name: 'sidebar.footer.action',
-            id: 'dsh-tokenbank-card',
+            name: 'conversation.input.right',
+            id: 'dsh-tokenbank-entry',
+            order: 0,
             locale: NS,
-          }, SidebarCard)
+          }, ComposerEntry)
         })
 
         // 同一个槽只 inject 一次:多次 inject 会互相覆盖(之前 auth 注册被
