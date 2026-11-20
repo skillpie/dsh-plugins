@@ -1,6 +1,6 @@
 {
   "name": "dsh-tokenbank",
-  "version": "0.1.65",
+  "version": "0.1.66",
   "description": "DSH 免费模型：一键注册 TokenBank 领免费 APIKey 送 $5 体验金，免费 GLM 模型直接进模型列表；自带余额查询、API Key 密钥托管（临时额度转永久）、每日签到、充值入口（支付宝），获取免费模型无需自建中转。致敬 dsh-our-free-model。官网 https://bank.skillpie.cn",
   "type": "module",
   "license": "MIT",
