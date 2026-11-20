@@ -28,6 +28,7 @@ window.__ModuleLoader__.load({
       openPortal: '打开完整门户',
       openSite: '打开官网',
       addFreeModels: '获取免费模型',
+      modelLinked: '已接入 {n} 个模型，去切换',
       reload: '刷新',
       recharge: '充值',
       depositManage: '托管',
@@ -116,6 +117,7 @@ window.__ModuleLoader__.load({
       openPortal: 'Open full portal',
       openSite: 'Open website',
       addFreeModels: 'Get free models',
+      modelLinked: '{n} models linked, tap to switch',
       reload: 'Reload',
       recharge: 'Recharge',
       depositManage: 'Manage keys',
@@ -612,6 +614,7 @@ window.__ModuleLoader__.load({
       var innerToast = React.useState(null)
       var checkinFlash = React.useState(null) // 签到成功闪现文案(复用获取免费模型按钮样式,2s 回原样)
       var checkin = React.useState({ busy: false, done: false })
+      var depTip = React.useState(false) // 托管按钮 tooltip:mouseenter 立即显示(原生 title 有 ~1s 延迟)
       React.useEffect(function () {
         if (!snap.authOpen) logoutArm[1](false)
       }, [snap.authOpen])
@@ -716,8 +719,8 @@ window.__ModuleLoader__.load({
                             var fresh = await api('status').catch(function () { return null })
                             if (fresh) { st[1](fresh); tbStore.set({ loggedIn: Boolean(fresh.loggedIn), portalUrl: fresh.portalUrl }) }
                             var streakText = ci.streak > 1 ? '（' + pageT('checkinStreak').replace('{n}', String(ci.streak)) + '）' : ''
-                            checkinFlash[1](pageT('checkinOk') + streakText)
-                            window.setTimeout(function () { checkinFlash[1](null) }, 2000)
+                            checkinFlash[1]({ text: pageT('checkinOk') + streakText })
+                            window.setTimeout(function () { checkinFlash[1](null) }, 3000)
                           }
                         } catch (e9) {
                           checkin[1]({ busy: false, done: false })
@@ -725,11 +728,29 @@ window.__ModuleLoader__.load({
                         }
                       },
                     }, checkin[0].done ? pageT('checkinDone') : pageT('checkin')),
-                    data && data.loggedIn ? h('button', {
-                      type: 'button', title: pageT('depositManageTip'),
-                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
-                      onClick: function () { tbStore.set({ authOpen: false }); openSettingsPage() },
-                    }, pageT('depositManage')) : null,
+                    data && data.loggedIn ? h('span', {
+                      style: { position: 'relative', display: 'inline-flex' },
+                      onMouseEnter: function () { depTip[1](true) },
+                      onMouseLeave: function () { depTip[1](false) },
+                    },
+                      h('button', {
+                        type: 'button', 'aria-label': pageT('depositManageTip'),
+                        style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
+                        onClick: function () { tbStore.set({ authOpen: false }); openSettingsPage() },
+                      }, pageT('depositManage')),
+                      depTip[0] ? h('div', {
+                        style: {
+                          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                          width: 'min(220px, calc(100vw - 32px))', padding: '8px 10px', borderRadius: 8,
+                          fontSize: 11.5, lineHeight: 1.5, fontWeight: 400,
+                          background: 'var(--dsw-alias-bg-elevated, #ffffff)',
+                          color: 'var(--dsw-alias-label-primary)',
+                          border: '1px solid var(--dsw-alias-border-l1)',
+                          boxShadow: '0 6px 20px rgba(0, 0, 0, 0.12)',
+                          pointerEvents: 'none', zIndex: 30,
+                        },
+                      }, pageT('depositManageTip')) : null,
+                    ) : null,
                     (checkin[0].done || (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9))
                       ? h('button', {
                           type: 'button',
@@ -769,23 +790,34 @@ window.__ModuleLoader__.load({
                       }, 80)
                     },
                   }, pageT('goSwitch')) : null,
-                ) : !rechargeOpen[0] ? h('button', {
+                ) : !rechargeOpen[0] ? (checkinFlash[0] ? h('button', {
+                      type: 'button', tabIndex: -1,
+                      style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', cursor: checkinFlash[0].models ? 'pointer' : 'default', opacity: 0.9 }),
+                      onClick: checkinFlash[0].models ? function () {
+                        checkinFlash[1](null)
+                        tbStore.set({ authOpen: false })
+                        window.setTimeout(function () {
+                          var triggers = document.querySelectorAll('button[aria-haspopup="menu"]')
+                          for (var q = 0; q < triggers.length; q++) {
+                            var lb = triggers[q].getAttribute('aria-label') || ''
+                            if (/选择模型|Select model/.test(lb)) { triggers[q].click(); return }
+                          }
+                        }, 80)
+                      } : undefined,
+                    }, checkinFlash[0].text) : h('button', {
                   type: 'button', style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center' }),
                   onClick: async function () {
                     try {
                       var models = await api('gateway-models', { accessKey: data.accessKey })
                       var list = Array.isArray(models) ? models : (models.models || models.list || [])
                       await addProviderToModels(runtimeCtx, data.baseURL || portal, { accessKey: data.accessKey, list: list, protocol: models.protocol })
-                      innerToast[1]({ kind: 'models', text: pageT('modelListCount').replace('{n}', String(list.length)) })
+                      checkinFlash[1]({ text: pageT('modelLinked').replace('{n}', String(list.length)), models: true })
+                      window.setTimeout(function () { checkinFlash[1](null) }, 3000)
                     } catch (err) {
                       tbStore.set({ notify: { kind: 'error', title: String(err.message || err), detail: '' } })
                     }
                   },
-                }, pageT('addFreeModels'))
-                  : checkinFlash[0] ? h('button', {
-                      type: 'button', tabIndex: -1,
-                      style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', cursor: 'default', opacity: 0.85 }),
-                    }, checkinFlash[0]) : null,
+                }, pageT('addFreeModels'))) : null,
               )
             : h(AuthCard, {
                 mode: snap.authMode,
