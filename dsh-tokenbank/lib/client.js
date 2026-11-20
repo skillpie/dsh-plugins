@@ -429,8 +429,9 @@ window.__ModuleLoader__.load({
     function rechargeHint(fen, creditNano) {
       var tokens = RECHARGE_HINTS[fen]
       var usd = (creditNano ? creditNano / 1e9 : (fen / 100 / 6.5)).toFixed(2)
-      var turns = Math.round(tokens / 2000) // 旧口径:1 轮对话 ≈ 2000 TOKEN
-      return '获得 $' + usd + ' ≈ ' + humanTokens(turns) + ' 轮对话'
+      var TURNS = { 1000: 214, 5000: 1068, 10000: 2137, 30000: 6410 } // 用户给定口径
+      var turns = TURNS[fen] || Math.round(tokens / 180000)
+      return '获得 $' + usd + ' ≈ ' + turns.toLocaleString('en-US') + ' 轮对话'
     }
 
     /** 词元数 → "1.2亿"/"3.4万"/"5000"。 */
