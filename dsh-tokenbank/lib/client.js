@@ -607,7 +607,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 侧栏底部长驻行:余额+托管+充值同行,无卡片框;点击经弹窗展开完整功能。 */
+    /** 侧栏底部长驻块:完整展示 logo/账号/余额/托管充值/获取免费模型,无卡片框。 */
     function SidebarCard() {
       var snap = useTbStore()
       var st = React.useState(null)
@@ -634,11 +634,23 @@ window.__ModuleLoader__.load({
       return h('div', {
         ref: boxRef,
         style: {
-          margin: '4px 10px', display: 'flex', alignItems: 'center', gap: 6,
+          margin: '4px 10px 8px', display: 'flex', flexDirection: 'column', gap: 6,
         },
       },
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 } },
+          h('span', { className: 'tb-wordmark', style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 14, letterSpacing: 0.5, color: '#ff4f1f' } }, 'TOKENBANK'),
+          h('a', { href: (data && data.portalUrl) || 'https://bank.skillpie.cn', target: '_blank', rel: 'noopener noreferrer', title: pageT('officialSite'), style: { display: 'inline-flex', color: 'var(--dsw-alias-label-secondary, #888)', textDecoration: 'none' } },
+            h('svg', { viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+              h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+              h('path', { d: 'M15 3h6v6' }),
+              h('path', { d: 'M10 14L21 3' })))),
+        loggedIn ? h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6 } },
+          h('span', { style: { fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            (data && data.user && (data.user.display_name || data.user.name)) || data.email || ''),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, data.email || ''),
+        ) : null,
         loggedIn
-          ? h(React.Fragment, null,
+          ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
               h('span', { style: { fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flex: 1 } },
                 data && data.account && typeof data.account.balance_nano_usd === 'number'
                   ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—'),
@@ -646,7 +658,11 @@ window.__ModuleLoader__.load({
                 onClick: function () { openPanel('login') } }, pageT('depositManage')),
               h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 24, padding: '0 8px', fontSize: 12 }),
                 onClick: function () { openPanel('login') } }, pageT('recharge')))
-          : h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 26, justifyContent: 'center', width: '100%' }),
+          : h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('balance') + ': —'),
+        loggedIn
+          ? h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%' }),
+              onClick: function () { openPanel('login') } }, pageT('addFreeModels'))
+          : h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%' }),
               onClick: function () { openPanel('register') } }, pageT('register')),
       )
     }
@@ -1392,16 +1408,6 @@ window.__ModuleLoader__.load({
             order: 0,
             locale: NS,
           }, ComposerEntry)
-        })
-
-        // 侧栏底部长驻卡片(sidebar.footer.action 是 list 槽,渲染为追加项)
-        ctx.slots.inject('sidebar.footer.action', function () {
-          return ctx.slots.register({
-            name: 'sidebar.footer.action',
-            id: 'dsh-tokenbank-card',
-            order: 100,
-            locale: NS,
-          }, SidebarCard)
         })
 
         // 同一个槽只 inject 一次:多次 inject 会互相覆盖(之前 auth 注册被
