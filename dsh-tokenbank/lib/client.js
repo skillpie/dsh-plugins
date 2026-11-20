@@ -753,7 +753,7 @@ window.__ModuleLoader__.load({
                 },
                   h('span', { style: { color: innerToast[0].error ? '#d03050' : '#22a04a', fontWeight: 700 } }, innerToast[0].error ? '✕' : '✓'),
                   h('span', { style: { flex: 1 } }, innerToast[0].text),
-                  innerToast[0].error ? null : h('button', {
+                  (!innerToast[0].error && innerToast[0].kind === 'models') ? h('button', {
                     type: 'button', style: Object.assign({}, buttonStyle, { height: 24, padding: '0 10px', fontSize: 12 }),
                     onClick: function () {
                       innerToast[1](null)
@@ -766,7 +766,7 @@ window.__ModuleLoader__.load({
                         }
                       }, 80)
                     },
-                  }, pageT('goSwitch')),
+                  }, pageT('goSwitch')) : null,
                 ) : !rechargeOpen[0] ? h('button', {
                   type: 'button', style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center' }),
                   onClick: async function () {
@@ -774,7 +774,7 @@ window.__ModuleLoader__.load({
                       var models = await api('gateway-models', { accessKey: data.accessKey })
                       var list = Array.isArray(models) ? models : (models.models || models.list || [])
                       await addProviderToModels(runtimeCtx, data.baseURL || portal, { accessKey: data.accessKey, list: list, protocol: models.protocol })
-                      innerToast[1]({ text: pageT('modelListCount').replace('{n}', String(list.length)) })
+                      innerToast[1]({ kind: 'models', text: pageT('modelListCount').replace('{n}', String(list.length)) })
                     } catch (err) {
                       tbStore.set({ notify: { kind: 'error', title: String(err.message || err), detail: '' } })
                     }
