@@ -581,7 +581,7 @@ window.__ModuleLoader__.load({
                     h('span', { style: { background: '#ff4f1f', color: '#fff', borderRadius: 4, padding: '1px 5px', fontSize: 11, fontWeight: 700 } }, '最优惠'),
                     humanTokens(tbTokens) + ' TOKEN')),
                 h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-                  h('span', null, 'OpenAI/Anthropic'),
+                  h('span', null, 'OpenAI/Anthropic 等'),
                   h('span', null, humanTokens(vendorTokens) + ' TOKEN')),
                 h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
                   h('span', null, '国内中转站均价'),
@@ -667,11 +667,6 @@ window.__ModuleLoader__.load({
             }, h('span', { className: 'tb-wordmark', style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 17, fontWeight: 400, letterSpacing: 0.5, lineHeight: 1, color: '#111111' } }, 'TOKENBANK')),
             h('span', { style: { flex: 1 } }),
             data && data.loggedIn ? h('button', {
-              type: 'button', title: pageT('depositManageTip'),
-              style: Object.assign({}, buttonStyle, { height: 24, padding: '0 10px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
-              onClick: function () { tbStore.set({ authOpen: false }); openSettingsPage() },
-            }, pageT('depositManage')) : null,
-            data && data.loggedIn ? h('button', {
               type: 'button', title: pageT('logout'), 'aria-label': pageT('logout'),
               style: logoutArm[0]
                 ? Object.assign({}, buttonStyle, { height: 24, padding: '0 8px', fontSize: 11, color: '#d03050', borderColor: '#d03050', borderWidth: 1, borderStyle: 'solid' })
@@ -728,6 +723,11 @@ window.__ModuleLoader__.load({
                         }
                       },
                     }, checkin[0].done ? pageT('checkinDone') : pageT('checkin')),
+                    data && data.loggedIn ? h('button', {
+                      type: 'button', title: pageT('depositManageTip'),
+                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
+                      onClick: function () { tbStore.set({ authOpen: false }); openSettingsPage() },
+                    }, pageT('depositManage')) : null,
                     (checkin[0].done || (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9))
                       ? h('button', {
                           type: 'button',
