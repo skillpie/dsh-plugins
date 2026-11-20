@@ -46,6 +46,7 @@ window.__ModuleLoader__.load({
       rechargeOpenPay: '打开支付页',
       rechargeCancel: '取消',
       composerEntry: 'TokenBank 账户',
+      officialSite: 'TokenBank 官网',
       loading: '正在连接 TokenBank…',
       balance: '余额',
       totalEarned: '累计收益',
@@ -137,6 +138,7 @@ window.__ModuleLoader__.load({
       rechargeOpenPay: 'Open payment page',
       rechargeCancel: 'Cancel',
       composerEntry: 'TokenBank account',
+      officialSite: 'TokenBank website',
       loading: 'Connecting to TokenBank…',
       balance: 'Balance',
       totalEarned: 'Total earned',
@@ -602,6 +604,50 @@ window.__ModuleLoader__.load({
             try { localStorage.removeItem('dsh-tokenbank/pending-order') } catch (e8) {}
           },
         }, pageT('rechargeCancel')) : null,
+      )
+    }
+
+    /** 侧栏底部长驻行:余额+托管+充值同行,无卡片框;点击经弹窗展开完整功能。 */
+    function SidebarCard() {
+      var snap = useTbStore()
+      var st = React.useState(null)
+      var boxRef = React.useRef(null)
+      React.useEffect(function () {
+        var stopped = false
+        api('status').then(function (data) {
+          if (!stopped) { st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl }) }
+        }).catch(function () {})
+        var timer = setInterval(function () {
+          api('status').then(function (data) { if (!stopped) st[1](data) }).catch(function () {})
+        }, 60000)
+        return function () { stopped = true; clearInterval(timer) }
+      }, [])
+      var openPanel = function (mode) {
+        var el = boxRef.current
+        var r = el ? el.getBoundingClientRect() : { top: window.innerHeight - 80, right: window.innerWidth - 16, bottom: window.innerHeight, left: window.innerWidth - 272 }
+        tbStore.set({ authOpen: true, authMode: mode || snap.authMode || 'login', anchor: { top: r.top, right: r.right, bottom: r.bottom, left: r.left } })
+      }
+      var data = st[0]
+      var loggedIn = snap.loggedIn
+      if (!runtimeCtx) return null
+      var smallBtn = Object.assign({}, buttonStyle, { height: 24, padding: '0 8px', fontSize: 12 })
+      return h('div', {
+        ref: boxRef,
+        style: {
+          margin: '4px 10px', display: 'flex', alignItems: 'center', gap: 6,
+        },
+      },
+        loggedIn
+          ? h(React.Fragment, null,
+              h('span', { style: { fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flex: 1 } },
+                data && data.account && typeof data.account.balance_nano_usd === 'number'
+                  ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—'),
+              h('button', { type: 'button', style: Object.assign({}, smallBtn, { borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
+                onClick: function () { openPanel('login') } }, pageT('depositManage')),
+              h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 24, padding: '0 8px', fontSize: 12 }),
+                onClick: function () { openPanel('login') } }, pageT('recharge')))
+          : h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 26, justifyContent: 'center', width: '100%' }),
+              onClick: function () { openPanel('register') } }, pageT('register')),
       )
     }
 
@@ -1346,6 +1392,16 @@ window.__ModuleLoader__.load({
             order: 0,
             locale: NS,
           }, ComposerEntry)
+        })
+
+        // 侧栏底部长驻卡片(sidebar.footer.action 是 list 槽,渲染为追加项)
+        ctx.slots.inject('sidebar.footer.action', function () {
+          return ctx.slots.register({
+            name: 'sidebar.footer.action',
+            id: 'dsh-tokenbank-card',
+            order: 100,
+            locale: NS,
+          }, SidebarCard)
         })
 
         // 同一个槽只 inject 一次:多次 inject 会互相覆盖(之前 auth 注册被
