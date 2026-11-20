@@ -637,6 +637,14 @@ window.__ModuleLoader__.load({
       var openPanel = function (mode, extra) {
         tbStore.set(Object.assign({ authOpen: true, authMode: mode || snap.authMode || 'login', anchor: null }, extra || {}))
       }
+      // 余额行右侧的低调图标按钮(悬停有 title 提示)
+      var iconBtn = function (label, paths, onClick) {
+        return h('button', { type: 'button', title: label, 'aria-label': label,
+          style: { border: 'none', background: 'transparent', cursor: 'pointer', padding: 3, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: 'var(--dsw-alias-label-secondary, #666)' },
+          onClick: onClick },
+          h('svg', { viewBox: '0 0 24 24', width: 14, height: 14, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+            paths.map(function (d) { return h('path', { d: d }) })))
+      }
       // 找到宿主模型选择器触发按钮并点开(带重试:刚接入的 provider 需要等一拍渲染)
       var openModelSwitcher = function (tries) {
         var triggers = document.querySelectorAll('button[aria-haspopup="menu"]')
@@ -718,22 +726,28 @@ window.__ModuleLoader__.load({
           h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, data.email || ''),
         ) : null,
         loggedIn
-          ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+          ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 2 } },
               h('span', { style: { fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flex: 1 } },
                 data && data.account && typeof data.account.balance_nano_usd === 'number'
                   ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—'),
-              h('button', { type: 'button', style: Object.assign({}, smallBtn, { borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
-                onClick: function () { openSettingsPage() } }, pageT('depositManage')),
-              h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 24, padding: '0 8px', fontSize: 12 }),
-                onClick: function () { openPanel('login', { startRecharge: true }) } }, pageT('recharge')))
+              iconBtn(pageT('addFreeModels'), [
+                'M20 12v9H4v-9',
+                'M2 7h20v5H2z',
+                'M12 22V7',
+                'M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z',
+                'M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z',
+              ], addModels),
+              iconBtn(pageT('depositManage'), [
+                'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+              ], function () { openSettingsPage() }),
+              iconBtn(pageT('recharge'), [
+                'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+                'M12 8v8',
+                'M8 12h8',
+              ], function () { openPanel('login', { startRecharge: true }) }))
           : null,
-        loggedIn
-          ? flash[0]
-            ? h('button', { type: 'button', tabIndex: -1, disabled: true,
-                style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%', cursor: 'default', opacity: 0.9 }),
-              }, flash[0].text)
-            : h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%' }),
-                onClick: addModels }, pageT('addFreeModels'))
+        loggedIn && flash[0]
+          ? h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', textAlign: 'center' } }, flash[0].text)
           : null,
       )
     }
