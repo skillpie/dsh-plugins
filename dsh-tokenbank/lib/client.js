@@ -634,7 +634,7 @@ window.__ModuleLoader__.load({
       return h('div', {
         ref: boxRef,
         style: {
-          margin: '4px 10px 8px', display: 'flex', flexDirection: 'column', gap: 6,
+          margin: '4px 10px 8px', display: 'flex', flexDirection: 'column', gap: 6, width: 'calc(100% - 20px)', boxSizing: 'border-box', alignSelf: 'stretch'
         },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 } },
@@ -1408,6 +1408,15 @@ window.__ModuleLoader__.load({
             order: 0,
             locale: NS,
           }, ComposerEntry)
+        })
+
+        // 侧栏底部长驻块(sidebar.footer.action 是 list 槽,渲染为追加项)
+        ctx.slots.inject('sidebar.footer.action', function () {
+          return ctx.slots.register({
+            name: 'sidebar.footer.action',
+            id: 'dsh-tokenbank-card',
+            locale: NS,
+          }, SidebarCard)
         })
 
         // 同一个槽只 inject 一次:多次 inject 会互相覆盖(之前 auth 注册被
