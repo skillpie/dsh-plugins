@@ -29,7 +29,7 @@ window.__ModuleLoader__.load({
       openSite: '打开官网',
       addFreeModels: '获取免费模型',
       freeModelsTip: '免费使用主流收费模型，点击后自动获取，模型列表 TokenBank 中的模型任意使用。',
-      modelLinked: '已接入 {n} 个模型，去切换',
+      modelLinked: '已接入 {n} 个模型',
       reload: '刷新',
       recharge: '充值',
       rechargeTip: '全网最低价：￥10 ≈ 3846万 TOKEN，比官方与中转站省 10%~25%；支付宝直付秒到账，余额永不过期。',
@@ -66,6 +66,7 @@ window.__ModuleLoader__.load({
       captchaRefresh: '换一张',
       savePassword: '在本机记住密码（用于静默续登）',
       register: '注册免费领TOKEN',
+      freeToken: '免费模型',
       login: '立即登录',
       logout: '退出登录',
       deposits: '密钥托管',
@@ -122,7 +123,7 @@ window.__ModuleLoader__.load({
       addFreeModels: 'Get free models',
       freeModelsTip: 'Use paid-tier models for free — one click links them, and every TokenBank model in the list is available.',
       rechargeTip: 'Best price anywhere: $1 for ¥6.50 — 10%~25% cheaper than official APIs and relays. Pay with Alipay, credited instantly, credit never expires.',
-      modelLinked: '{n} models linked, tap to switch',
+      modelLinked: '{n} models linked',
       reload: 'Reload',
       recharge: 'Recharge',
       depositManage: 'Manage keys',
@@ -158,6 +159,7 @@ window.__ModuleLoader__.load({
       captchaRefresh: 'New captcha',
       savePassword: 'Remember password on this machine (silent re-login)',
       register: 'Sign up for free TOKEN',
+      freeToken: 'FREE',
       login: 'Sign in now',
       logout: 'Sign out',
       deposits: 'Key deposits',
@@ -612,6 +614,7 @@ window.__ModuleLoader__.load({
       var st = React.useState(null)
       var flash = React.useState(null)
       var sLogoutArm = React.useState(false)
+      var sLogoutTimer = { ref: null }
       var boxRef = React.useRef(null)
       React.useEffect(function () {
         var stopped = false
@@ -623,8 +626,25 @@ window.__ModuleLoader__.load({
         }, 60000)
         return function () { stopped = true; clearInterval(timer) }
       }, [])
+      // 登录态/弹窗开合变化时立即重拉 status,侧栏即时反映登录结果
+      React.useEffect(function () {
+        var stopped = false
+        api('status').then(function (data) {
+          if (!stopped) { st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl }) }
+        }).catch(function () {})
+        return function () { stopped = true }
+      }, [snap.loggedIn, snap.authOpen])
       var openPanel = function (mode, extra) {
         tbStore.set(Object.assign({ authOpen: true, authMode: mode || snap.authMode || 'login', anchor: null }, extra || {}))
+      }
+      // 找到宿主模型选择器触发按钮并点开(带重试:刚接入的 provider 需要等一拍渲染)
+      var openModelSwitcher = function (tries) {
+        var triggers = document.querySelectorAll('button[aria-haspopup="menu"]')
+        for (var q = 0; q < triggers.length; q++) {
+          var lb = triggers[q].getAttribute('aria-label') || ''
+          if (/选择模型|Select model/.test(lb)) { triggers[q].click(); return }
+        }
+        if (tries > 0) window.setTimeout(function () { openModelSwitcher(tries - 1) }, 120)
       }
       var addModels = async function () {
         var d = data
@@ -636,6 +656,8 @@ window.__ModuleLoader__.load({
           await addProviderToModels(runtimeCtx, d.baseURL || d.portalUrl || 'https://bank.skillpie.cn', { accessKey: d.accessKey, list: list, protocol: models.protocol })
           flash[1]({ text: pageT('modelLinked').replace('{n}', String(list.length)), models: true })
           window.setTimeout(function () { flash[1](null) }, 3000)
+          // 不等用户点「去切换」,直接弹模型菜单
+          window.setTimeout(function () { openModelSwitcher(6) }, 120)
         } catch (err) {
           tbStore.set({ notify: { kind: 'error', title: String(err.message || err), detail: '' } })
         }
@@ -651,7 +673,11 @@ window.__ModuleLoader__.load({
         },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
-          h('span', { className: 'tb-wordmark', style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 14, letterSpacing: 0.5, color: '#ff4f1f', position: 'relative', top: -1 } }, 'TOKENBANK'),
+          h('span', {
+            className: 'tb-wordmark',
+            style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 14, letterSpacing: 0.5, color: '#ff4f1f', position: 'relative', top: -1, cursor: 'pointer' },
+            onClick: function () { window.open((data && data.portalUrl) || 'https://bank.skillpie.cn', '_blank', 'noopener') },
+          }, 'TOKENBANK'),
           h('a', { href: (data && data.portalUrl) || 'https://bank.skillpie.cn', target: '_blank', rel: 'noopener noreferrer', title: pageT('officialSite'), style: { display: 'inline-flex', color: 'var(--dsw-alias-label-secondary, #888)', textDecoration: 'none' } },
             h('svg', { viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
               h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
@@ -663,7 +689,14 @@ window.__ModuleLoader__.load({
               ? Object.assign({}, buttonStyle, { height: 20, padding: '0 6px', fontSize: 11, color: '#d03050', borderColor: '#d03050', borderWidth: 1, borderStyle: 'solid', marginLeft: 'auto' })
               : { border: 'none', background: 'transparent', cursor: 'pointer', padding: 2, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#d03050', marginLeft: 'auto' },
             onClick: async function () {
-              if (!sLogoutArm[0]) { sLogoutArm[1](true); return }
+              if (!sLogoutArm[0]) {
+                sLogoutArm[1](true)
+                // 10 秒不确认自动归位,避免按钮一直停在「退出登录?」态
+                clearTimeout(sLogoutTimer.ref)
+                sLogoutTimer.ref = setTimeout(function () { sLogoutArm[1](false) }, 5000)
+                return
+              }
+              clearTimeout(sLogoutTimer.ref)
               await api('logout').catch(function () {})
               sLogoutArm[1](false)
               st[1](null)
@@ -673,10 +706,15 @@ window.__ModuleLoader__.load({
             h('svg', { viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
               h('path', { d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' }),
               h('path', { d: 'M16 17l5-5-5-5' }),
-              h('path', { d: 'M21 12H9' }))) : null),
+              h('path', { d: 'M21 12H9' })))
+            : h('button', {
+              type: 'button',
+              style: { fontSize: 10, lineHeight: 1, padding: '3px 7px', borderRadius: 999, border: 'none', cursor: 'pointer', color: '#fff', background: '#ff4f1f', fontWeight: 600, letterSpacing: 0.3, marginLeft: 'auto' },
+              onClick: function () { openPanel('register') },
+            }, pageT('freeToken'))),
         loggedIn ? h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6 } },
           h('span', { style: { fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-            (data && data.user && (data.user.display_name || data.user.name)) || data.email || ''),
+            (data && data.user && (data.user.display_name || data.user.name)) || (data && data.email) || ''),
           h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, data.email || ''),
         ) : null,
         loggedIn
@@ -688,30 +726,37 @@ window.__ModuleLoader__.load({
                 onClick: function () { openSettingsPage() } }, pageT('depositManage')),
               h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 24, padding: '0 8px', fontSize: 12 }),
                 onClick: function () { openPanel('login', { startRecharge: true }) } }, pageT('recharge')))
-          : h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('balance') + ': —'),
+          : null,
         loggedIn
           ? flash[0]
-            ? h('button', { type: 'button', tabIndex: -1,
-                style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%', cursor: 'pointer', opacity: 0.9 }),
-                onClick: flash[0].models ? function () {
-                  flash[1](null)
-                  window.setTimeout(function () {
-                    var triggers = document.querySelectorAll('button[aria-haspopup="menu"]')
-                    for (var q = 0; q < triggers.length; q++) {
-                      var lb = triggers[q].getAttribute('aria-label') || ''
-                      if (/选择模型|Select model/.test(lb)) { triggers[q].click(); return }
-                    }
-                  }, 80)
-                } : undefined,
+            ? h('button', { type: 'button', tabIndex: -1, disabled: true,
+                style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%', cursor: 'default', opacity: 0.9 }),
               }, flash[0].text)
             : h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%' }),
                 onClick: addModels }, pageT('addFreeModels'))
-          : h('button', { type: 'button', style: Object.assign({}, primaryButtonStyle, { height: 28, justifyContent: 'center', width: '100%' }),
-              onClick: function () { openPanel('register') } }, pageT('register')),
+          : null,
       )
     }
 
     /** shell.overlay 账户/注册弹窗:登录态展示余额与快捷操作,未登录展示表单。 */
+    // 由邮箱地址推断其服务商网页版收件箱入口(发码后自动跳转用)
+    function mailHomeUrl(addr) {
+      var domain = String(addr || '').split('@')[1] || ''
+      domain = domain.toLowerCase()
+      var map = {
+        'qq.com': 'https://mail.qq.com', 'foxmail.com': 'https://mail.qq.com',
+        '163.com': 'https://mail.163.com', '126.com': 'https://mail.126.com',
+        'gmail.com': 'https://mail.google.com', 'googlemail.com': 'https://mail.google.com',
+        'outlook.com': 'https://outlook.live.com', 'hotmail.com': 'https://outlook.live.com', 'live.com': 'https://outlook.live.com',
+        'icloud.com': 'https://www.icloud.com/mail',
+        'sina.com': 'https://mail.sina.com.cn', 'sohu.com': 'https://mail.sohu.com',
+        'aliyun.com': 'https://mail.aliyun.com', 'yeah.net': 'https://mail.yeah.net',
+        '139.com': 'https://mail.10086.cn',
+      }
+      if (map[domain]) return map[domain]
+      return domain ? 'https://mail.' + domain : ''
+    }
+
     function EntryOverlay() {
       var snap = useTbStore()
       var st = React.useState(null)
@@ -1327,6 +1372,8 @@ window.__ModuleLoader__.load({
                   try {
                     await api('send-code', { email: email[0] })
                     sent[1](true)
+                    var mailUrl = mailHomeUrl(email[0])
+                    if (mailUrl) api('open-external', { url: mailUrl }).catch(function () {})
                   } catch (err) { error[1](String(err.message || err)) }
                   busy[1](false)
                 },

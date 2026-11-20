@@ -355,6 +355,18 @@ async function dispatch(ctx, state, cfg, body) {
       })
       return { ok: true, file }
     }
+    case 'open-external': {
+      // 用系统默认浏览器打开外部链接(仅 http/https;发码后跳邮箱用)
+      const url2 = String((body.body ?? body).url ?? '')
+      if (!/^https?:\/\//i.test(url2)) throw new Error('only http(s) urls allowed')
+      const opener2 = process.platform === 'darwin' ? 'open' : process.platform === 'linux' ? 'xdg-open' : 'cmd'
+      const args3 = process.platform === 'win32' ? ['/c', 'start', '', url2] : [url2]
+      const { execFile: execFile3 } = await import('node:child_process')
+      await new Promise(function (resolve3, reject3) {
+        execFile3(opener2, args3, function (err3) { return err3 ? reject3(err3) : resolve3() })
+      })
+      return { ok: true }
+    }
     case 'recharge-pay': {
       const identity = await requireLive()
       return {
