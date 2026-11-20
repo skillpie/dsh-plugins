@@ -728,29 +728,13 @@ window.__ModuleLoader__.load({
                         }
                       },
                     }, checkin[0].done ? pageT('checkinDone') : pageT('checkin')),
-                    data && data.loggedIn ? h('span', {
-                      style: { position: 'relative', display: 'inline-flex' },
+                    data && data.loggedIn ? h('button', {
+                      type: 'button', 'aria-label': pageT('depositManageTip'),
+                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
                       onMouseEnter: function () { depTip[1](true) },
                       onMouseLeave: function () { depTip[1](false) },
-                    },
-                      h('button', {
-                        type: 'button', 'aria-label': pageT('depositManageTip'),
-                        style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
-                        onClick: function () { tbStore.set({ authOpen: false }); openSettingsPage() },
-                      }, pageT('depositManage')),
-                      depTip[0] ? h('div', {
-                        style: {
-                          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-                          width: 'min(220px, calc(100vw - 32px))', padding: '8px 10px', borderRadius: 8,
-                          fontSize: 11.5, lineHeight: 1.5, fontWeight: 400,
-                          background: 'var(--dsw-alias-bg-elevated, #ffffff)',
-                          color: 'var(--dsw-alias-label-primary)',
-                          border: '1px solid var(--dsw-alias-border-l1)',
-                          boxShadow: '0 6px 20px rgba(0, 0, 0, 0.12)',
-                          pointerEvents: 'none', zIndex: 30,
-                        },
-                      }, pageT('depositManageTip')) : null,
-                    ) : null,
+                      onClick: function () { depTip[1](false); tbStore.set({ authOpen: false }); openSettingsPage() },
+                    }, pageT('depositManage')) : null,
                     (checkin[0].done || (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9))
                       ? h('button', {
                           type: 'button',
@@ -760,6 +744,14 @@ window.__ModuleLoader__.load({
                       : null,
                   ),
                 ),
+                depTip[0] ? h('div', {
+                  style: {
+                    padding: '8px 10px', borderRadius: 8, fontSize: 12, lineHeight: 1.6,
+                    background: 'var(--dsw-alias-bg-layer-1, #f7f7f8)',
+                    color: 'var(--dsw-alias-label-secondary, #888)',
+                    border: '1px solid var(--dsw-alias-border-l1)',
+                  },
+                }, pageT('depositManageTip')) : null,
                 rechargeOpen[0] ? h(InlineRecharge, {
                   onPaid: async function () {
                     rechargeOpen[1](false)
