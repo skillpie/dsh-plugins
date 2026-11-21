@@ -870,7 +870,6 @@ window.__ModuleLoader__.load({
     function EntryOverlay() {
       var snap = useTbStore()
       var st = React.useState(null)
-      var rechargeOpen = React.useState(false)
       var logoutArm = React.useState(false)
       var innerToast = React.useState(null)
       var checkinFlash = React.useState(null) // 签到成功闪现文案(复用获取免费模型按钮样式,2s 回原样)
@@ -879,7 +878,7 @@ window.__ModuleLoader__.load({
       var depTip = React.useState(null) // 说明板块:hover 哪个按钮就显示哪段说明('deposit'|'recharge'|'models')
       var tipSeen = React.useState({}) // 引导提示已看标记:每个按钮登录后仅第一次 hover 展示,后续不再弹
       var showTipOnce = function (key) {
-        if (rechargeOpen[0] || tipSeen[0][key]) return
+        if (tipSeen[0][key]) return
         var next = Object.assign({}, tipSeen[0]); next[key] = true
         tipSeen[1](next); depTip[1](key)
       }
@@ -887,7 +886,6 @@ window.__ModuleLoader__.load({
         if (!snap.authOpen) logoutArm[1](false)
       }, [snap.authOpen])
       React.useEffect(function () {
-        if (snap.authOpen) rechargeOpen[1](snap.loggedIn ? snap.startRecharge !== false : Boolean(snap.startRecharge))
       }, [snap.authOpen])
       React.useEffect(function () {
         if (!snap.authOpen) return
@@ -1030,10 +1028,10 @@ window.__ModuleLoader__.load({
                       },
                     }, pageT('depositManage')) : null,
                     h('button', {
-                      type: 'button', disabled: checkin[0].busy,
+                      type: 'button', disabled: checkin[0].busy || checkin[0].done,
                       style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
-                      // 位置固定:可签到时该按钮即「签到」,签到后同一位置变回「充值」
-                      onMouseEnter: function () { if (!(!checkin[0].done)) showTipOnce('recharge') },
+                      // 充值面板长驻,按钮固定为「签到」;签到后变「已签到」并禁用
+                      onMouseEnter: function () { showTipOnce('recharge') },
                       onClick: (!checkin[0].done) ? async function () {
                         if (checkin[0].busy) return
                         checkin[1](Object.assign({}, checkin[0], { busy: true }))
@@ -1058,13 +1056,12 @@ window.__ModuleLoader__.load({
                           checkin[1](Object.assign({}, checkin[0], { busy: false }))
                           innerToast[1]({ text: String(e9.message || e9), error: true })
                         }
-                      } : function () { depTip[1](null); rechargeOpen[1](function (v) { return !v }) },
-                    }, (!checkin[0].done) ? (checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')) : pageT('recharge')),
+                      } : undefined,
+                    }, (!checkin[0].done) ? (checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')) : pageT('checkinDone')),
                   ),
                 ),
-                rechargeOpen[0] ? h(InlineRecharge, {
+                h(InlineRecharge, {
                   onPaid: async function () {
-                    rechargeOpen[1](false)
                     var before = data.account && typeof data.account.balance_nano_usd === 'number' ? data.account.balance_nano_usd : null
                     var fresh = await api('status').catch(function () { return null })
                     var gain = null
@@ -1078,7 +1075,7 @@ window.__ModuleLoader__.load({
                     }
                     tbStore.set({ notify: { kind: 'success', title: pageT('rechargeDone'), detail: '' } })
                   },
-                }) : null,
+                }),
                 innerToast[0] ? h('div', {
                   style: {
                     display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',

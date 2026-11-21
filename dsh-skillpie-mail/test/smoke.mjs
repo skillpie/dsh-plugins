@@ -12,7 +12,7 @@ import { MailStore, RECORD_ID, dispatch, ROUTE } from '../lib/index.js'
 // ── 桩 credentials ───────────────────────────────────────────────────
 const records = new Map()
 const credentials = {
-  async getRecord(id) {
+  async readRecord(id) {
     return records.get(id) ?? null
   },
   async modifyRecord(id, write) {

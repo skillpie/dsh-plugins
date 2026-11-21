@@ -19,7 +19,7 @@ export class MailStore {
   }
 
   async #read() {
-    const record = await this.credentials.getRecord(RECORD_ID)
+    const record = await this.credentials.readRecord(RECORD_ID)
     const payload = record?.kind === 'grant' && record.payload ? record.payload : {}
     return { mailboxes: Array.isArray(payload.mailboxes) ? payload.mailboxes : [], lastUid: payload.lastUid ?? {} }
   }
