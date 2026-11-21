@@ -1280,11 +1280,13 @@ window.__ModuleLoader__.load({
       var snap = useTbStore()
       var portal = (tbStore.get().portalUrl) || 'https://bank.skillpie.cn'
       var hintClosed = React.useState(false)
-      var seenLogin = React.useRef(false)
+      // 初始值取当前登录态:挂载时已登录不算「登录跃迁」,避免误清关闭标记
+      var prevLogin = React.useRef(Boolean(snap.loggedIn))
       React.useEffect(function () {
-        if (snap.loggedIn && !seenLogin.current) {
-          seenLogin.current = true
-          // 每次登录后重新展示提示
+        if (!snap.loggedIn) { prevLogin.current = false; return }
+        if (!prevLogin.current) {
+          // 真正的「未登录 → 登录」跃迁:重新展示提示
+          prevLogin.current = true
           try { window.sessionStorage.removeItem('tb-deposit-hint-closed') } catch (e) {}
           hintClosed[1](false)
         }
