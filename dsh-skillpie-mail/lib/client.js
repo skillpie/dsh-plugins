@@ -217,6 +217,8 @@ window.__ModuleLoader__.load({
       )
     }
 
+    var MAIL_SUFFIX = '@skillpie.cn'
+
     function AddDialog(props) {
       var t = props.t
       var emailState = React.useState('')
@@ -228,7 +230,10 @@ window.__ModuleLoader__.load({
         if (busyState[0]) return
         busyState[1](true)
         errorState[1]('')
-        api('add', { email: emailState[0], password: passwordState[0] })
+        // 只输前缀,固定补 @skillpie.cn(已带后缀的不再重复补)
+        var prefix = emailState[0].trim()
+        var email = prefix.indexOf('@') >= 0 ? prefix : prefix + MAIL_SUFFIX
+        api('add', { email: email, password: passwordState[0] })
           .then(function () {
             props.onChanged()
             props.onClose()
@@ -238,7 +243,25 @@ window.__ModuleLoader__.load({
       }
 
       return h(Modal, { title: t('addTitle'), onClose: props.onClose },
-        h(Field, { label: t('email'), value: emailState[0], onChange: emailState[1] }),
+        h('label', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+          h('span', { style: labelStyle }, t('email')),
+          h('div', {
+            style: {
+              display: 'flex', alignItems: 'center', height: 28, borderRadius: 7,
+              border: '1px solid var(--dsw-alias-border-l1)',
+              background: 'var(--dsw-alias-bg-layer-1)', overflow: 'hidden',
+            },
+          },
+            h('input', {
+              style: Object.assign({}, inputStyle, { border: 'none', borderRadius: 0, flex: 1, height: '100%' }),
+              value: emailState[0], placeholder: 'taobao01',
+              onChange: function (event) { emailState[1](event.target.value.replace(/@.*$/, '')) },
+            }),
+            h('span', {
+              style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', padding: '0 8px', userSelect: 'none', flex: 'none' },
+            }, MAIL_SUFFIX),
+          ),
+        ),
         h(Field, { label: t('password'), value: passwordState[0], onChange: passwordState[1] }),
         errorState[0] ? h('div', { style: { fontSize: 12, color: '#e5484d' } }, errorState[0]) : null,
         h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
