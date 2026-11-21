@@ -25,7 +25,10 @@ export class MailStore {
     return {
       mailboxes: Array.isArray(payload.mailboxes) ? payload.mailboxes : [],
       lastUid: payload.lastUid ?? {},
+      lastUidByFolder: payload.lastUidByFolder ?? {},
+      lastTimeByFolder: payload.lastTimeByFolder ?? {},
       history: Array.isArray(payload.history) ? payload.history : [],
+      readIds: payload.readIds && typeof payload.readIds === 'object' ? payload.readIds : {},
     }
   }
 
@@ -72,20 +75,38 @@ export class MailStore {
     const fresh = []
     for (const box of state.mailboxes) {
       try {
+        // 水位按 (邮箱, 文件夹) 独立记:各文件夹 UID 序列独立,共用一个水位会漏新信
         const lastUid = state.lastUid[box.email] ?? 0
-        const result = await fetchNewMail({ host, port, user: box.email, password: box.password, folders, lastUid })
+        const folderMarks = state.lastUidByFolder?.[box.email] ?? {}
+        const folderTimes = state.lastTimeByFolder?.[box.email] ?? {}
+        const result = await fetchNewMail({ host, port, user: box.email, password: box.password, folders, lastUidByFolder: folderMarks, lastTimeByFolder: folderTimes })
         if (!baseline) {
           for (const message of result.messages) {
             fresh.push({ email: box.email, ...message })
           }
         }
-        if (result.lastUid > (state.lastUid[box.email] ?? 0)) state.lastUid[box.email] = result.lastUid
+        if (result.lastUidByFolder) {
+          state.lastUidByFolder = state.lastUidByFolder ?? {}
+          state.lastUidByFolder[box.email] = result.lastUidByFolder
+          state.lastTimeByFolder = state.lastTimeByFolder ?? {}
+          state.lastTimeByFolder[box.email] = result.lastTimeByFolder ?? state.lastTimeByFolder[box.email] ?? {}
+        } else if (result.lastUid > (state.lastUid[box.email] ?? 0)) {
+          state.lastUid[box.email] = result.lastUid // 兼容旧格式
+        }
       } catch (error) {
         // 单个邮箱失败不影响其它邮箱(密码错/网络断等)
         if (options.onBoxError) options.onBoxError(box.email, error)
       }
     }
-    // 收件历史(持久,最新在前,截断;不存密码)
+    // 收件历史(持久,最新在前,截断;不存密码);按 id 去重防历史损坏期间/并发轮询造成的重复
+    {
+      const seen = new Set()
+      state.history = (state.history ?? []).filter((m) => {
+        if (!m?.id || seen.has(m.id)) return false
+        seen.add(m.id)
+        return true
+      })
+    }
     if (fresh.length) {
       for (const message of fresh) {
         state.history.unshift({
@@ -94,7 +115,7 @@ export class MailStore {
           from: message.from, to: message.to, subject: message.subject, date: message.date,
           text: (message.text || '').slice(0, 2000),
           html: sanitizeHtml(message.html || '', 8000),
-          receivedAt: new Date().toISOString(),
+          receivedAt: (() => { const t = Date.parse(message.date || ''); return isNaN(t) ? new Date().toISOString() : new Date(t).toISOString() })(), // 优先邮件头 Date,解析失败才用本机时间
         })
       }
       if (state.history.length > MAX_HISTORY) state.history.length = MAX_HISTORY
@@ -114,9 +135,61 @@ export class MailStore {
 
   /** 收件历史(不含密码,最新在前)。 */
   async history(email = '') {
-    const { history } = await this.#read()
+    const { history, readIds } = await this.#read()
     const list = email ? history.filter((m) => m.email === email) : history
-    return list
+    return list.map((m) => ({ ...m, read: Boolean(readIds[m.id]) }))
+  }
+
+  /** 删除单封历史邮件(按 id)。返回是否删除。 */
+  async deleteMail(id) {
+    const target = String(id || '')
+    await this.credentials.modifyRecord(RECORD_ID, (current) => {
+      const payload = current?.payload ?? { mailboxes: [], lastUid: {}, history: [] }
+      payload.history = (payload.history || []).filter((m) => m.id !== target)
+      return { kind: 'grant', payload }
+    })
+    return true
+  }
+
+  /** 未读邮件总数(全部邮箱)。 */
+  async unreadCount() {
+    const { history, readIds } = await this.#read()
+    return history.filter((m) => !readIds[m.id]).length
+  }
+
+  /** 全部已读:email 指定邮箱则只标该邮箱。 */
+  async markAllRead(email = '') {
+    const target = (email || '').trim().toLowerCase()
+    await this.credentials.modifyRecord(RECORD_ID, (current) => {
+      const payload = current?.payload ?? { mailboxes: [], lastUid: {}, history: [] }
+      payload.readIds = payload.readIds || {}
+      for (const m of payload.history || []) {
+        if (!target || m.email === target) payload.readIds[m.id] = true
+      }
+      return { kind: 'grant', payload }
+    })
+  }
+
+  /** 标记邮件已读(按 history 条目 id)。 */
+  async markRead(id) {
+    await this.credentials.modifyRecord(RECORD_ID, (current) => {
+      const payload = current?.payload ?? { mailboxes: [], lastUid: {}, history: [] }
+      payload.readIds = payload.readIds || {}
+      payload.readIds[id] = true
+      return { kind: 'grant', payload } // 必须返回完整记录(含 kind),否则记录失效列表变空
+    })
+  }
+
+  /** 清空收件历史:email 指定邮箱则只清该邮箱,否则全清。返回剩余条数。 */
+  async clearHistory(email = '') {
+    const target = (email || '').trim().toLowerCase()
+    await this.credentials.modifyRecord(RECORD_ID, (current) => {
+      const payload = current?.payload ?? { mailboxes: [], lastUid: {}, history: [] }
+      const left = target ? (payload.history ?? []).filter((m) => m.email !== target) : []
+      return { kind: 'grant', payload: { ...payload, history: left } }
+    })
+    const { history } = await this.#read()
+    return { remaining: history.length }
   }
 
   /** 取走通知(客户端轮询)。sinceSeq 之后的消息。 */

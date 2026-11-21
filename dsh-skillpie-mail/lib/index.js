@@ -108,6 +108,26 @@ async function dispatch(store, cfg, body) {
     case 'list': {
       return { ok: true, mailboxes: await store.list() }
     }
+    case 'addOrRegister': {
+      // 合并入口:有应用密码先按已有邮箱验证添加;不通过/没填则自动注册
+      const username = String(body.username || '').trim().toLowerCase()
+      const note = String(body.note || '')
+      const password = String(body.password || '')
+      if (!/^[a-z0-9][a-z0-9._-]{2,30}$/.test(username)) {
+        return { ok: false, error: '用户名格式不对(3-31位小写字母/数字/._-)' }
+      }
+      if (password) {
+        try {
+          const email = username.includes('@') ? username : username + '@skillpie.cn'
+          await verifyImap(cfg.imapHost, cfg.imapPort, email, password)
+          await store.add(email, password, note)
+          return { ok: true, mode: 'added', mailboxes: await store.list() }
+        } catch (e) { /* 登录失败→当新邮箱自动注册 */ }
+      }
+      const result = await registerMailbox(cfg.registerUrl, username, note)
+      await store.addFromRegister({ address: result.address, appPassword: result.appPassword, note })
+      return { ok: true, mode: 'registered', address: result.address, appPassword: result.appPassword, mailboxes: await store.list() }
+    }
     case 'add': {
       const email = String(body.email || '').trim().toLowerCase()
       const password = String(body.password || '')
@@ -127,8 +147,27 @@ async function dispatch(store, cfg, body) {
       await store.addFromRegister({ address: result.address, appPassword: result.appPassword, note })
       return { ok: true, address: result.address, appPassword: result.appPassword, mailboxes: await store.list() }
     }
+    case 'unread': {
+      return { ok: true, count: await store.unreadCount() }
+    }
+    case 'markAllRead': {
+      await store.markAllRead(String(body.email || ''))
+      return { ok: true }
+    }
+    case 'deleteMail': {
+      await store.deleteMail(String(body.id || ''))
+      return { ok: true }
+    }
+    case 'markRead': {
+      await store.markRead(String(body.id || ''))
+      return { ok: true }
+    }
     case 'history': {
       return { ok: true, messages: await store.history(String(body.email || '').trim().toLowerCase()) }
+    }
+    case 'clearHistory': {
+      const remaining = await store.clearHistory(String(body.email || '').trim().toLowerCase())
+      return { ok: true, remaining }
     }
     case 'poll': {
       const sinceSeq = Number(body.sinceSeq) || 0
@@ -161,8 +200,9 @@ export default {
     // store 由 credentials 注入填充; HTTP 路由不依赖它, 先注册保证 API 可用
     const holder = { store: null }
 
-    ctx.inject(['credentials'], async (child) => {
-      const credentials = await child.credentials
+    // 同步回调!async 回调会让宿主无法在插件停用时回收定时器,每次热重载泄漏一个轮询实例
+    ctx.inject(['credentials'], (child) => {
+      const credentials = child.credentials
       holder.store = new MailStore(credentials)
       const imapOpts = { host: cfg.imapHost, port: cfg.imapPort, folders }
       // 首轮立即拉一次,保证基线 lastUid(不推历史邮件:首轮只记水位)

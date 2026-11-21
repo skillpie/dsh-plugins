@@ -226,9 +226,11 @@ function decodeEncodedWord(word) {
 export function decodeHeaderValue(value) {
   if (value == null) return ''
   let s = value.replace(/\r?\n[ \t]+/g, ' ') // 折行展开
-  if (/=[\s\S]*\?/.test(s)) s = s.replace(/=\?[^?]+\?[BbQq]\?[\s\S]*?\?=/g, decodeEncodedWord)
-  // 剩余裸 8bit(非 ASCII)按字节还原(GBK 链优先,兼容发件方不标编码)
-  if (/[^\x00-\x7F]/.test(s) && !s.includes('\uFFFD')) {
+  const hadEncodedWords = /=\?[^?]+\?[BbQq]\?/.test(s)
+  if (hadEncodedWords) s = s.replace(/=\?[^?]+\?[BbQq]\?[\s\S]*?\?=/g, decodeEncodedWord)
+  // 裸 8bit 兜底只在没有 encoded-word 时做:展开后已是正常 Unicode,
+  // 再按 latin1→GBK 链重解会把正确的中文二次搅成乱码
+  if (!hadEncodedWords && /[^\x00-\x7F]/.test(s) && !s.includes('\uFFFD')) {
     try {
       const buf = Buffer.from(s, 'latin1')
       for (const enc of ['utf-8', 'gbk', 'gb18030', 'big5']) {
@@ -294,7 +296,7 @@ export function extractText(rawBuf, maxLength = 800, preferHtml = false) {
   const sep = rawBuf.indexOf('\r\n\r\n')
   const headerBlock = rawBuf.subarray(0, sep < 0 ? 0 : sep).toString('latin1')
   const bodyBuf = sep < 0 ? rawBuf : rawBuf.subarray(sep + 4)
-  const walk = (buf, ct) => {
+  const walk = (buf, ct, headers) => {
     if (ct.type.startsWith('multipart/') && ct.boundary) {
       const b = '--' + ct.boundary
       const parts = []
@@ -310,12 +312,13 @@ export function extractText(rawBuf, maxLength = 800, preferHtml = false) {
         if (psep < 0) continue
         const ph = part.subarray(0, psep).toString('latin1')
         const pct = contentTypeOf(ph)
-        const text = walk(part.subarray(psep + 4), pct)
+        const text = walk(part.subarray(psep + 4), pct, ph)
         if (text) return text
       }
       return ''
     }
-    const cte = (getHeader(buf.toString('latin1', 0, Math.min(buf.length, 4096)), 'Content-Transfer-Encoding') || '').trim()
+    // 非多部件邮件的传输编码在顶层头里;多部件则在部件头里
+    const cte = (getHeader(headers || buf.toString('latin1', 0, Math.min(buf.length, 4096)), 'Content-Transfer-Encoding') || '').trim()
     const text = decodeBodyText(buf, cte, ct.charset)
     if (ct.type === 'text/plain' || ct.type === 'text/html' || !ct.type) {
       if (ct.type === 'text/html') return preferHtml ? sanitizeHtml(text) : text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -323,7 +326,7 @@ export function extractText(rawBuf, maxLength = 800, preferHtml = false) {
     }
     return ''
   }
-  const text = walk(bodyBuf, contentTypeOf(headerBlock)) || (preferHtml ? '' : bodyBuf.toString('utf-8'))
+  const text = walk(bodyBuf, contentTypeOf(headerBlock), headerBlock) || (preferHtml ? '' : bodyBuf.toString('utf-8'))
   return text.length > maxLength ? text.slice(0, maxLength) + '…' : text
 }
 
@@ -377,7 +380,7 @@ export function extractHtml(rawBuf, maxLength = 20000) {
   const headerBlock = rawBuf.subarray(0, sep < 0 ? 0 : sep).toString('latin1')
   const bodyBuf = sep < 0 ? rawBuf : rawBuf.subarray(sep + 4)
   let found = ''
-  const walk = (buf, ct) => {
+  const walk = (buf, ct, headers) => {
     if (found) return
     if (ct.type.startsWith('multipart/') && ct.boundary) {
       const b = '--' + ct.boundary
@@ -387,16 +390,21 @@ export function extractHtml(rawBuf, maxLength = 20000) {
         if (next < 0) break
         const part = buf.subarray(idx + b.length, next)
         const psep = part.indexOf('\r\n\r\n')
-        if (psep >= 0) walk(part.subarray(psep + 4), contentTypeOf(part.subarray(0, psep).toString('latin1')))
+        if (psep >= 0) {
+          const partHeaders = part.subarray(0, psep).toString('latin1')
+          walk(part.subarray(psep + 4), contentTypeOf(partHeaders), partHeaders)
+        }
         idx = next
       }
       return
     }
     if (ct.type !== 'text/html') return
-    const cte = (getHeader(buf.toString('latin1', 0, Math.min(buf.length, 4096)), 'Content-Transfer-Encoding') || '').trim()
+    // 非多部件邮件的传输编码在顶层头里;多部件则在部件头里
+    const cte = (getHeader(headers, 'Content-Transfer-Encoding') || '').trim()
     found = sanitizeHtml(decodeBodyText(buf, cte, ct.charset))
   }
-  walk(bodyBuf, contentTypeOf(headerBlock))
+  const topHeaders = headerBlock
+  walk(bodyBuf, contentTypeOf(topHeaders), topHeaders)
   return found.length > maxLength ? found.slice(0, maxLength) + '…' : found
 }
 
@@ -406,28 +414,37 @@ export function extractHtml(rawBuf, maxLength = 20000) {
  * 检查邮箱自 lastUid 以来的新邮件。
  * @returns {Promise<{messages: Array<{uid, folder, from, to, subject, date, text, html}>, lastUid}>}
  */
-export async function fetchNewMail({ host, port, user, password, folders = ['INBOX'], lastUid = 0 }) {
+export async function fetchNewMail({ host, port, user, password, folders = ['INBOX'], lastUid = 0, lastUidByFolder = null, lastTimeByFolder = null }) {
   const client = new ImapClient({ host, port, user, password })
   await client.connect()
   try {
     const messages = []
-    let maxUid = lastUid
+    const marks = {} // 各文件夹独立水位(UID 序列互不相干)
+    const times = {} // 各文件夹独立时间水位(收件时间)
     for (const folder of folders) {
+      const base = Math.max(lastUidByFolder?.[folder] ?? 0, lastUid) // 兼容旧水位
+      const timeFloor = Date.parse(lastTimeByFolder?.[folder] ?? '') || 0 // 时间兜底:UID 回退(文件夹重建等)时靠收件时间过滤
       await client.select(folder)
-      const uids = await client.searchUids(lastUid + 1)
-      const fresh = uids.filter((u) => u > lastUid)
+      const uids = await client.searchUids(base + 1)
+      const fresh = uids.filter((u) => u > base)
+      let newestTs = 0
       for (const uid of fresh) {
         const lines = await client.command('UID', 'FETCH', String(uid), '(BODY.PEEK[])')
         for (const l of lines) {
           const m = /\x00LIT\x00([\s\S]*)\x00END\x00/.exec(l)
           if (!m) continue
           const parsed = parseMail(Buffer.from(m[1], 'utf-8'))
+          const ts = Date.parse(parsed.date || '') || 0
+          if (timeFloor && ts && ts <= timeFloor) continue // 早于水位时间的旧信跳过(只记 UID 不推送)
           messages.push({ uid, folder, ...parsed })
-          if (uid > maxUid) maxUid = uid
+          if (ts > newestTs) newestTs = ts
         }
+        if (uid > (marks[folder] ?? 0)) marks[folder] = uid
       }
+      if (!(marks[folder] > base)) marks[folder] = base
+      times[folder] = timeFloor && !newestTs ? new Date(timeFloor).toISOString() : (newestTs ? new Date(newestTs).toISOString() : (lastTimeByFolder?.[folder] ?? ''))
     }
-    return { messages, lastUid: maxUid }
+    return { messages, lastUidByFolder: marks, lastTimeByFolder: times, lastUid: Math.max(...Object.values(marks), lastUid) }
   } finally {
     await client.logout().catch(() => {})
   }

@@ -20,7 +20,7 @@ window.__ModuleLoader__.load({
     var API = '/dsh-skillpie-mail/api'
 
     var zh = {
-      title: 'SkillPie邮箱',
+      title: 'SkillPie收件箱',
       sectionDesc: '管理 @skillpie.cn 邮箱；收到新邮件时全局弹窗提醒。',
       quickRegister: '快速注册',
       registerTitle: '快速注册邮箱',
@@ -34,17 +34,24 @@ window.__ModuleLoader__.load({
       registerPwd: '应用密码 (IMAP 登录用)',
       registerDone: '已自动加入下方列表, 无需再手动添加',
       add: '添加邮箱',
-      addTitle: '添加已有邮箱',
+      addTitle: '添加邮箱',
+      mergeHint: '已有邮箱填密码直接添加;新用户名自动注册,登录密码为系统自动生成的应用密码(Stalwart 不支持自设账号密码)。',
       email: '邮箱地址',
       password: '密码',
-      appPasswordLabel: '应用密码',
-      appPasswordTip: '填 app_ 开头的应用密码 (注册成功弹窗里有;老账号可在 mail.skillpie.cn/admin 的账户页签发)。账号密码无法用于此登录。',
+      appPasswordLabel: '密码 / 应用密码',
+      appPasswordTip: '已有账号: 填它的应用密码 (app_ 开头) 直接添加; 老账号可在 mail.skillpie.cn/admin 签发。',
       addOk: '添加',
       remove: '移除',
-      empty: '还没有邮箱，点「快速注册」或「添加邮箱」。',
+      empty: '还没有邮箱，点「添加邮箱」。',
       mailboxCount: '共 {n} 个邮箱',
       newMail: '新邮件',
       close: '关闭',
+      clearAll: '清空',
+      markAllRead: '全部已读',
+      prevMail: '上一封',
+      del: '删除',
+      nextMail: '下一封',
+      back: '返回',
       inbox: '收件箱',
       inboxAll: '全部邮箱',
       inboxEmpty: '还没有收过邮件',
@@ -82,6 +89,12 @@ window.__ModuleLoader__.load({
       mailboxCount: '{n} mailbox(es)',
       newMail: 'New mail',
       close: 'Close',
+      back: 'Back',
+      del: 'Delete',
+      prevMail: 'Prev',
+      nextMail: 'Next',
+      markAllRead: 'Mark all read',
+      clearAll: 'Clear',
       inbox: 'Inbox',
       inboxAll: 'All mailboxes',
       inboxEmpty: 'No mail received yet',
@@ -183,6 +196,14 @@ window.__ModuleLoader__.load({
 
     var MAIL_SUFFIX = '@skillpie.cn'
 
+    function fmtTime(iso) {
+      if (!iso) return ''
+      var d = new Date(iso)
+      if (isNaN(d.getTime())) return ''
+      var p = function (n) { return n < 10 ? '0' + n : '' + n }
+      return p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes())
+    }
+
     function RegisterDialog(props) {
       var t = props.t
       var usernameState = React.useState('')
@@ -271,66 +292,86 @@ window.__ModuleLoader__.load({
       var t = props.t
       var emailState = React.useState('')
       var passwordState = React.useState('')
+      var noteState = React.useState('')
       var busyState = React.useState(false)
       var errorState = React.useState('')
+      var resultState = React.useState(null)
+      var copiedState = React.useState('')
+
+      var copy = function (text, tag) {
+        navigator.clipboard.writeText(text).then(function () {
+          copiedState[1](tag)
+          window.setTimeout(function () { copiedState[1]('') }, 1500)
+        }).catch(function () {})
+      }
 
       var submit = function () {
         if (busyState[0]) return
         busyState[1](true)
         errorState[1]('')
-        // 支持 @skillpie.cn 前缀简写(自动补全)或任意完整邮箱地址
         var prefix = emailState[0].trim()
-        var email = prefix.indexOf('@') >= 0 ? prefix : prefix + MAIL_SUFFIX
-        api('add', { email: email, password: passwordState[0] })
-          .then(function () {
+        api('addOrRegister', { username: prefix, note: noteState[0], password: passwordState[0] })
+          .then(function (data) {
             props.onChanged()
-            props.onClose()
+            if (data.mode === 'registered') resultState[1]({ address: data.address, appPassword: data.appPassword })
+            else props.onClose()
           })
           .catch(function (error) { errorState[1](error.message) })
           .finally(function () { busyState[1](false) })
       }
 
-      return h(Modal, { title: t('addTitle'), onClose: props.onClose },
-        h('label', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
-          h('span', { style: labelStyle }, t('email')),
-          h('div', {
-            style: {
-              display: 'flex', alignItems: 'center', height: 28, borderRadius: 7,
-              border: '1px solid var(--dsw-alias-border-l1)',
-              background: 'var(--dsw-alias-bg-layer-1)', overflow: 'hidden',
-            },
-          },
-            h('input', {
-              style: Object.assign({}, inputStyle, { border: 'none', borderRadius: 0, flex: 1, height: '100%' }),
-              value: emailState[0], placeholder: 'taobao01',
-              onChange: function (event) { emailState[1](event.target.value.replace(/@.*$/, '')) },
-            }),
-            h('span', {
-              style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', padding: '0 8px', userSelect: 'none', flex: 'none' },
-            }, MAIL_SUFFIX),
-          ),
-        ),
-        h(Field, {
-          label: [
-            t('appPasswordLabel'),
-            h('span', {
-              key: 'tip', title: t('appPasswordTip'),
-              style: {
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                marginLeft: 4, width: 14, height: 14, borderRadius: '50%',
-                border: '1px solid var(--dsw-alias-border-l1)', fontSize: 10,
-                color: 'var(--dsw-alias-label-secondary)', cursor: 'help', userSelect: 'none',
-              },
-            }, '?'),
-          ],
-          value: passwordState[0], onChange: passwordState[1],
-        }),
-        errorState[0] ? h('div', { style: { fontSize: 12, color: '#e5484d' } }, errorState[0]) : null,
-        h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
-          h('button', { type: 'button', style: btnStyle, onClick: props.onClose }, t('close')),
-          h('button', { type: 'button', style: btnPrimaryStyle, disabled: busyState[0], onClick: submit },
-            busyState[0] ? t('loading') : t('addOk')),
-        ),
+      var result = resultState[0]
+      return h(Modal, { title: result ? t('registerOk') : t('addTitle'), onClose: props.onClose },
+        result
+          ? [
+              h('div', { key: 'addr', style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+                h('span', { style: labelStyle }, t('registerResult')),
+                h('div', { style: { display: 'flex', gap: 6 } },
+                  h('code', { style: { flex: 1, fontSize: 13, fontWeight: 600 } }, result.address),
+                  h('button', { type: 'button', style: btnStyle, onClick: function () { copy(result.address, 'addr') } },
+                    copiedState[0] === 'addr' ? t('copied') : t('copy')),
+                ),
+              ),
+              h('div', { key: 'pwd', style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+                h('span', { style: labelStyle }, t('registerPwd')),
+                h('div', { style: { display: 'flex', gap: 6 } },
+                  h('code', { style: { flex: 1, fontSize: 12, wordBreak: 'break-all' } }, result.appPassword),
+                  h('button', { type: 'button', style: btnStyle, onClick: function () { copy(result.appPassword, 'pwd') } },
+                    copiedState[0] === 'pwd' ? t('copied') : t('copy')),
+                ),
+              ),
+              h('div', { key: 'hint', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('registerDone')),
+            ]
+          : [
+              h('label', { key: 'u', style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+                h('span', { style: labelStyle }, t('registerUser')),
+                h('div', {
+                  style: {
+                    display: 'flex', alignItems: 'center', height: 28, borderRadius: 7,
+                    border: '1px solid var(--dsw-alias-border-l1)',
+                    background: 'var(--dsw-alias-bg-layer-1)', overflow: 'hidden',
+                  },
+                },
+                  h('input', {
+                    style: Object.assign({}, inputStyle, { border: 'none', borderRadius: 0, flex: 1, height: '100%' }),
+                    value: emailState[0], placeholder: 'taobao01',
+                    onChange: function (event) { emailState[1](event.target.value.replace(/@.*$/, '')) },
+                  }),
+                  h('span', {
+                    style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', padding: '0 8px', userSelect: 'none', flex: 'none' },
+                  }, MAIL_SUFFIX),
+                ),
+              ),
+              h(Field, { key: 'n', label: t('registerNote'), value: noteState[0], placeholder: t('registerNotePh'), onChange: noteState[1] }),
+              h(Field, { key: 'p', label: t('appPasswordLabel') + '（选填）', value: passwordState[0], onChange: passwordState[1], placeholder: t('appPasswordTip') }),
+              h('div', { key: 'hint2', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('mergeHint')),
+              errorState[0] ? h('div', { key: 'e', style: { fontSize: 12, color: '#e5484d' } }, errorState[0]) : null,
+              h('div', { key: 'b', style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
+                h('button', { type: 'button', style: btnStyle, onClick: props.onClose }, t('close')),
+                h('button', { type: 'button', style: btnPrimaryStyle, disabled: busyState[0], onClick: submit },
+                  busyState[0] ? t('loading') : t('addOk')),
+              ),
+            ],
       )
     }
 
@@ -339,69 +380,272 @@ window.__ModuleLoader__.load({
       var listState = React.useState(null) // null=加载中
       var mailboxes = listState[0]
       var setMailboxes = listState[1]
-      var dialogState = React.useState(null) // 'register' | 'add' | null
+      var selState = React.useState('') // ''=全部邮箱
+      var selected = selState[0]
+      var setSelected = selState[1]
+      var msgState = React.useState(null)
+      var messages = msgState[0]
+      var setMessages = msgState[1]
+      var openState = React.useState(null)
+      var opened = openState[0]
+      var setOpened = openState[1]
+      var pageState = React.useState(0)
+      var page = pageState[0]
+      var setPage = pageState[1]
+      var dialogState = React.useState(null) // 'add' | null
       var dialog = dialogState[0]
       var setDialog = dialogState[1]
+      var confirmingState = React.useState(false) // 清空两段式确认
+      var confirming = confirmingState[0]
+      var menuState = React.useState(null) // {email,x,y} 右键菜单
+      var menu = menuState[0]
+      var setMenu = menuState[1]
+      var PAGE_SIZE = 10
 
       var refresh = React.useCallback(function () {
         api('list').then(function (data) { setMailboxes(data.mailboxes) }).catch(function () { setMailboxes([]) })
       }, [])
       React.useEffect(function () { refresh() }, [refresh])
 
+      // 切换账号→拉取对应邮件(''=全部)
+      React.useEffect(function () {
+        setMessages(null); setOpened(null); setPage(0)
+        api('history', { email: selected }).then(function (data) {
+          var list = (data.messages || []).slice().sort(function (a, b) {
+            return new Date(b.receivedAt || 0) - new Date(a.receivedAt || 0) // 全局时间倒序,最新在前
+          })
+          setMessages(list)
+        }).catch(function () { setMessages([]) })
+      }, [selected])
+
+      // 点任意处关闭右键菜单
+      React.useEffect(function () {
+        if (!menu) return undefined
+        var close = function () { setMenu(null) }
+        window.addEventListener('click', close)
+        return function () { window.removeEventListener('click', close) }
+      }, [menu])
+
       var removeOne = function (email) {
-        api('remove', { email: email }).then(function (data) { setMailboxes(data.mailboxes) }).catch(function () {})
+        setMenu(null)
+        api('remove', { email: email }).then(function (data) {
+          setMailboxes(data.mailboxes)
+          if (selected === email) setSelected('')
+        }).catch(function () {})
       }
 
-      return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 0' } },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+      var prefix = function (email) { return String(email || '').replace(/@skillpie\.cn$/, '') }
+
+      return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 0, height: 520 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, height: 44, flex: 'none', paddingLeft: 10 } },
           h(MailIcon, { size: 16 }),
           h('span', { style: { fontSize: 13, fontWeight: 600 } }, t('title')),
         ),
-        h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('sectionDesc')),
-        h('div', { style: { display: 'flex', gap: 8 } },
-          h('button', { type: 'button', style: btnPrimaryStyle, onClick: function () { setDialog('register') } }, t('quickRegister')),
-          h('button', { type: 'button', style: btnStyle, onClick: function () { setDialog('add') } }, t('add')),
-          h('button', { type: 'button', style: btnStyle, onClick: function () { setDialog('inbox:') } }, t('inbox')),
-        ),
-        mailboxes === null
-          ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('loading'))
-          : mailboxes.length === 0
-            ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('empty'))
-            : h('div', { style: { display: 'flex', flexDirection: 'column' } },
-                mailboxes.map(function (box) {
-                  return h('div', {
-                    key: box.email,
-                    style: {
-                      display: 'flex', alignItems: 'center', gap: 8, padding: '7px 4px',
-                      borderBottom: '1px solid var(--dsw-alias-border-l1)', fontSize: 12,
-                    },
-                  },
-                    h(MailIcon, { size: 13 }),
-                    h('span', { style: { fontWeight: 500 } }, box.email),
-                    box.note ? h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } }, box.note) : null,
+        h('div', { style: { display: 'flex', flex: 1, minHeight: 0, borderTop: '1px solid #f0f0f2' } },
+          /* 左栏:账号列表 */
+          h('div', { style: { width: 168, flex: 'none', borderRight: '1px solid #f0f0f2', display: 'flex', flexDirection: 'column', minHeight: 0 } },
+            h('div', { style: { flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 4px 0 0' } },
+            h('div', {
+              onClick: function () { setSelected('') },
+              style: {
+                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', fontSize: 12, cursor: 'pointer',
+                fontWeight: selected === '' ? 600 : 400, background: selected === '' ? '#f5f5f7' : 'transparent', borderRadius: 6,
+              },
+            },
+              h(MailIcon, { size: 13 }), t('inboxAll'),
+            ),
+            (mailboxes || []).map(function (box) {
+              var isSel = selected === box.email
+              return h('div', {
+                key: box.email,
+                onClick: function () { setSelected(box.email) },
+                onContextMenu: function (event) {
+                  event.preventDefault()
+                  setMenu({ email: box.email, x: event.clientX, y: event.clientY })
+                },
+                title: box.email + (box.note ? ' · ' + box.note : '') + '（右键移除）',
+                style: {
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', fontSize: 12, cursor: 'pointer',
+                  fontWeight: isSel ? 600 : 400, background: isSel ? '#f5f5f7' : 'transparent', borderRadius: 6,
+                },
+              },
+                h(MailIcon, { size: 13 }),
+                h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                  prefix(box.email) + (box.note ? ' ' + box.note : '')),
+              )
+            }),
+            ),
+            h('div', { style: { padding: 6 } },
+              h('button', {
+                type: 'button', style: Object.assign({}, btnPrimaryStyle, { width: '100%', justifyContent: 'center' }),
+                onClick: function () { setDialog('add') },
+              }, '+ ' + t('add')),
+            ),
+          ),
+          /* 右栏:邮件列表/详情 */
+          h('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: '6px 0 0 10px' } },
+            opened
+              ? [
+                  h('div', { key: 'back', style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                    h('button', { type: 'button', style: btnStyle, onClick: function () { setOpened(null) } }, '‹ ' + t('back')),
                     h('span', { style: { flex: 1 } }),
                     h('button', {
-                      type: 'button', style: btnStyle,
-                      onClick: function () { setDialog('inbox:' + box.email) },
-                    }, t('inbox')),
+                      type: 'button', style: Object.assign({}, btnStyle, { color: '#e5484d', borderColor: 'rgba(229,72,77,0.4)' }),
+                      onClick: function () {
+                        var id = opened.id
+                        var i = messages.findIndex(function (m) { return m.id === id })
+                        var neighbor = messages[i - 1] || messages[i + 1] // 删除后自动跳到相邻邮件
+                        api('deleteMail', { id: id }).catch(function () {})
+                        syncUnread()
+                        var left = messages.filter(function (m) { return m.id !== id })
+                        setMessages(left)
+                        setOpened(neighbor || null)
+                      },
+                    }, t('del')),
                     h('button', {
-                      type: 'button', style: Object.assign({}, btnStyle, { color: '#e5484d' }),
-                      onClick: function () { removeOne(box.email) },
-                    }, t('remove')),
-                  )
-                }),
-              ),
-        dialog === 'register'
-          ? h(RegisterDialog, { t: t, onClose: function () { setDialog(null) }, onChanged: refresh })
-          : null,
+                      type: 'button', style: btnStyle,
+                      disabled: messages.findIndex(function (m) { return m.id === opened.id }) <= 0,
+                      onClick: function () {
+                        var i = messages.findIndex(function (m) { return m.id === opened.id })
+                        var next = messages[i - 1] // 列表倒序,上一封=数组前一个(更新)
+                        if (next) {
+                          if (!next.read) { next.read = true; api('markRead', { id: next.id }).catch(function () {}); syncUnread() }
+                          setOpened(next)
+                        }
+                      },
+                    }, '↑ ' + (t('prevMail') || '上一封')),
+                    h('button', {
+                      type: 'button', style: btnStyle,
+                      disabled: messages.findIndex(function (m) { return m.id === opened.id }) < 0 || messages.findIndex(function (m) { return m.id === opened.id }) >= messages.length - 1,
+                      onClick: function () {
+                        var i = messages.findIndex(function (m) { return m.id === opened.id })
+                        var nextM = messages[i + 1] // 数组后一个(更早)
+                        if (nextM) {
+                          if (!nextM.read) { nextM.read = true; api('markRead', { id: nextM.id }).catch(function () {}); syncUnread() }
+                          setOpened(nextM)
+                        }
+                      },
+                    }, '↓ ' + (t('nextMail') || '下一封')),
+                  ),
+                  h('div', { key: 'subj', style: { fontSize: 14, fontWeight: 600, marginTop: 6 } }, opened.subject || t('noSubject')),
+                  h('div', { key: 'meta', style: { display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11, color: '#8a8a8e', margin: '6px 0' } },
+                    h('span', null, (t('from') || '发件人') + '：' + (opened.from || '-')),
+                    h('span', null, (t('toLabel') || '收件邮箱') + '：' + opened.email),
+                    h('span', null, (t('dateLabel') || '时间') + '：' + (fmtTime(opened.receivedAt) || opened.date || '-')),
+                  ),
+                  opened.html
+                    ? h('div', {
+                        key: 'html',
+                        style: { fontSize: 12, color: '#3a3a3c', background: '#f5f5f7', borderRadius: 8, padding: '8px 10px', flex: 1, minHeight: 0, overflowY: 'auto' },
+                        dangerouslySetInnerHTML: { __html: opened.html },
+                      })
+                    : h('div', {
+                        key: 'body',
+                        style: { fontSize: 12, color: '#3a3a3c', whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: '#f5f5f7', borderRadius: 8, padding: '8px 10px', flex: 1, minHeight: 0, overflowY: 'auto' },
+                      }, opened.text || '(无正文)'),
+                ]
+              : [
+                  h('div', { key: 'toolbar', style: { display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 4, borderBottom: '1px solid #f0f0f2' } },
+                    h('button', {
+                      type: 'button', style: btnStyle,
+                      onClick: function () {
+                        if (!messages) return
+                        api('markAllRead', { email: selected }).then(function () {
+                          // 服务端写完再更新本地,保证实时刷新且不丢
+                          setMessages(function (prev) { return prev.map(function (m) { return Object.assign({}, m, { read: true }) }) })
+                          syncUnread()
+                        }).catch(function () {})
+                      },
+                    }, t('markAllRead')),
+                    h('span', { key: 'sp', style: { flex: 1 } }),
+                    h('button', {
+                      type: 'button', style: Object.assign({}, btnStyle, confirming ? { color: '#fff', background: '#e5484d', borderColor: '#e5484d' } : { color: '#e5484d', borderColor: 'rgba(229,72,77,0.4)' }),
+                      onClick: function () {
+                        // DSH 可能屏蔽 window.confirm,两段式确认
+                        if (!confirming) {
+                          confirmingState[1](true)
+                          window.setTimeout(function () { confirmingState[1](false) }, 3000)
+                          return
+                        }
+                        confirmingState[1](false)
+                        api('clearHistory', { email: selected }).then(function () {
+                          setMessages([]); setPage(0)
+                        }).catch(function () {})
+                      },
+                    }, confirming ? '确认清空?' : t('clearAll')),
+                  ),
+                  messages === null
+                    ? h('div', { key: 'load', style: { fontSize: 12, color: '#8a8a8e' } }, t('loading'))
+                    : messages.length === 0
+                      ? h('div', { key: 'empty', style: { fontSize: 12, color: '#8a8a8e' } }, t('inboxEmpty'))
+                      : [
+                          h('div', { key: 'list', style: { flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' } },
+                            messages.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(function (m) {
+                              return h('div', {
+                                key: m.id,
+                                onClick: function () {
+                                  setOpened(m)
+                                  if (!m.read) {
+                                    m.read = true
+                                    api('markRead', { id: m.id }).catch(function () {}); syncUnread()
+                                  }
+                                },
+                                style: {
+                                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px',
+                                  borderBottom: '1px solid #f0f0f2', fontSize: 12, cursor: 'pointer', borderRadius: 6,
+                                  fontWeight: m.read ? 400 : 600, // 未读整行加粗
+                                },
+                                onMouseEnter: function (event) { event.currentTarget.style.background = '#f5f5f7' },
+                                onMouseLeave: function (event) { event.currentTarget.style.background = 'transparent' },
+                              },
+                                h('span', {
+                                  key: 'rdot',
+                                  title: m.read ? '已读' : '未读',
+                                  style: {
+                                    flex: 'none', width: 8, height: 8, borderRadius: 4,
+                                    background: m.read ? 'transparent' : '#0a84ff',
+                                    border: m.read ? '1px solid #c7c7cc' : 'none',
+                                  },
+                                }),
+                                selected === '' ? h('span', { style: { color: '#8a8a8e', flex: 'none', width: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, prefix(m.email)) : null,
+                                h('span', { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 } }, m.subject || t('noSubject')),
+                                h('span', { style: { color: '#8a8a8e', flex: 'none', width: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', direction: 'rtl', textAlign: 'left' } }, m.from || '-'),
+                                h('span', { style: { color: '#8a8a8e', flex: 'none', width: 78, fontSize: 11, textAlign: 'right' } }, fmtTime(m.receivedAt)),
+                              )
+                            })),
+                          h('div', { key: 'pager', style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 6, fontSize: 12, color: '#8a8a8e' } },
+                            h('span', null, '共 ' + messages.length + ' 封 · 第 ' + (page + 1) + '/' + Math.max(1, Math.ceil(messages.length / PAGE_SIZE)) + ' 页'),
+                            h('button', { type: 'button', style: Object.assign({}, btnStyle, { opacity: page === 0 ? 0.4 : 1 }), disabled: page === 0, onClick: function () { setPage(page - 1) } }, '‹ 上一页'),
+                            h('button', { type: 'button', style: Object.assign({}, btnStyle, { opacity: (page + 1) * PAGE_SIZE >= messages.length ? 0.4 : 1 }), disabled: (page + 1) * PAGE_SIZE >= messages.length, onClick: function () { setPage(page + 1) } }, '下一页 ›'),
+                          ),
+                        ],
+                ],
+          ),
+        ),
         dialog === 'add'
           ? h(AddDialog, { t: t, onClose: function () { setDialog(null) }, onChanged: refresh })
           : null,
-        typeof dialog === 'string' && dialog.indexOf('inbox:') === 0
-          ? h(InboxDialog, { t: t, email: dialog.slice(6), onClose: function () { setDialog(null) } })
+        menu
+          ? ReactDOM.createPortal(
+              h('div', {
+                style: {
+                  position: 'fixed', left: menu.x, top: menu.y, zIndex: 3200,
+                  background: '#ffffff', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 8,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.15)', padding: 4, minWidth: 120,
+                },
+                onClick: function (event) { event.stopPropagation() },
+              },
+                h('div', {
+                  onClick: function () { removeOne(menu.email) },
+                  style: { padding: '6px 10px', fontSize: 12, color: '#e5484d', cursor: 'pointer', borderRadius: 5 },
+                  onMouseEnter: function (event) { event.currentTarget.style.background = '#fdecec' },
+                  onMouseLeave: function (event) { event.currentTarget.style.background = 'transparent' },
+                }, t('remove')),
+              ), document.body)
           : null,
       )
     }
+
 
 
     /* ── 收件箱弹窗(列表 → 详情) ───────────────────────────────────── */
@@ -414,12 +658,26 @@ window.__ModuleLoader__.load({
       var openState = React.useState(null)
       var opened = openState[0]
       var setOpened = openState[1]
+      var pageState = React.useState(0) // 收件箱列表分页
+      var page = pageState[0]
+      var setPage = pageState[1]
+      var confirmState = React.useState(false)
+      var confirming = confirmState[0]
+      var errState = React.useState('')
+      var errMsg = errState[0]
+      var setErr = errState[1]
+      var PAGE_SIZE = 10
 
       React.useEffect(function () {
         api('history', { email: props.email || '' }).then(function (data) {
           setMessages(data.messages || [])
         }).catch(function () { setMessages([]) })
       }, [])
+      // 返回列表时若超出末页则回退
+      var backToList = function () {
+        setOpened(null)
+        setPage(function (p) { return messages && (p + 1) * PAGE_SIZE > messages.length ? Math.max(0, Math.ceil(messages.length / PAGE_SIZE) - 1) : p })
+      }
 
       if (!ReactDOM || typeof ReactDOM.createPortal !== 'function') return null
       var closeList = function () { props.onClose() }
@@ -448,7 +706,7 @@ window.__ModuleLoader__.load({
                 opened ? (opened.subject || t('noSubject')) : t('inbox')),
               h('span', { style: { flex: 1 } }),
               opened
-                ? h('button', { type: 'button', style: btnStyle, onClick: function () { setOpened(null) } }, t('back'))
+                ? h('button', { type: 'button', style: btnStyle, onClick: backToList }, t('back'))
                 : null,
               h('button', { type: 'button', style: btnStyle, onClick: closeList }, t('close')),
             ),
@@ -458,7 +716,7 @@ window.__ModuleLoader__.load({
                 h('div', { key: 'meta', style: { fontSize: 12, color: '#6d6d72', display: 'flex', flexDirection: 'column', gap: 2 } },
                   h('span', null, (t('from') || '发件人') + '：' + (opened.from || '-')),
                   h('span', null, (t('toLabel') || '收件邮箱') + '：' + opened.email),
-                  opened.date ? h('span', null, (t('dateLabel') || '时间') + '：' + opened.date) : null,
+                  h('span', null, (t('dateLabel') || '时间') + '：' + (fmtTime(opened.receivedAt) || opened.date || '-')),
                 ),
                 opened.html
                   ? h('div', {
@@ -488,8 +746,9 @@ window.__ModuleLoader__.load({
                   ? h('div', { key: 'load', style: { fontSize: 12, color: '#8a8a8e' } }, t('loading'))
                   : messages.length === 0
                     ? h('div', { key: 'empty', style: { fontSize: 12, color: '#8a8a8e' } }, t('inboxEmpty'))
-                    : h('div', { key: 'list', style: { display: 'flex', flexDirection: 'column' } },
-                        messages.map(function (m) {
+                    : [
+                        h('div', { key: 'list', style: { display: 'flex', flexDirection: 'column' } },
+                          messages.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(function (m) {
                           return h('div', {
                             key: m.id,
                             onClick: function () { setOpened(m) },
@@ -507,8 +766,31 @@ window.__ModuleLoader__.load({
                               m.subject || t('noSubject')),
                             h('span', { style: { color: '#8a8a8e', flex: 'none', width: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', direction: 'rtl', textAlign: 'left' } },
                               m.from || '-'),
+                            h('span', { style: { color: '#8a8a8e', flex: 'none', width: 78, fontSize: 11, textAlign: 'right' } },
+                              fmtTime(m.receivedAt)),
                           )
-                        })),
+                          })),
+                        h('div', { key: 'pager', style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 6, fontSize: 12, color: '#8a8a8e' } },
+                          h('span', null, '共 ' + messages.length + ' 封 · 第 ' + (page + 1) + '/' + Math.max(1, Math.ceil(messages.length / PAGE_SIZE)) + ' 页'),
+                          h('button', { type: 'button', style: Object.assign({}, btnStyle, { opacity: page === 0 ? 0.4 : 1 }), disabled: page === 0, onClick: function () { setPage(page - 1) } }, '‹ 上一页'),
+                          h('button', { type: 'button', style: Object.assign({}, btnStyle, { opacity: (page + 1) * PAGE_SIZE >= messages.length ? 0.4 : 1 }), disabled: (page + 1) * PAGE_SIZE >= messages.length, onClick: function () { setPage(page + 1) } }, '下一页 ›'),
+                          h('button', { type: 'button', style: Object.assign({}, btnStyle, confirming ? { color: '#fff', background: '#e5484d', borderColor: '#e5484d' } : { color: '#e5484d', borderColor: 'rgba(229,72,77,0.4)' }), onClick: function () {
+                            // DSH 环境可能屏蔽 window.confirm,改用两段确认
+                            if (!confirming) {
+                              confirmState[1](true)
+                              window.setTimeout(function () { confirmState[1](false) }, 3000)
+                              return
+                            }
+                            confirmState[1](false)
+                            api('clearHistory', { email: props.email || '' }).then(function () {
+                              setMessages([])
+                              setPage(0)
+                              setErr('')
+                            }).catch(function (e) { setErr('清空失败: ' + (e && e.message ? e.message : e)) })
+                          } }, confirming ? '确认清空?' : t('clearAll')),
+                        ),
+                        errMsg ? h('div', { style: { color: '#e5484d', fontSize: 12, textAlign: 'center', marginTop: 8 } }, errMsg) : null,
+                      ],
               ],
           ),
         ),
@@ -518,14 +800,33 @@ window.__ModuleLoader__.load({
 
     /* ── 全局新邮件弹窗 ─────────────────────────────────────────────── */
 
+    // 底部栏图标共享的未读计数(收到新邮件 +1,打开收件箱清零)
+    var refreshRef = { current: null } // MailDock 的立即收件入口
+    var syncUnread = function () { // 已读/删除后立即校准底部未读数
+      api('unread').then(function (d) {
+        if (d && typeof d.count === 'number') dockStore.set(d.count)
+      }).catch(function () {})
+    }
+    var dockStore = {
+      count: 0,
+      subs: [],
+      subscribe: function (fn) { this.subs.push(fn); return this.subs.indexOf(fn) },
+      set: function (n) { this.count = n; for (var i = 0; i < this.subs.length; i++) this.subs[i](n) },
+      add: function (n) { this.set(this.count + n) },
+    }
+
 
     var pollSeq = 0 // 已取走的通知最大 seq(内存态,刷新后从 0 重新拉取不重复弹:seq 会重置)
 
     function MailPopup(props) {
       var t = props.t
-      var mailState = React.useState(null)
-      var mail = mailState[0]
-      var setMail = mailState[1]
+      var mailsState = React.useState([])
+      var mails = mailsState[0]
+      var setMails = mailsState[1]
+
+      var viewState = React.useState(0) // hooks 必须全部在条件 return 之前
+      var view = viewState[0]
+      var setView = viewState[1]
 
       React.useEffect(function () {
         var stopped = false
@@ -537,7 +838,8 @@ window.__ModuleLoader__.load({
               var item = data.notifications[i]
               if (item.seq > pollSeq) pollSeq = item.seq
             }
-            setMail(data.notifications[data.notifications.length - 1])
+            setMails(function (prev) { return prev.concat(data.notifications) })
+            dockStore.add(data.notifications.length)
           }).catch(function () {})
         }, 8000)
         return function () {
@@ -546,8 +848,15 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
-      if (!mail || !ReactDOM || typeof ReactDOM.createPortal !== 'function') return null
-      var close = function () { setMail(null) }
+      var idx = mails.length ? Math.min(view, mails.length - 1) : 0
+      if (!mails || !mails.length || !ReactDOM || typeof ReactDOM.createPortal !== 'function') return null
+      var close = function () { setMails([]) }
+      var goPrev = function () { setView(function (v) { return (v - 1 + mails.length) % mails.length }) }
+      var goNext = function () { setView(function (v) { return (v + 1) % mails.length }) }
+      var pagerBtn = {
+        border: '1px solid rgba(0,0,0,0.12)', background: '#f5f5f7', cursor: 'pointer',
+        borderRadius: 6, padding: '1px 8px', fontSize: 13, lineHeight: 1.4, color: '#1c1c1e',
+      }
       // 全局居中模态:遮罩+浅色卡片,仅用户点击关闭按钮/遮罩才消失
       return ReactDOM.createPortal(
         h('div', {
@@ -573,9 +882,14 @@ window.__ModuleLoader__.load({
                 h('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
                   h('rect', { x: 3, y: 5, width: 18, height: 14, rx: 2 }),
                   h('path', { d: 'm3 7 9 6 9-6' }))),
-              h('span', { style: { fontWeight: 600 } }, t('newMail')),
+              h('span', { style: { fontWeight: 600 } }, t('newMail') + (mails.length > 1 ? ' (' + (idx + 1) + '/' + mails.length + ')' : '')),
+              mails.length > 1
+                ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 2 } },
+                    h('button', { onClick: goPrev, style: pagerBtn }, '‹'),
+                    h('button', { onClick: goNext, style: pagerBtn }, '›'),
+                  )
+                : null,
               h('span', { style: { flex: 1 } }),
-              h('span', { style: { fontSize: 12, color: '#8a8a8e', wordBreak: 'break-all' } }, mail.email),
               h('button', {
                 onClick: close,
                 style: {
@@ -584,26 +898,34 @@ window.__ModuleLoader__.load({
                 },
               }, '×'),
             ),
-            h('div', { style: { fontWeight: 600, wordBreak: 'break-all' } }, mail.subject || '(无主题)'),
-            mail.from
-              ? h('div', { style: { fontSize: 12, color: '#6d6d72', wordBreak: 'break-all' } }, mail.from)
-              : null,
-            mail.html
-              ? h('div', {
-                  style: {
-                    fontSize: 13, color: '#3a3a3c', wordBreak: 'break-all', lineHeight: 1.6,
-                    background: '#f5f5f7', borderRadius: 8, padding: '10px 12px', maxHeight: 260, overflowY: 'auto',
-                  },
-                  dangerouslySetInnerHTML: { __html: mail.html },
-                })
-              : mail.text
-                ? h('div', {
-                    style: {
-                      fontSize: 12, color: '#3a3a3c', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                      background: '#f5f5f7', borderRadius: 8, padding: '8px 10px', maxHeight: 260, overflowY: 'auto',
-                    },
-                  }, mail.text.length > 800 ? mail.text.slice(0, 800) + '…' : mail.text)
-                : null,
+            mails.length > 0 ? (function () {
+              var mail = mails[idx]
+              return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                    h('span', { style: { fontSize: 12, color: '#8a8a8e', wordBreak: 'break-all', flex: 1 } }, mail.email + (mail.folder ? ' · ' + mail.folder : '')),
+                  ),
+                  h('div', { style: { fontWeight: 600, wordBreak: 'break-all' } }, mail.subject || '(无主题)'),
+                  mail.from
+                    ? h('div', { style: { fontSize: 12, color: '#6d6d72', wordBreak: 'break-all' } }, mail.from)
+                    : null,
+                  mail.html
+                    ? h('div', {
+                        style: {
+                          fontSize: 13, color: '#3a3a3c', wordBreak: 'break-all', lineHeight: 1.6,
+                          background: '#f5f5f7', borderRadius: 8, padding: '10px 12px', maxHeight: 260, overflowY: 'auto',
+                        },
+                        dangerouslySetInnerHTML: { __html: mail.html },
+                      })
+                    : mail.text
+                      ? h('div', {
+                          style: {
+                            fontSize: 12, color: '#3a3a3c', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                            background: '#f5f5f7', borderRadius: 8, padding: '8px 10px', maxHeight: 260, overflowY: 'auto',
+                          },
+                        }, mail.text.length > 800 ? mail.text.slice(0, 800) + '…' : mail.text)
+                      : null,
+                )
+            })() : null,
             h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
               h('button', {
                 onClick: close,
@@ -611,7 +933,7 @@ window.__ModuleLoader__.load({
                   border: '1px solid rgba(0,0,0,0.12)', background: '#f5f5f7', cursor: 'pointer',
                   borderRadius: 7, padding: '4px 14px', fontSize: 12, color: '#1c1c1e',
                 },
-              }, t('close')),
+              }, t('close') + (mails.length > 1 ? ' (' + mails.length + ')' : '')),
             ),
           ),
         ),
@@ -637,33 +959,100 @@ window.__ModuleLoader__.load({
               return s
             }
 
-        // 同一个槽只 inject 一次:设置页分区(注册+列表)与全局新邮件弹窗分属
-        // 不同槽(settings.section / shell.overlay),各自注册。
-        ctx.slots.inject('settings.section', function () {
+        // 底部栏邮箱入口:图标+新邮件角标,点击打开收件箱
+        ctx.slots.inject('conversation.composer.dock', function () {
           return ctx.slots.register(
             {
-              name: 'settings.section',
-              id: 'dsh-skillpie-mail',
-              order: 62,
-              label: function () { return pageT('title') },
+              name: 'conversation.composer.dock',
+              id: 'dsh-skillpie-mail-dock',
+              order: 6,
               locale: NS,
             },
-            function SettingsSectionSlot(sectionProps) {
-              return h(SettingsSection, { t: sectionProps.t || pageT })
-            },
-          )
-        })
-
-        ctx.slots.inject('shell.overlay', function () {
-          return ctx.slots.register(
-            {
-              name: 'shell.overlay',
-              id: 'dsh-skillpie-mail-popup',
-              order: 45,
-              locale: NS,
-            },
-            function MailPopupOverlay(overlayProps) {
-              return h(MailPopup, { t: overlayProps.t || pageT })
+            function MailDock() {
+              var openState = React.useState(false)
+              var open = openState[0]
+              var setOpen = openState[1]
+              var countState = React.useState(dockStore.count)
+              var setCount = countState[1]
+              React.useEffect(function () {
+                var off = function (n) { setCount(n) }
+                dockStore.subs.push(off)
+                return function () { dockStore.subs = dockStore.subs.filter(function (fn) { return fn !== off }) }
+              }, [])
+              // 新邮件轮询:不再自动弹窗,只累加状态栏角标
+              React.useEffect(function () {
+                var stopped = false
+                var refresh = function () {
+                  // 立即收一次件(pollNow 让宿主马上拉 IMAP),再校准未读数
+                  api('pollNow').catch(function () {})
+                  api('poll', { sinceSeq: pollSeq }).then(function (data) {
+                    if (stopped || !data.notifications || !data.notifications.length) return
+                    for (var i = 0; i < data.notifications.length; i++) {
+                      var item = data.notifications[i]
+                      if (item.seq > pollSeq) pollSeq = item.seq
+                    }
+                    return api('unread')
+                  }).then(function (d) {
+                    if (!stopped && d && typeof d.count === 'number') dockStore.set(d.count)
+                  }).catch(function () {})
+                }
+                refreshRef.current = refresh
+                var timer = window.setInterval(refresh, 30000)
+                return function () {
+                  stopped = true
+                  window.clearInterval(timer)
+                }
+              }, [])
+              return [
+                h('button', {
+                  title: (pageT('sectionTitle') || 'SkillPie 邮箱') + (countState[0] > 0 ? '（' + countState[0] + ' 封新邮件）' : ''),
+                  onClick: function () {
+                    setOpen(function (v) { return !v })
+                    if (refreshRef.current) refreshRef.current() // 点击立即收一次件
+                  },
+                  style: {
+                    boxSizing: 'border-box', borderRadius: 6, maxWidth: '100%',
+                    color: 'var(--dsw-alias-label-tertiary, #a0a3a8)', font: 'inherit',
+                    lineHeight: 'inherit', whiteSpace: 'nowrap',
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px',
+                    fontSize: 14, position: 'relative',
+                  },
+                },
+                  h('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+                    h('rect', { x: 3, y: 5, width: 18, height: 14, rx: 2 }),
+                    h('path', { d: 'm3 7 9 6 9-6' })),
+                  countState[0] > 0
+                    ? h('span', {
+                        style: { color: 'var(--dsw-alias-label-tertiary, #a0a3a8)', fontVariantNumeric: 'tabular-nums', fontSize: 'inherit', lineHeight: 'inherit' },
+                      }, String(countState[0]))
+                    : null,
+                ),
+                open
+                  ? ReactDOM.createPortal(h('div', {
+                      style: { position: 'fixed', inset: 0, zIndex: 2600, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+                      onClick: function (e) { if (e.target === e.currentTarget) setOpen(false) },
+                    },
+                      h('div', {
+                        style: {
+                          background: '#ffffff', borderRadius: 12, boxShadow: '0 12px 48px rgba(0,0,0,0.2)',
+                          width: 780, maxWidth: 'calc(100vw - 32px)', maxHeight: '86vh', overflow: 'hidden',
+                          padding: 4, position: 'relative',
+                        },
+                      },
+                        h('button', {
+                          onClick: function () { setOpen(false) },
+                          style: {
+                            position: 'absolute', top: 12, right: 12, border: 'none', background: 'transparent',
+                            cursor: 'pointer', fontSize: 18, lineHeight: 1, color: '#8a8a8e',
+                            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                          },
+                        }, '×'),
+                        h(SettingsSection, { t: pageT }),
+                      ),
+                    ), document.body)
+                  : null,
+              ]
             },
           )
         })
