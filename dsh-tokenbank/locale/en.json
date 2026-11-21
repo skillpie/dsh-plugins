@@ -7,7 +7,7 @@
   "probeInconclusive": "Upstream probe inconclusive; deposited anyway",
   "probeRejected": "{n} key(s) failed the live probe and were dropped",
   "notifyOk": "OK",
-  "depositHint": "One-click deposit: host your API key on TokenBank to convert its temporary quota into permanent balance — ideal when the weekly reset is close and quota remains unused.",
+  "depositHint": "One-click deposit: host your API key credentials on TokenBank to convert temporary quota into permanent balance. Useful when:",
   "learnMore": "About TokenBank →",
   "freeModelsEntry": "TokenBank free models",
   "addFreeModels": "Get free models",
@@ -24,10 +24,16 @@
   "rechargeOpenPay": "Open payment page",
   "rechargeCancel": "Cancel",
   "goSwitch": "Switch now",
-  "depositManageTip": "Deposit your API key into TokenBank — remaining temporary quota transfers to permanent credit. Useful when the weekly reset is near.",
+  "depositManageTip": "One-click deposit: host your API key credentials on TokenBank to convert temporary quota into permanent balance. Useful when: 1. The weekly reset is close and quota remains unused — sell it to the platform for permanent balance (like a bank deposit) 2. Cross-provider calls — convert to TokenBank balance and switch to the model providers TokenBank offers 3. Deposited API keys are called by the platform first, earning deposit interest into your balance (like a bank loan) 4. When your TokenBank balance runs short, your own API key is withdrawn and used directly 5. TokenBank routes automatically, so you no longer need to switch models frequently due to insufficient usage",
   "checkin": "Check in",
   "checkinDone": "Checked in",
   "checkinOk": "Check-in success",
   "checkinStreak": "{n}-day streak",
-  "meta.detail": "docs/DETAIL.md"
+  "meta.detail": "docs/DETAIL.md",
+  "depositCase1": "1. The weekly reset is close and quota remains unused — sell it to the platform for permanent balance (like a bank deposit)",
+  "depositCase2": "2. Cross-provider calls — convert to TokenBank balance and switch to the model providers TokenBank offers",
+  "depositCase3": "3. Deposited API keys are called by the platform first, earning deposit interest into your balance (like a bank loan)",
+  "depositCase4": "4. When your TokenBank balance runs short, your own API key is withdrawn and used directly",
+  "depositCase5": "5. TokenBank routes automatically, so you no longer need to switch models frequently due to insufficient usage",
+  "dismissHint": "Don't show again"
 }

@@ -7,7 +7,7 @@
   "probeInconclusive": "上游探活未出结论,已放行托管",
   "probeRejected": "{n} 个 Key 探活失败已被剔除",
   "notifyOk": "知道了",
-  "depositHint": "一键托管:把你的 API Key 托管到 TokenBank,临时额度自动转移为永久额度保留使用。适用于周重置快到了还没用完等情况。",
+  "depositHint": "一键托管：把你的 API Key 凭证托管到 TokenBank,临时额度自动转移为永久额度保留使用。适用于：",
   "learnMore": "了解 TokenBank →",
   "freeModelsEntry": "TokenBank 免费模型",
   "addFreeModels": "获取免费模型",
@@ -24,10 +24,16 @@
   "rechargeOpenPay": "打开支付页",
   "rechargeCancel": "取消",
   "goSwitch": "去切换",
-  "depositManageTip": "把你的 API Key 托管到 TokenBank,临时额度自动转移为永久额度保留使用。适用于周重置快到了还没用完等情况。",
+  "depositManageTip": "一键托管：把你的 API Key 凭证托管到 TokenBank,临时额度自动转移为永久额度保留使用。适用于： 1. 周重置快到期了还没用完,重置后白白浪费,不如卖给平台换取永久余额,类似银行的存款业务 2. 跨模型厂商调用,转换为 TokenBank 余额后,更换 TokenBank 提供的模型厂商继续使用 3. 托管的 API Key 优先被平台调用,被调用后获得一定的托管利息存进余额,类似银行的贷款业务 4. 自己使用时如果 TokenBank 余额不足会取出自己的 API Key 继续使用 5. TokenBank 会自动路由,解决您用量不足需要频繁切换模型的问题",
   "checkin": "签到",
   "checkinDone": "已签到",
   "checkinOk": "签到成功",
   "checkinStreak": "已连签 {n} 天",
-  "meta.detail": "docs/DETAIL.zh.md"
+  "meta.detail": "docs/DETAIL.zh.md",
+  "depositCase1": "1. 周重置快到期了还没用完,重置后白白浪费,不如卖给平台换取永久余额,类似银行的存款业务",
+  "depositCase2": "2. 跨模型厂商调用,转换为 TokenBank 余额后,更换 TokenBank 提供的模型厂商继续使用",
+  "depositCase3": "3. 托管的 API Key 优先被平台调用,被调用后获得一定的托管利息存进余额,类似银行的贷款业务",
+  "depositCase4": "4. 自己使用时如果 TokenBank 余额不足会取出自己的 API Key 继续使用",
+  "depositCase5": "5. TokenBank 会自动路由,解决您用量不足需要频繁切换模型的问题",
+  "dismissHint": "不再显示"
 }

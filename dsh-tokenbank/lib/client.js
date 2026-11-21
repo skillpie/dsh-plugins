@@ -109,8 +109,14 @@ window.__ModuleLoader__.load({
       probeRejected: '{n} 个 Key 探活失败已被剔除',
       keyRequired: '请先粘贴至少一个 Key',
       connectedAs: 'TokenBank 已连接：{email}',
-      depositHint: '一键托管:把你的 API Key 托管到 TokenBank,临时额度自动转移为永久额度保留使用。适用于周重置快到了还没用完等情况。',
+      depositHint: "一键托管：把你的 API Key 凭证托管到 TokenBank,临时额度自动转移为永久额度保留使用。适用于：",
+      depositCase1: "1. 周重置快到期了还没用完,重置后白白浪费,不如卖给平台换取永久余额,类似银行的存款业务",
+      depositCase2: "2. 跨模型厂商调用,转换为 TokenBank 余额后,更换 TokenBank 提供的模型厂商继续使用",
+      depositCase3: "3. 托管的 API Key 优先被平台调用,被调用后获得一定的托管利息存进余额,类似银行的贷款业务",
+      depositCase4: "4. 自己使用时如果 TokenBank 余额不足会取出自己的 API Key 继续使用",
+      depositCase5: "5. TokenBank 会自动路由,解决您用量不足需要频繁切换模型的问题",
       learnMore: '了解 TokenBank →',
+      dismissHint: '不再显示',
       notConnected: 'TokenBank 未登录',
       modelLink: '已有 Key？手动接入',
       modelLinkHint: '粘贴 TokenBank 访问密钥（tb-…）',
@@ -198,8 +204,14 @@ window.__ModuleLoader__.load({
       depositDone: 'Deposited',
       keyRequired: 'Paste at least one key first',
       connectedAs: 'TokenBank connected: {email}',
-      depositHint: 'One-click deposit: host your API key on TokenBank to convert its temporary quota into permanent balance — ideal when the weekly reset is close and quota remains unused.',
+      depositHint: "One-click deposit: host your API key credentials on TokenBank to convert temporary quota into permanent balance. Useful when:",
+      depositCase1: "1. The weekly reset is close and quota remains unused — sell it to the platform for permanent balance (like a bank deposit)",
+      depositCase2: "2. Cross-provider calls — convert to TokenBank balance and switch to the model providers TokenBank offers",
+      depositCase3: "3. Deposited API keys are called by the platform first, earning deposit interest into your balance (like a bank loan)",
+      depositCase4: "4. When your TokenBank balance runs short, your own API key is withdrawn and used directly",
+      depositCase5: "5. TokenBank routes automatically, so you no longer need to switch models frequently due to insufficient usage",
       learnMore: 'About TokenBank →',
+      dismissHint: "Don't show again",
       notConnected: 'TokenBank not signed in',
       modelLink: 'Have a key? Link manually',
       modelLinkHint: 'Paste your TokenBank access key (tb-…)',
@@ -1267,12 +1279,46 @@ window.__ModuleLoader__.load({
     function DepositHint() {
       var snap = useTbStore()
       var portal = (tbStore.get().portalUrl) || 'https://bank.skillpie.cn'
+      var hintClosed = React.useState(false)
+      var seenLogin = React.useRef(false)
+      React.useEffect(function () {
+        if (snap.loggedIn && !seenLogin.current) {
+          seenLogin.current = true
+          // 每次登录后重新展示提示
+          try { window.sessionStorage.removeItem('tb-deposit-hint-closed') } catch (e) {}
+          hintClosed[1](false)
+        }
+      }, [snap.loggedIn])
+      React.useEffect(function () {
+        try { if (window.sessionStorage.getItem('tb-deposit-hint-closed') === '1') hintClosed[1](true) } catch (e) {}
+      }, [])
+      if (hintClosed[0]) return null
       return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8, padding: '8px 12px', borderRadius: 10, background: 'var(--dsw-alias-interactive-bg-subtle, transparent)', border: '0.5px solid var(--dsw-alias-border-l3)' } },
-        h('span', { style: { fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary)' } }, pageT('depositHint')),
-        h('a', {
-          href: portal, target: '_blank', rel: 'noreferrer',
-          style: { fontSize: 12, color: 'var(--dsw-alias-label-link, var(--dsw-alias-label-primary))', textDecoration: 'none', alignSelf: 'flex-start' },
-        }, pageT('learnMore')),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12, lineHeight: '18px', color: 'var(--dsw-alias-label-secondary)' } },
+          h('span', null, pageT('depositHint')),
+          h('span', null, pageT('depositCase1')),
+          h('span', null, pageT('depositCase2')),
+          h('span', null, pageT('depositCase3')),
+          h('span', null, pageT('depositCase4')),
+          h('span', null, pageT('depositCase5')),
+        ),
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          h('a', {
+            href: portal, target: '_blank', rel: 'noreferrer',
+            style: { fontSize: 12, color: 'var(--dsw-alias-label-link, var(--dsw-alias-label-primary))', textDecoration: 'none' },
+          }, pageT('learnMore')),
+          h('button', {
+            type: 'button', title: pageT('dismissHint'), 'aria-label': pageT('dismissHint'),
+            style: { border: 'none', background: 'transparent', cursor: 'pointer', padding: 2, display: 'inline-flex', alignItems: 'center', color: 'var(--dsw-alias-label-tertiary, #a0a3a8)' },
+            onClick: function () {
+              hintClosed[1](true)
+              try { window.sessionStorage.setItem('tb-deposit-hint-closed', '1') } catch (e) {}
+            },
+          },
+            h('svg', { viewBox: '0 0 24 24', width: 14, height: 14, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' },
+              h('path', { d: 'M18 6 6 18' }), h('path', { d: 'm6 6 12 12' })),
+          ),
+        ),
       )
     }
 
