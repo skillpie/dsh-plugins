@@ -111,7 +111,7 @@ window.__ModuleLoader__.load({
       depositToTokenbank: '托管到 TokenBank',
       depositCancel: '取消托管',
       depositCancelled: '已取消托管',
-      depositPlaceholder: '粘贴闲置 API Key，每行一个',
+      depositPlaceholder: '粘贴要托管的 API Key',
       depositDone: '托管成功',
       notifyOk: '知道了',
       goSwitch: '去切换',
@@ -221,7 +221,7 @@ window.__ModuleLoader__.load({
       depositToTokenbank: 'Deposit to TokenBank',
       depositCancel: 'Cancel deposit',
       depositCancelled: 'Deposit cancelled',
-      depositPlaceholder: 'Paste idle API keys, one per line',
+      depositPlaceholder: 'Paste the API key to deposit',
       depositDone: 'Deposited',
       keyRequired: 'Paste at least one key first',
       connectedAs: 'TokenBank connected: {email}',
@@ -877,8 +877,9 @@ window.__ModuleLoader__.load({
       if (!snap.depositOpen || !runtimeCtx) return null
       var close = function () { tbStore.set({ depositOpen: false }) }
       var submit = async function () {
-        var list = keys[0].split(/\n/).map(function (k) { return k.trim() }).filter(Boolean)
-        if (!list.length) { err[1](pageT('keyRequired')); return }
+        var one = keys[0].trim()
+        if (!one) { err[1](pageT('keyRequired')); return }
+        var list = [one]
         busy[1](true); err[1]('')
         try {
           await api('deposits-add', { keys: list })
@@ -918,10 +919,10 @@ window.__ModuleLoader__.load({
             h('div', null, pageT('depositIntro4')),
             h('div', { style: { marginBottom: 6 } }, pageT('depositIntro5')),
             h('a', { href: (snap.portalUrl || 'https://bank.skillpie.cn') + '/', target: '_blank', rel: 'noreferrer', style: { color: '#ff4f1f', textDecoration: 'none', fontWeight: 600 } }, pageT('learnMore'))),
-          h('textarea', {
-            rows: 4, placeholder: pageT('depositPlaceholder'),
+          h('input', {
+            type: 'text', placeholder: pageT('depositPlaceholder'),
             value: keys[0], onChange: function (e) { keys[1](e.target.value) },
-            style: Object.assign({}, inputStyle, { resize: 'vertical', fontFamily: 'monospace' }),
+            style: Object.assign({}, inputStyle, { fontFamily: 'monospace' }),
           }),
           err[0] ? h('div', { style: { fontSize: 12, color: '#d54941', marginTop: 6 } }, err[0]) : null,
           h('button', {
