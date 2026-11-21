@@ -86,6 +86,7 @@ window.__ModuleLoader__.load({
       depositIntro4: '4. 自己使用时如果 TokenBank 余额不足会取出自己的 API Key 继续使用',
       depositIntro5: '5. TokenBank 会自动路由，解决用量不足需要频繁切换模型的问题',
       depositGroup: '托管分组',
+      depositRejected: 'Key 探活失败：无效凭证，或所属厂商不接受托管',
       depositEmpty: '还没有托管任何 Key',
       depositRemove: '撤销',
       recharge: '充值',
@@ -186,6 +187,7 @@ window.__ModuleLoader__.load({
       deposits: 'Key deposits',
       depositAdd: 'Deposit an idle key to earn',
       depositGroup: 'Group',
+      depositRejected: 'Key failed the live probe: invalid credential, or its provider does not accept deposits',
       depositKeys: 'Keys (one per line)',
       depositSubmit: 'Deposit',
       depositTitle: 'Deposit Credential',
@@ -196,6 +198,7 @@ window.__ModuleLoader__.load({
       depositIntro4: '4. If your TokenBank balance runs out, your own key is withdrawn so you can keep going',
       depositIntro5: '5. TokenBank routes automatically — no more frequent model switching due to quota limits',
       depositGroup: 'Group',
+      depositRejected: 'Key failed the live probe: invalid credential, or its provider does not accept deposits',
       depositEmpty: 'No deposited keys yet',
       depositRemove: 'Remove',
       recharge: 'Recharge',
@@ -886,7 +889,9 @@ window.__ModuleLoader__.load({
           busy[1](false)
           tbStore.set({ depositOpen: false, notify: { kind: 'success', title: pageT('depositDone'), detail: '' } })
         } catch (e) {
-          busy[1](false); err[1](String(e.message || e))
+          busy[1](false)
+          var msg = String(e.message || e)
+          err[1](/validation|no_group_matched/i.test(msg) ? pageT('depositRejected') : msg)
         }
       }
       var inputStyle = {
