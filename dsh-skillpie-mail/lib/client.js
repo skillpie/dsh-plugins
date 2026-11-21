@@ -161,6 +161,8 @@ window.__ModuleLoader__.load({
 
     /* ── 设置页分区 ─────────────────────────────────────────────────── */
 
+    var MAIL_SUFFIX = '@skillpie.cn'
+
     function RegisterDialog(props) {
       var t = props.t
       var usernameState = React.useState('')
@@ -205,7 +207,25 @@ window.__ModuleLoader__.load({
               h('div', { key: 'hint', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('registerDone')),
             ]
           : [
-              h(Field, { key: 'u', label: t('registerUser'), value: usernameState[0], placeholder: t('registerUserPh'), onChange: usernameState[1] }),
+              h('label', { key: 'u', style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+                h('span', { style: labelStyle }, t('registerUser')),
+                h('div', {
+                  style: {
+                    display: 'flex', alignItems: 'center', height: 28, borderRadius: 7,
+                    border: '1px solid var(--dsw-alias-border-l1)',
+                    background: 'var(--dsw-alias-bg-layer-1)', overflow: 'hidden',
+                  },
+                },
+                  h('input', {
+                    style: Object.assign({}, inputStyle, { border: 'none', borderRadius: 0, flex: 1, height: '100%' }),
+                    value: usernameState[0], placeholder: 'taobao01',
+                    onChange: function (event) { usernameState[1](event.target.value.replace(/@.*$/, '')) },
+                  }),
+                  h('span', {
+                    style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', padding: '0 8px', userSelect: 'none', flex: 'none' },
+                  }, MAIL_SUFFIX),
+                ),
+              ),
               h(Field, { key: 'n', label: t('registerNote'), value: noteState[0], placeholder: t('registerNotePh'), onChange: noteState[1] }),
               errorState[0] ? h('div', { key: 'e', style: { fontSize: 12, color: '#e5484d' } }, errorState[0]) : null,
               h('div', { key: 'b', style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
@@ -216,8 +236,6 @@ window.__ModuleLoader__.load({
             ],
       )
     }
-
-    var MAIL_SUFFIX = '@skillpie.cn'
 
     function AddDialog(props) {
       var t = props.t
