@@ -88,6 +88,7 @@
 - 插件命名社区现状:`dsh-*` 裸前缀占 ~2/3 但重灾区(常用词几乎被占),`@scope/dsh-*` ~21%,`dsh-plugin-*` ~5%;官方自身全用 scope(`@deepseek-ai/dsh-*`),无硬性命名规定,建议 scope。
 - 脚本内双引号字符串中 `$VAR` 后紧跟全角标点(如 `$VERSION（`)会把多字节字符首字节吞进变量名 → `set -u` 下报 `VAR�: unbound variable` 崩溃且只在该分支首次执行时暴露;所有插值一律 `${VAR}`。
 - `npm publish` 输出 `+ pkg@ver` 仅表示 PUT 被接受;若随即网络/脚本中断,registry 可能停在 staged 态(重发报 E409 Cannot publish over previously staged version,几分钟内索引自会翻正,不要盲目升版本重发)。
+- 发布 npm 的插件 package.json **必须带 `repository` 字段**(type/url 指向收录仓库,monorepo 子包加 `directory`):awesome-dsh-plugin/dsh-market 靠它自动关联 npm↔GitHub(防止他人冒挂仓库;条目 yml 手写 `npm:` 字段会被校验拒);缺失时市场按 GitHub 源码构建安装,国内用户连不上 github.com 直接超时(宿主探连默认仅 5s,plugin-manager 配置 `githubConnectionTimeoutMs` 可调大)。
 
 ## 禁止事项
 
