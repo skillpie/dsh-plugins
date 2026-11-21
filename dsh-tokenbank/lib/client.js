@@ -78,6 +78,14 @@ window.__ModuleLoader__.load({
       depositGroup: '分组',
       depositKeys: 'Key（每行一个）',
       depositSubmit: '托管',
+      depositTitle: '托管 API Key',
+      depositIntro: '把你的 API Key 凭证托管到 TokenBank，临时额度自动转移为永久额度保留使用。适用于：',
+      depositIntro1: '1. 周重置快到期还没用完，重置后白白浪费，不如卖给平台换取永久余额（类似银行存款业务）',
+      depositIntro2: '2. 跨模型厂商调用，转换为 TokenBank 余额后，更换 TokenBank 提供的模型厂商继续使用',
+      depositIntro3: '3. 托管的 API Key 优先被平台调用，被调用后获得托管利息存进余额（类似银行贷款业务）',
+      depositIntro4: '4. 自己使用时如果 TokenBank 余额不足会取出自己的 API Key 继续使用',
+      depositIntro5: '5. TokenBank 会自动路由，解决用量不足需要频繁切换模型的问题',
+      depositGroup: '托管分组',
       depositEmpty: '还没有托管任何 Key',
       depositRemove: '撤销',
       recharge: '充值',
@@ -180,6 +188,14 @@ window.__ModuleLoader__.load({
       depositGroup: 'Group',
       depositKeys: 'Keys (one per line)',
       depositSubmit: 'Deposit',
+      depositTitle: 'Deposit API Key',
+      depositIntro: 'Deposit your API key to TokenBank — remaining temporary quota converts to permanent credit. Use cases:',
+      depositIntro1: '1. Weekly-reset quota about to expire? Sell it to the platform for permanent balance (like a bank deposit)',
+      depositIntro2: '2. Cross-provider calls: convert to TokenBank balance and switch among TokenBank model providers',
+      depositIntro3: '3. Deposited keys are called by the platform first and earn interest into your balance (like a bank loan)',
+      depositIntro4: '4. If your TokenBank balance runs out, your own key is withdrawn so you can keep going',
+      depositIntro5: '5. TokenBank routes automatically — no more frequent model switching due to quota limits',
+      depositGroup: 'Group',
       depositEmpty: 'No deposited keys yet',
       depositRemove: 'Remove',
       recharge: 'Recharge',
@@ -848,6 +864,86 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 全局托管弹窗:用户粘贴 API Key 托管(设置页「一键托管」不受影响)。 */
+    function DepositOverlay() {
+      var snap = useTbStore()
+      var groups = React.useState([])
+      var groupId = React.useState('')
+      var keys = React.useState('')
+      var busy = React.useState(false)
+      var err = React.useState('')
+      React.useEffect(function () {
+        if (!snap.depositOpen) return
+        keys[1](''); err[1](''); busy[1](false)
+        api('groups').then(function (res) {
+          var list = (res && res.groups) || []
+          groups[1](list)
+          if (list.length) groupId[1](String(list[0].id))
+        }).catch(function () {})
+      }, [snap.depositOpen])
+      if (!snap.depositOpen || !runtimeCtx) return null
+      var close = function () { tbStore.set({ depositOpen: false }) }
+      var submit = async function () {
+        var list = keys[0].split(/\n/).map(function (k) { return k.trim() }).filter(Boolean)
+        if (!list.length) { err[1](pageT('keyRequired')); return }
+        busy[1](true); err[1]('')
+        try {
+          await api('deposits-add', { groupId: Number(groupId[0] || 0), keys: list })
+          busy[1](false)
+          tbStore.set({ depositOpen: false, notify: { kind: 'success', title: pageT('depositDone'), detail: '' } })
+        } catch (e) {
+          busy[1](false); err[1](String(e.message || e))
+        }
+      }
+      var inputStyle = {
+        width: '100%', boxSizing: 'border-box', padding: '7px 9px', fontSize: 13,
+        borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)',
+        background: 'var(--dsw-alias-bg-layer-1, #f7f7f8)', color: 'inherit',
+      }
+      return h('div', { style: { position: 'fixed', inset: 0, zIndex: 2100 } },
+        h('div', { style: { position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(0,0,0,0.35)' }, onClick: close }),
+        h('div', {
+          style: {
+            position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            width: 360, maxWidth: 'calc(100vw - 24px)', maxHeight: '80vh', overflow: 'auto',
+            background: 'var(--dsw-menu-surface-fill)', backdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            WebkitBackdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            color: 'var(--dsw-alias-label-primary)',
+            borderRadius: 'var(--dsw-radius-md, 10px)', padding: 16,
+            border: '1px solid var(--dsw-alias-border-l1)',
+            boxShadow: 'var(--dsw-elevation-prominent)',
+          },
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
+            h('span', { style: { fontWeight: 700, fontSize: 14 } }, pageT('depositTitle')),
+            h('button', { type: 'button', style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, lineHeight: 1, color: 'var(--dsw-alias-label-secondary, #888)', padding: 2 }, onClick: close }, '✕')),
+          h('div', { style: { fontSize: 12, lineHeight: 1.7, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 10 } },
+            h('div', null, pageT('depositIntro')),
+            h('div', null, pageT('depositIntro1')),
+            h('div', null, pageT('depositIntro2')),
+            h('div', null, pageT('depositIntro3')),
+            h('div', null, pageT('depositIntro4')),
+            h('div', { style: { marginBottom: 6 } }, pageT('depositIntro5')),
+            h('a', { href: (snap.portalUrl || 'https://bank.skillpie.cn') + '/', target: '_blank', rel: 'noreferrer', style: { color: '#ff4f1f', textDecoration: 'none', fontWeight: 600 } }, pageT('learnMore'))),
+          groups[0].length ? h('div', { style: { marginBottom: 8 } },
+            h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 4 } }, pageT('depositGroup')),
+            h('select', { value: groupId[0], onChange: function (e) { groupId[1](e.target.value) }, style: inputStyle },
+              groups[0].map(function (g) { return h('option', { value: String(g.id), key: g.id }, g.name) }))) : null,
+          h('textarea', {
+            rows: 4, placeholder: pageT('depositPlaceholder'),
+            value: keys[0], onChange: function (e) { keys[1](e.target.value) },
+            style: Object.assign({}, inputStyle, { resize: 'vertical', fontFamily: 'monospace' }),
+          }),
+          err[0] ? h('div', { style: { fontSize: 12, color: '#d54941', marginTop: 6 } }, err[0]) : null,
+          h('button', {
+            type: 'button', disabled: busy[0],
+            style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', width: '100%', marginTop: 10 }),
+            onClick: submit,
+          }, busy[0] ? '…' : pageT('depositSubmit')),
+        ),
+      )
+    }
+
     /** shell.overlay 账户/注册弹窗:登录态展示余额与快捷操作,未登录展示表单。 */
     // 由邮箱地址推断其服务商网页版收件箱入口(发码后自动跳转用)
     function mailHomeUrl(addr) {
@@ -1035,9 +1131,7 @@ window.__ModuleLoader__.load({
                       type: 'button', 'aria-label': pageT('depositManageTip'),
                       style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)', marginLeft: 'auto' }),
                       onClick: function () {
-                        tbStore.set({ authOpen: false })
-                        tbStore.set({ notify: { kind: 'success', title: pageT('depositGuide'), detail: '' } })
-                        openSettingsPage()
+                        tbStore.set({ authOpen: false, depositOpen: true })
                       },
                     }, pageT('depositManage')) : null,
 
@@ -1741,11 +1835,16 @@ window.__ModuleLoader__.load({
             id: 'dsh-tokenbank-auth',
             locale: NS,
           }, EntryOverlay)
-          return ctx.slots.register({
+          ctx.slots.register({
             name: 'shell.overlay',
             id: 'dsh-tokenbank-lowbalance',
             locale: NS,
           }, LowBalanceOverlay)
+          return ctx.slots.register({
+            name: 'shell.overlay',
+            id: 'dsh-tokenbank-deposit',
+            locale: NS,
+          }, DepositOverlay)
         })
 
         ctx.slots.inject('settings.models.provider-card', function () {

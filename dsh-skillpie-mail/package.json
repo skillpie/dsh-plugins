@@ -1,6 +1,6 @@
 {
   "name": "dsh-skillpie-mail",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "SkillPie邮箱：管理 @skillpie.cn 邮箱（快速注册/手动添加/移除），后台 IMAP 轮询，收到新邮件全局弹窗展示并注明收件邮箱。",
   "type": "module",
   "license": "MIT",
@@ -46,7 +46,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/linchuncheng/dsh-plugins.git",
+    "url": "git+https://github.com/skillpie/dsh-plugins.git",
     "directory": "dsh-skillpie-mail"
   },
   "publishConfig": {
