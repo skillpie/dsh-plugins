@@ -461,6 +461,8 @@ window.__ModuleLoader__.load({
         return function () { stopped = true }
       }, [snap.loggedIn, snap.authOpen])
       var data = st[0]
+      // 登录态入口整个不渲染(余额在底部状态栏 pill),否则会残留一个空胶囊
+      if (snap.loggedIn) return null
       return h('button', {
         type: 'button',
         id: 'tb-entry-btn',
