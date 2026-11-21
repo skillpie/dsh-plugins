@@ -906,6 +906,24 @@ window.__ModuleLoader__.load({
         var timer = setInterval(pull, 60000)
         return function () { stopped = true; clearInterval(timer) }
       }, [snap.authOpen])
+      // 登录态下每 30 分钟拉一次网关模型目录并刷新进模型列表(仅保留有可用凭证的模型);
+      // 退出登录(snap.loggedIn 变 false)即清定时器,不再同步。
+      React.useEffect(function () {
+        if (!snap.loggedIn) return
+        var syncModels = async function () {
+          try {
+            var d = await api('status')
+            if (!d || !d.loggedIn || !runtimeCtx) return
+            var models = await api('gateway-models', { accessKey: d.accessKey })
+            var list = (models && models.models) || []
+            if (!list.length) return
+            await addProviderToModels(runtimeCtx, d.baseURL || d.portalUrl || 'https://bank.skillpie.cn', { accessKey: d.accessKey, list: list, protocol: models.protocol })
+          } catch (e) { /* 静默:后台同步失败不打扰用户 */ }
+        }
+        syncModels()
+        var t = window.setInterval(syncModels, 30 * 60 * 1000)
+        return function () { window.clearInterval(t) }
+      }, [snap.loggedIn])
       if (!snap.authOpen || !runtimeCtx) return null
       var close = function () { tbStore.set({ authOpen: false, startRecharge: false }) }
       var data = st[0]
@@ -1083,7 +1101,7 @@ window.__ModuleLoader__.load({
                       }, 80)
                     },
                   }, pageT('goSwitch')) : null,
-                ) : !rechargeOpen[0] ? (checkinFlash[0] ? h('button', {
+                ) : (checkinFlash[0] ? h('button', {
                       type: 'button', tabIndex: -1,
                       style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', cursor: checkinFlash[0].models ? 'pointer' : 'default', opacity: 0.9 }),
                       onClick: checkinFlash[0].models ? function () {
@@ -1097,29 +1115,7 @@ window.__ModuleLoader__.load({
                           }
                         }, 80)
                       } : undefined,
-                    }, checkinFlash[0].text) : h('button', {
-                  type: 'button', style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center' }),
-                  onMouseEnter: function () { showTipOnce('models') },
-                  onClick: async function () {
-                    try {
-                      var models = await api('gateway-models', { accessKey: data.accessKey })
-                      var list = Array.isArray(models) ? models : (models.models || models.list || [])
-                      await addProviderToModels(runtimeCtx, data.baseURL || portal, { accessKey: data.accessKey, list: list, protocol: models.protocol })
-                      tbStore.set({ notify: { kind: 'success', title: pageT('modelLinked').replace('{n}', String(list.length)), detail: '' } })
-                      // 模型接入成功即关弹窗,自动弹出宿主模型选择器(与签到闪现按钮同款时序)
-                      tbStore.set({ authOpen: false })
-                      window.setTimeout(function () {
-                        var triggers = document.querySelectorAll('button[aria-haspopup="menu"]')
-                        for (var q = 0; q < triggers.length; q++) {
-                          var lb = triggers[q].getAttribute('aria-label') || ''
-                          if (/选择模型|Select model/.test(lb)) { triggers[q].click(); return }
-                        }
-                      }, 80)
-                    } catch (err) {
-                      tbStore.set({ notify: { kind: 'error', title: String(err.message || err), detail: '' } })
-                    }
-                  },
-                }, pageT('addFreeModels'))) : null,
+                    }, checkinFlash[0].text) : null),
               )
             : h(AuthCard, {
                 mode: snap.authMode,

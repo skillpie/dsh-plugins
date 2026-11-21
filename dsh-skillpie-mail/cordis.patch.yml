@@ -1,0 +1,10 @@
+# dsh-skillpie-mail bundle patch.
+#
+# One dual-face row: the host half serves POST /dsh-skillpie-mail/api
+# (mailbox list/add/remove/register + poll notifications, credentials-backed
+# storage, background IMAP polling), the client half registers the
+# "SkillPie邮箱" settings section and the global new-mail popup overlay.
+- insert:
+    - id: dsh-skillpie-mail
+      name: "dsh-skillpie-mail"
+      config: {}
