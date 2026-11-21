@@ -30,11 +30,12 @@ window.__ModuleLoader__.load({
       addFreeModels: '获取免费模型',
       getModels: '获取模型',
       freeModelsTip: '免费使用主流收费模型，点击后自动获取，模型列表 TokenBank 中的模型任意使用。',
-      modelLinked: '已接入 {n} 个模型',
+      modelLinked: '已接入 {n} 个模型,点输入框上方的模型选择器即可切换使用',
       reload: '刷新',
       recharge: '充值',
       rechargeTip: '全网最低价：￥10 ≈ 3846万 TOKEN，比官方与中转站省 10%~25%；支付宝直付秒到账，余额永不过期。',
       depositManage: '托管',
+      depositGuide: '已打开模型设置,点卡片上的「一键托管」即可把 API Key 托管到 TokenBank',
       depositManageTip: '把你的 API Key 托管到 TokenBank，临时额度自动转移为永久额度保留使用。适用于周重置快到了还没用完等情况。',
       checkin: '签到',
       checkinDone: '已签到',
@@ -133,10 +134,11 @@ window.__ModuleLoader__.load({
       getModels: 'Get models',
       freeModelsTip: 'Use paid-tier models for free — one click links them, and every TokenBank model in the list is available.',
       rechargeTip: 'Best price anywhere: $1 for ¥6.50 — 10%~25% cheaper than official APIs and relays. Pay with Alipay, credited instantly, credit never expires.',
-      modelLinked: '{n} models linked',
+      modelLinked: '{n} models linked — open the model picker above the input to switch to them',
       reload: 'Reload',
       recharge: 'Recharge',
       depositManage: 'Manage keys',
+      depositGuide: 'Model settings opened — click "Manage keys" on a provider card to deposit your key',
       depositManageTip: 'Deposit your API key into TokenBank — remaining temporary quota transfers to permanent credit. Useful when the weekly reset is near.',
       checkin: 'Check in',
       checkinDone: 'Checked in',
@@ -345,13 +347,24 @@ window.__ModuleLoader__.load({
     function BalancePill() {
       var snap = useTbStore()
       var st = React.useState(null)
+      // 登录跃迁(false→true)自动同步一次免费模型;初始挂载已登录不触发
+      var prevLogin = React.useRef(null)
       React.useEffect(function () {
         var stopped = false
         api('status').then(function (data) {
-          if (!stopped) { st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl }) }
+          if (stopped) return
+          st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl })
+          var now = Boolean(data.loggedIn)
+          if (prevLogin.current === false && now) autoSyncModels()
+          prevLogin.current = now
         }).catch(function () {})
         return function () { stopped = true }
       }, [])
+      React.useEffect(function () {
+        var now = Boolean(snap.loggedIn)
+        if (prevLogin.current === false && now) { prevLogin.current = now; autoSyncModels() }
+        else if (prevLogin.current !== null) prevLogin.current = now
+      }, [snap.loggedIn])
       React.useEffect(function () {
         var stopped = false
         if (!snap.loggedIn) return
@@ -420,13 +433,24 @@ window.__ModuleLoader__.load({
         })
       }
       var st = React.useState(null)
+      // 登录跃迁(false→true)自动同步一次免费模型;初始挂载已登录不触发
+      var prevLogin = React.useRef(null)
       React.useEffect(function () {
         var stopped = false
         api('status').then(function (data) {
-          if (!stopped) { st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl }) }
+          if (stopped) return
+          st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl })
+          var now = Boolean(data.loggedIn)
+          if (prevLogin.current === false && now) autoSyncModels()
+          prevLogin.current = now
         }).catch(function () {})
         return function () { stopped = true }
       }, [])
+      React.useEffect(function () {
+        var now = Boolean(snap.loggedIn)
+        if (prevLogin.current === false && now) { prevLogin.current = now; autoSyncModels() }
+        else if (prevLogin.current !== null) prevLogin.current = now
+      }, [snap.loggedIn])
       // 登录态变化(弹窗登录/退出)时刷新余额展示
       React.useEffect(function () {
         var stopped = false
@@ -464,33 +488,38 @@ window.__ModuleLoader__.load({
     /** shell.overlay 轻提示:portal 到 document.body,压过设置页抽屉层级。 */
     function NotifyOverlay() {
       var snap = useTbStore()
+      // 宿主风格:顶部居中深色胶囊,非阻塞,6s 自动消失,点击关闭
+      React.useEffect(function () {
+        if (!snap.notify) return
+        var timer = window.setTimeout(function () { tbStore.set({ notify: null }) }, 6000)
+        return function () { window.clearTimeout(timer) }
+      }, [snap.notify && snap.notify.title, snap.notify && snap.notify.seq])
       if (!snap.notify || !ReactDOM || typeof ReactDOM.createPortal !== 'function') return null
       var n = snap.notify
       var ok = n.kind === 'success'
       var close = function () { tbStore.set({ notify: null }) }
       return ReactDOM.createPortal(
         h('div', {
-          style: {
-            position: 'fixed', inset: 0, zIndex: 3000,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(0,0,0,0.35)',
-          },
           onClick: close,
-        },
-          h('div', {
-            style: {
-              background: 'var(--dsw-alias-bg-base)', color: 'var(--dsw-alias-label-primary)',
-              borderRadius: 12, padding: 16, width: 320, maxWidth: '86vw',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
-            },
-            onClick: function (e) { e.stopPropagation() },
+          style: {
+            position: 'fixed', top: 52, left: '50%', transform: 'translateX(-50%)', zIndex: 3000,
+            display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+            maxWidth: '86vw', padding: '9px 16px', borderRadius: 10,
+            background: 'rgba(30, 30, 32, 0.96)', color: '#f5f5f5',
+            border: 'none',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+            fontSize: 13, lineHeight: 1.5, pointerEvents: 'auto',
           },
-            h('div', { style: { fontSize: 14, fontWeight: 700, marginBottom: n.detail ? 6 : 0 } },
-              (ok ? '✅ ' : '⚠️ ') + n.title),
-            n.detail ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' } }, n.detail) : null,
-            h('div', { style: { display: 'flex', justifyContent: 'flex-end', marginTop: 12 } },
-              h('button', { type: 'button', style: buttonStyle, onClick: close }, pageT('notifyOk'))),
+        },
+          h('span', { style: { flexShrink: 0, display: 'inline-flex' } },
+            ok
+              ? h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, fill: 'none', stroke: '#34c759', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+                  h('circle', { cx: 12, cy: 12, r: 10 }), h('polyline', { points: '8 12.5 11 15.5 16 9.5' }))
+              : h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, fill: 'none', stroke: '#ffd60a', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+                  h('circle', { cx: 12, cy: 12, r: 10 }), h('line', { x1: 12, y1: 7.5, x2: 12, y2: 13 }), h('circle', { cx: 12, cy: 16.5, r: 0.5, fill: '#ffd60a' })),
           ),
+          h('span', { style: { fontWeight: 600 } }, n.title),
+          n.detail ? h('span', { style: { opacity: 0.75, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all' } }, n.detail) : null,
         ),
         document.body,
       )
@@ -932,6 +961,7 @@ window.__ModuleLoader__.load({
                 st[1](null)
                 try { window.localStorage.removeItem('tb-free-models-used') } catch (e) {}
                 tbStore.set({ loggedIn: false })
+                if (runtimeCtx) removeProviderFromModels(runtimeCtx)
               },
             },
               h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
@@ -972,7 +1002,12 @@ window.__ModuleLoader__.load({
                       type: 'button', 'aria-label': pageT('depositManageTip'),
                       style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
                       onMouseEnter: function () { showTipOnce('deposit') },
-                      onClick: function () { depTip[1](null); tbStore.set({ authOpen: false }); openSettingsPage() },
+                      onClick: function () {
+                        depTip[1](null)
+                        tbStore.set({ authOpen: false })
+                        tbStore.set({ notify: { kind: 'success', title: pageT('depositGuide'), detail: '' } })
+                        openSettingsPage()
+                      },
                     }, pageT('depositManage')) : null,
                     h('button', {
                       type: 'button', disabled: checkin[0].busy,
@@ -997,8 +1032,7 @@ window.__ModuleLoader__.load({
                             balanceGain[1]({ amount: gain || '0.10', ts: Date.now() })
                             window.setTimeout(function () { balanceGain[1](null) }, 8000)
                             var streakText = ci.streak > 1 ? '（' + pageT('checkinStreak').replace('{n}', String(ci.streak)) + '）' : ''
-                            checkinFlash[1]({ text: pageT('checkinOk') + streakText })
-                            window.setTimeout(function () { checkinFlash[1](null) }, 3000)
+                            tbStore.set({ notify: { kind: 'success', title: pageT('checkinOk') + streakText, detail: '' } })
                           }
                         } catch (e9) {
                           checkin[1](Object.assign({}, checkin[0], { busy: false }))
@@ -1069,8 +1103,7 @@ window.__ModuleLoader__.load({
                       var models = await api('gateway-models', { accessKey: data.accessKey })
                       var list = Array.isArray(models) ? models : (models.models || models.list || [])
                       await addProviderToModels(runtimeCtx, data.baseURL || portal, { accessKey: data.accessKey, list: list, protocol: models.protocol })
-                      checkinFlash[1]({ text: pageT('modelLinked').replace('{n}', String(list.length)), models: true })
-                      window.setTimeout(function () { checkinFlash[1](null) }, 3000)
+                      tbStore.set({ notify: { kind: 'success', title: pageT('modelLinked').replace('{n}', String(list.length)), detail: '' } })
                       // 模型接入成功即关弹窗,自动弹出宿主模型选择器(与签到闪现按钮同款时序)
                       tbStore.set({ authOpen: false })
                       window.setTimeout(function () {
@@ -1422,6 +1455,38 @@ window.__ModuleLoader__.load({
         throw new Error(response.error?.message || 'settings write refused')
       }
       return { ok: true }
+    }
+
+    /** 登录后自动同步一次免费模型(写 provider,失败静默,不打扰用户)。 */
+    async function autoSyncModels() {
+      try {
+        if (!runtimeCtx || !runtimeCtx.remote || !runtimeCtx.remote.settings) return
+        var fresh = await api('status')
+        if (!fresh || !fresh.accessKey) return
+        var models = await api('gateway-models', { accessKey: fresh.accessKey })
+        var list = Array.isArray(models) ? models : (models.models || models.list || [])
+        await addProviderToModels(runtimeCtx, fresh.baseURL || fresh.portalUrl, { accessKey: fresh.accessKey, list: list, protocol: models.protocol, key: fresh.accessKey })
+        tbStore.set({ notify: { kind: 'success', title: pageT('modelLinked').replace('{n}', String(list.length)), detail: '' } })
+      } catch (e) {
+        console.warn('[dsh-tokenbank] auto sync models failed:', String(e && e.message || e))
+      }
+    }
+
+    /** 退出登录:从模型列表移除 TokenBank provider(尽力而为,失败不阻塞登出)。 */
+    async function removeProviderFromModels(ctx) {
+      try {
+        const describe = await ctx.remote.settings.describe()
+        const view = describe?.namespaces?.[MODEL_NS] ?? null
+        const revision = view && typeof view.revision === 'number' ? view.revision : undefined
+        const response = await ctx.remote.settings.mutate(MODEL_NS,
+          [{ op: 'unset', path: ['providers', MODEL_ROUTE] }], revision)
+        if (response && response.ok === false) {
+          // 目标不存在(settings/target-missing 之类)视为已删除
+          console.warn('[dsh-tokenbank] remove provider:', response.error?.code || response.error?.message)
+        }
+      } catch (e) {
+        console.warn('[dsh-tokenbank] remove provider failed:', String(e && e.message || e))
+      }
     }
 
     /* ── auth forms ─────────────────────────────────────────────────────── */
