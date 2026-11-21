@@ -1046,7 +1046,7 @@ window.__ModuleLoader__.load({
                           innerToast[1]({ text: String(e9.message || e9), error: true })
                         }
                       } : undefined,
-                    }, (!checkin[0].done) ? (checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')) : pageT('checkinDone')),                    data && data.loggedIn ? h('button', {
+                    }, checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')),                    data && data.loggedIn ? h('button', {
                       type: 'button', 'aria-label': pageT('depositManageTip'),
                       style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)', marginLeft: 'auto' }),
                       onMouseEnter: function () { showTipOnce('deposit') },
