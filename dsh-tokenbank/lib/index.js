@@ -209,10 +209,23 @@ async function dispatch(ctx, state, cfg, body) {
       const identity = await requireLive()
       let probeFallback = ''
       const keys = Array.isArray(body.keys) ? body.keys.map((k) => String(k).trim()).filter(Boolean) : []
-      // 未指定分组:逐分组探活自动选第一个能通过的(用户无需手选,Key 前缀即隐含分组)
-      let chosenGroup = body.groupId != null ? Number(body.groupId) : null
-      if (chosenGroup == null) {
+      if (body.groupId == null) {
+        // 自动分组:服务端 /deposits/auto 逐分组探活选组;未部署时降级为逐分组探活
+        try {
+          const results = []
+          for (const key of keys) {
+            results.push(await tb.autoDeposit(baseUrl, identity.sessionToken, key))
+          }
+          return { ok: true, auto: true, result: { results } }
+        } catch (err) {
+          probeFallback = String(err.message || err)
+          if (!/404|not found|non-JSON/i.test(probeFallback) && !/validate/i.test(probeFallback)) {
+            throw err
+          }
+        }
+        // 降级:客户端侧逐分组探活
         const groups = (await tb.groups(baseUrl, identity.sessionToken))?.groups ?? []
+        let chosenGroup = null
         for (const group of groups) {
           if (group == null || group.id == null) continue
           try {
@@ -221,13 +234,23 @@ async function dispatch(ctx, state, cfg, body) {
           } catch { /* 该分组探活不可用,试下一个 */ }
         }
         if (chosenGroup == null) throw new PortalError('no group accepts these keys')
+        const probe2 = await tb.validateDepositKeys(baseUrl, identity.sessionToken, { groupId: chosenGroup, keys })
+        const probeResults = Array.isArray(probe2?.results) ? probe2.results : []
+        const alive = keys.filter((_, i) => probeResults[i]?.outcome !== 'failed')
+        return {
+          ok: true,
+          probe: { model: probe2?.model ?? '', rejected: keys.length - alive.length },
+          result: alive.length
+            ? await tb.addDeposit(baseUrl, identity.sessionToken, { groupId: chosenGroup, keys: alive })
+            : { added: 0, duplicated: 0, rejected: 0 },
+        }
       }
-      // 托管前探活:failed 的 Key 直接剔除,不写入;服务端未部署 validate 时降级为直接托管
+      // 指定分组(设置页一键托管走这里)
       let results = []
       let probeModel = ''
       try {
         const probe = await tb.validateDepositKeys(baseUrl, identity.sessionToken, {
-          groupId: chosenGroup, keys,
+          groupId: Number(body.groupId), keys,
         })
         results = Array.isArray(probe?.results) ? probe.results : []
         probeModel = probe?.model ?? ''
@@ -239,7 +262,7 @@ async function dispatch(ctx, state, cfg, body) {
         ok: true,
         probe: { model: probeModel, rejected: keys.length - alive.length, fallback: probeFallback || undefined },
         result: alive.length
-          ? await tb.addDeposit(baseUrl, identity.sessionToken, { groupId: chosenGroup, keys: alive })
+          ? await tb.addDeposit(baseUrl, identity.sessionToken, { groupId: Number(body.groupId), keys: alive })
           : { added: 0, duplicated: 0, rejected: 0 },
       }
     }

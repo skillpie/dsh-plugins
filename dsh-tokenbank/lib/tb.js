@@ -153,6 +153,10 @@ export const addDeposit = (baseUrl, sessionToken, { groupId, keys }) =>
   call(baseUrl, '/deposits', { method: 'POST', sessionToken, body: { group_id: groupId, keys } })
 
 /** Pre-deposit live probe: per-key {outcome,reason,...} without storing anything. */
+/** POST /deposits/auto — 单 Key 托管,服务端逐分组探活自动选分组。 */
+export const autoDeposit = (baseUrl, sessionToken, key) =>
+  call(baseUrl, '/deposits/auto', { method: 'POST', sessionToken, body: { key } })
+
 export const validateDepositKeys = (baseUrl, sessionToken, { groupId, keys }) =>
   call(baseUrl, '/deposits/validate', {
     method: 'POST', sessionToken, body: { group_id: groupId, keys },
