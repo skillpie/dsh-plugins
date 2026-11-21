@@ -326,6 +326,58 @@ window.__ModuleLoader__.load({
       return snap[0]
     }
 
+    /** 底部状态栏余额 pill(conversation.composer.dock,登录态显示)。 */
+    function BalancePill() {
+      var snap = useTbStore()
+      var st = React.useState(null)
+      React.useEffect(function () {
+        var stopped = false
+        api('status').then(function (data) {
+          if (!stopped) { st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl }) }
+        }).catch(function () {})
+        return function () { stopped = true }
+      }, [])
+      React.useEffect(function () {
+        var stopped = false
+        if (!snap.loggedIn) return
+        api('status').then(function (data) { if (!stopped) st[1](data) }).catch(function () {})
+        return function () { stopped = true }
+      }, [snap.loggedIn, snap.authOpen])
+      var flash = React.useState(false)
+      var prev = React.useRef(false)
+      React.useEffect(function () {
+        if (snap.loggedIn && !prev.current) flash[1](true)
+        prev.current = snap.loggedIn
+      }, [snap.loggedIn])
+      var onClick = function (e) {
+        flash[1](false)
+        var rect = e && e.currentTarget && e.currentTarget.getBoundingClientRect()
+        tbStore.set({
+          authOpen: true, authMode: 'login',
+          anchor: rect ? { right: rect.right, top: rect.top } : null,
+        })
+      }
+      if (!snap.loggedIn) return null
+      var data = st[0]
+      var bal = data && data.account && typeof data.account.balance_nano_usd === 'number'
+        ? '$ ' + (data.account.balance_nano_usd / 1e9).toFixed(2) : null
+      return h('button', {
+        type: 'button', id: 'tb-balance-pill', title: pageT('composerEntry'),
+        className: (flash[0] ? 'tb-balance-flash ' : '') + (snap.authOpen ? 'tb-balance-open' : ''),
+        onClick: onClick,
+        style: {
+          boxSizing: 'border-box', borderRadius: 6, maxWidth: '100%',
+          color: 'var(--dsw-alias-label-tertiary, #a0a3a8)', font: 'inherit',
+          fontVariantNumeric: 'tabular-nums', lineHeight: 'inherit', whiteSpace: 'nowrap',
+          background: 'transparent', border: 'none',
+          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px',
+          fontSize: 14, cursor: 'pointer',
+        },
+      },
+        bal || '—',
+      )
+    }
+
     /** 输入框工具行、模型选择器左侧的紧凑入口按钮。 */
     function ComposerEntry() {
       var snap = useTbStore()
@@ -380,16 +432,8 @@ window.__ModuleLoader__.load({
             },
       },
         snap.loggedIn
-          ? h('span', { style: { fontSize: 13, fontVariantNumeric: 'tabular-nums', color: 'var(--dsw-alias-label-secondary, #888)' } },
-              data && data.account && typeof data.account.balance_nano_usd === 'number'
-                ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '')
-          : h('span', {
-              style: { fontSize: 12, lineHeight: '25px', padding: '0 10px', borderRadius: 999, color: '#fff', background: '#ff4f1f', fontWeight: 600, letterSpacing: 0.3 },
-            }, pageT('freeToken')),
-        snap.loggedIn
-          ? h('svg', { viewBox: '0 0 24 24', className: 'tb-entry-chevron', width: 14, height: 14, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: { color: 'var(--dsw-alias-label-tertiary, #a0a3a8)', flex: 'none' } },
-              h('path', { d: 'm6 9 6 6 6-6' }))
-          : null,
+          ? null
+          : h('span', { className: 'tb-free-tag', style: { fontSize: 11, lineHeight: '20px', padding: '0 8px', borderRadius: 999, color: '#fff', background: '#ff4f1f', fontWeight: 600, letterSpacing: 0.3 } }, pageT('freeToken')),
       )
     }
 
@@ -1522,9 +1566,16 @@ window.__ModuleLoader__.load({
         var wmCss = document.createElement('style')
         wmCss.textContent = "@font-face{font-family:'FrizonLocal';src:url(data:font/woff;base64," + FRIZON_WOFF + ") format('woff')}body[data-ds-dark-theme] .tb-wordmark{color:#ffffff!important}"
         document.head.appendChild(wmCss)
+        // 余额 pill 登录闪烁 5s 提示可点击
+        var flashCss = document.createElement('style')
+        flashCss.textContent = '.tb-balance-flash{color:#ff7a3d!important;box-shadow:inset 0 0 0 1px #ff7a3d}#tb-balance-pill{border-radius:var(--dsw-radius-sm, 8px)}#tb-balance-pill:hover,#tb-balance-pill.tb-balance-open{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.08))!important;color:var(--dsw-alias-label-secondary, #888)!important}'
+        document.head.appendChild(flashCss)
+        ctx.effect(function () {
+          return function () { if (flashCss.parentNode) flashCss.parentNode.removeChild(flashCss) }
+        }, 'dsh-tokenbank: balance flash style')
         // 入口按钮 hover 形态:灰底 + 箭头反转(与模型选择器 hover 一致)
         var entryCss = document.createElement('style')
-        entryCss.textContent = '#tb-entry-btn:hover{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05))!important;margin:1px 0;height:27px!important}.tb-entry-open .tb-entry-chevron{transition:transform .15s ease;transform:rotate(180deg)}'
+        entryCss.textContent = '#tb-entry-btn:not(:has(.tb-free-tag)):hover{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05))!important;margin:1px 0;height:27px!important}.tb-entry-open .tb-entry-chevron{transition:transform .15s ease;transform:rotate(180deg)}'
         document.head.appendChild(entryCss)
         ctx.effect(function () {
           return function () { if (entryCss.parentNode) entryCss.parentNode.removeChild(entryCss) }
@@ -1543,6 +1594,13 @@ window.__ModuleLoader__.load({
         runtimeCtx = ctx
 
         // 输入框工具行、模型选择器左侧的紧凑入口按钮(弹账户/注册窗)
+        ctx.slots.inject('conversation.composer.dock', function () {
+          return ctx.slots.register({
+            name: 'conversation.composer.dock',
+            id: 'dsh-tokenbank-balance',
+            order: 5,
+          }, BalancePill)
+        })
         ctx.slots.inject('conversation.input.right', function () {
           return ctx.slots.register({
             name: 'conversation.input.right',
