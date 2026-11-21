@@ -45,6 +45,13 @@ window.__ModuleLoader__.load({
       mailboxCount: '共 {n} 个邮箱',
       newMail: '新邮件',
       close: '关闭',
+      inbox: '收件箱',
+      inboxAll: '全部邮箱',
+      inboxEmpty: '还没有收过邮件',
+      noSubject: '(无主题)',
+      from: '发件人',
+      toLabel: '收件邮箱',
+      dateLabel: '时间',
       loading: '处理中…',
       copy: '复制',
       copied: '已复制',
@@ -75,6 +82,13 @@ window.__ModuleLoader__.load({
       mailboxCount: '{n} mailbox(es)',
       newMail: 'New mail',
       close: 'Close',
+      inbox: 'Inbox',
+      inboxAll: 'All mailboxes',
+      inboxEmpty: 'No mail received yet',
+      noSubject: '(no subject)',
+      from: 'From',
+      toLabel: 'Mailbox',
+      dateLabel: 'Date',
       loading: 'Working…',
       copy: 'Copy',
       copied: 'Copied',
@@ -264,7 +278,7 @@ window.__ModuleLoader__.load({
         if (busyState[0]) return
         busyState[1](true)
         errorState[1]('')
-        // 只输前缀,固定补 @skillpie.cn(已带后缀的不再重复补)
+        // 支持 @skillpie.cn 前缀简写(自动补全)或任意完整邮箱地址
         var prefix = emailState[0].trim()
         var email = prefix.indexOf('@') >= 0 ? prefix : prefix + MAIL_SUFFIX
         api('add', { email: email, password: passwordState[0] })
@@ -347,6 +361,7 @@ window.__ModuleLoader__.load({
         h('div', { style: { display: 'flex', gap: 8 } },
           h('button', { type: 'button', style: btnPrimaryStyle, onClick: function () { setDialog('register') } }, t('quickRegister')),
           h('button', { type: 'button', style: btnStyle, onClick: function () { setDialog('add') } }, t('add')),
+          h('button', { type: 'button', style: btnStyle, onClick: function () { setDialog('inbox:') } }, t('inbox')),
         ),
         mailboxes === null
           ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('loading'))
@@ -366,6 +381,10 @@ window.__ModuleLoader__.load({
                     box.note ? h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } }, box.note) : null,
                     h('span', { style: { flex: 1 } }),
                     h('button', {
+                      type: 'button', style: btnStyle,
+                      onClick: function () { setDialog('inbox:' + box.email) },
+                    }, t('inbox')),
+                    h('button', {
                       type: 'button', style: Object.assign({}, btnStyle, { color: '#e5484d' }),
                       onClick: function () { removeOne(box.email) },
                     }, t('remove')),
@@ -378,10 +397,127 @@ window.__ModuleLoader__.load({
         dialog === 'add'
           ? h(AddDialog, { t: t, onClose: function () { setDialog(null) }, onChanged: refresh })
           : null,
+        typeof dialog === 'string' && dialog.indexOf('inbox:') === 0
+          ? h(InboxDialog, { t: t, email: dialog.slice(6), onClose: function () { setDialog(null) } })
+          : null,
+      )
+    }
+
+
+    /* ── 收件箱弹窗(列表 → 详情) ───────────────────────────────────── */
+
+    function InboxDialog(props) {
+      var t = props.t
+      var listState = React.useState(null)
+      var messages = listState[0]
+      var setMessages = listState[1]
+      var openState = React.useState(null)
+      var opened = openState[0]
+      var setOpened = openState[1]
+
+      React.useEffect(function () {
+        api('history', { email: props.email || '' }).then(function (data) {
+          setMessages(data.messages || [])
+        }).catch(function () { setMessages([]) })
+      }, [])
+
+      if (!ReactDOM || typeof ReactDOM.createPortal !== 'function') return null
+      var closeList = function () { props.onClose() }
+      return ReactDOM.createPortal(
+        h('div', {
+          onClick: function () { if (!opened) closeList() },
+          style: {
+            position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.35)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto',
+          },
+        },
+          h('div', {
+            onClick: function (event) { event.stopPropagation() },
+            style: {
+              width: 560, maxWidth: '92vw', maxHeight: '72vh', overflowY: 'auto',
+              padding: 18, borderRadius: 12,
+              background: '#ffffff', color: '#1c1c1e',
+              border: '1px solid rgba(0,0,0,0.08)',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.18)', fontSize: 13, lineHeight: 1.55,
+              display: 'flex', flexDirection: 'column', gap: 8,
+            },
+          },
+            /* 标题行 */
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('span', { style: { fontWeight: 600, fontSize: 14 } },
+                opened ? (opened.subject || t('noSubject')) : t('inbox')),
+              h('span', { style: { flex: 1 } }),
+              opened
+                ? h('button', { type: 'button', style: btnStyle, onClick: function () { setOpened(null) } }, t('back'))
+                : null,
+              h('button', { type: 'button', style: btnStyle, onClick: closeList }, t('close')),
+            ),
+            opened
+              ? /* 详情视图 */
+              [
+                h('div', { key: 'meta', style: { fontSize: 12, color: '#6d6d72', display: 'flex', flexDirection: 'column', gap: 2 } },
+                  h('span', null, (t('from') || '发件人') + '：' + (opened.from || '-')),
+                  h('span', null, (t('toLabel') || '收件邮箱') + '：' + opened.email),
+                  opened.date ? h('span', null, (t('dateLabel') || '时间') + '：' + opened.date) : null,
+                ),
+                opened.html
+                  ? h('div', {
+                      key: 'body',
+                      style: {
+                        fontSize: 13, color: '#3a3a3c', wordBreak: 'break-all', lineHeight: 1.6,
+                        background: '#f5f5f7', borderRadius: 8, padding: '10px 12px',
+                        maxHeight: 320, overflowY: 'auto',
+                      },
+                      dangerouslySetInnerHTML: { __html: opened.html },
+                    })
+                  : h('div', {
+                      key: 'body',
+                      style: {
+                        fontSize: 12, color: '#3a3a3c', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                        background: '#f5f5f7', borderRadius: 8, padding: '8px 10px',
+                        maxHeight: 320, overflowY: 'auto',
+                      },
+                    }, opened.text || '(无正文)'),
+              ]
+              : /* 列表视图 */
+              [
+                h('div', {
+                  key: 'sub', style: { fontSize: 12, color: '#8a8a8e' },
+                }, props.email || t('inboxAll')),
+                messages === null
+                  ? h('div', { key: 'load', style: { fontSize: 12, color: '#8a8a8e' } }, t('loading'))
+                  : messages.length === 0
+                    ? h('div', { key: 'empty', style: { fontSize: 12, color: '#8a8a8e' } }, t('inboxEmpty'))
+                    : h('div', { key: 'list', style: { display: 'flex', flexDirection: 'column' } },
+                        messages.map(function (m) {
+                          return h('div', {
+                            key: m.id,
+                            onClick: function () { setOpened(m) },
+                            style: {
+                              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 6px',
+                              borderBottom: '1px solid #f0f0f2', fontSize: 12, cursor: 'pointer',
+                              borderRadius: 6,
+                            },
+                            onMouseEnter: function (event) { event.currentTarget.style.background = '#f5f5f7' },
+                            onMouseLeave: function (event) { event.currentTarget.style.background = 'transparent' },
+                          },
+                            h('span', { style: { color: '#8a8a8e', flex: 'none', width: 86, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                              m.email.replace(/@skillpie\.cn$/, '')),
+                            h('span', { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 } },
+                              m.subject || t('noSubject')),
+                            h('span', { style: { color: '#8a8a8e', flex: 'none', width: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', direction: 'rtl', textAlign: 'left' } },
+                              m.from || '-'),
+                          )
+                        })),
+              ],
+          ),
+        ),
+        document.body,
       )
     }
 
     /* ── 全局新邮件弹窗 ─────────────────────────────────────────────── */
+
 
     var pollSeq = 0 // 已取走的通知最大 seq(内存态,刷新后从 0 重新拉取不重复弹:seq 会重置)
 
@@ -410,43 +546,74 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
-      React.useEffect(function () {
-        if (!mail) return
-        var timer = window.setTimeout(function () { setMail(null) }, 12000)
-        return function () { window.clearTimeout(timer) }
-      }, [mail && mail.id])
-
       if (!mail || !ReactDOM || typeof ReactDOM.createPortal !== 'function') return null
       var close = function () { setMail(null) }
+      // 全局居中模态:遮罩+浅色卡片,仅用户点击关闭按钮/遮罩才消失
       return ReactDOM.createPortal(
         h('div', {
           onClick: close,
           style: {
-            position: 'fixed', top: 52, right: 20, zIndex: 3000, width: 360, maxWidth: '86vw',
-            cursor: 'pointer', padding: 14, borderRadius: 12,
-            background: 'rgba(30, 30, 32, 0.97)', color: '#f5f5f5',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.35)', fontSize: 13, lineHeight: 1.55,
-            display: 'flex', flexDirection: 'column', gap: 6, pointerEvents: 'auto',
+            position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.35)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto',
           },
         },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-            h('span', { style: { display: 'inline-flex', color: '#34c759' } },
-              h('svg', { viewBox: '0 0 24 24', width: 15, height: 15, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-                h('rect', { x: 3, y: 5, width: 18, height: 14, rx: 2 }),
-                h('path', { d: 'm3 7 9 6 9-6' }))),
-            h('span', { style: { fontWeight: 600 } }, t('newMail')),
-            h('span', { style: { flex: 1 } }),
-            h('span', { style: { fontSize: 12, color: '#9f9fa3', wordBreak: 'break-all' } }, mail.email),
+          h('div', {
+            onClick: function (event) { event.stopPropagation() },
+            style: {
+              width: 420, maxWidth: '88vw', maxHeight: '70vh', overflowY: 'auto',
+              padding: 18, borderRadius: 12,
+              background: '#ffffff', color: '#1c1c1e',
+              border: '1px solid rgba(0,0,0,0.08)',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.18)', fontSize: 13, lineHeight: 1.55,
+              display: 'flex', flexDirection: 'column', gap: 8,
+            },
+          },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('span', { style: { display: 'inline-flex', color: '#34c759' } },
+                h('svg', { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+                  h('rect', { x: 3, y: 5, width: 18, height: 14, rx: 2 }),
+                  h('path', { d: 'm3 7 9 6 9-6' }))),
+              h('span', { style: { fontWeight: 600 } }, t('newMail')),
+              h('span', { style: { flex: 1 } }),
+              h('span', { style: { fontSize: 12, color: '#8a8a8e', wordBreak: 'break-all' } }, mail.email),
+              h('button', {
+                onClick: close,
+                style: {
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  fontSize: 16, lineHeight: 1, color: '#8a8a8e', padding: '0 2px',
+                },
+              }, '×'),
+            ),
+            h('div', { style: { fontWeight: 600, wordBreak: 'break-all' } }, mail.subject || '(无主题)'),
+            mail.from
+              ? h('div', { style: { fontSize: 12, color: '#6d6d72', wordBreak: 'break-all' } }, mail.from)
+              : null,
+            mail.html
+              ? h('div', {
+                  style: {
+                    fontSize: 13, color: '#3a3a3c', wordBreak: 'break-all', lineHeight: 1.6,
+                    background: '#f5f5f7', borderRadius: 8, padding: '10px 12px', maxHeight: 260, overflowY: 'auto',
+                  },
+                  dangerouslySetInnerHTML: { __html: mail.html },
+                })
+              : mail.text
+                ? h('div', {
+                    style: {
+                      fontSize: 12, color: '#3a3a3c', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                      background: '#f5f5f7', borderRadius: 8, padding: '8px 10px', maxHeight: 260, overflowY: 'auto',
+                    },
+                  }, mail.text.length > 800 ? mail.text.slice(0, 800) + '…' : mail.text)
+                : null,
+            h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
+              h('button', {
+                onClick: close,
+                style: {
+                  border: '1px solid rgba(0,0,0,0.12)', background: '#f5f5f7', cursor: 'pointer',
+                  borderRadius: 7, padding: '4px 14px', fontSize: 12, color: '#1c1c1e',
+                },
+              }, t('close')),
+            ),
           ),
-          h('div', { style: { fontWeight: 600, wordBreak: 'break-all' } }, mail.subject || '(无主题)'),
-          mail.from
-            ? h('div', { style: { fontSize: 12, color: '#b5b5ba', wordBreak: 'break-all' } }, mail.from)
-            : null,
-          mail.text
-            ? h('div', {
-                style: { fontSize: 12, color: '#d5d5da', whiteSpace: 'pre-wrap', wordBreak: 'break-all' },
-              }, mail.text.length > 400 ? mail.text.slice(0, 400) + '…' : mail.text)
-            : null,
         ),
         document.body,
       )

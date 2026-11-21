@@ -127,6 +127,9 @@ async function dispatch(store, cfg, body) {
       await store.addFromRegister({ address: result.address, appPassword: result.appPassword, note })
       return { ok: true, address: result.address, appPassword: result.appPassword, mailboxes: await store.list() }
     }
+    case 'history': {
+      return { ok: true, messages: await store.history(String(body.email || '').trim().toLowerCase()) }
+    }
     case 'poll': {
       const sinceSeq = Number(body.sinceSeq) || 0
       return { ok: true, notifications: store.takeNotifications(sinceSeq) }

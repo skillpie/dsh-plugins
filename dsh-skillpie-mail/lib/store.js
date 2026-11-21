@@ -5,10 +5,11 @@
  * payload: { mailboxes: [{ email, password, note }], lastUid: { [email]: n } }
  * 密码只在宿主侧保存,任何 API 都不会原样返回。
  */
-import { fetchNewMail } from './imap.js'
+import { fetchNewMail, sanitizeHtml } from './imap.js'
 
 export const RECORD_ID = 'dsh-skillpie-mail/mailboxes'
 export const MAX_NOTIFICATIONS = 20
+export const MAX_HISTORY = 200
 
 export class MailStore {
   constructor(credentials) {
@@ -21,7 +22,11 @@ export class MailStore {
   async #read() {
     const record = await this.credentials.readRecord(RECORD_ID)
     const payload = record?.kind === 'grant' && record.payload ? record.payload : {}
-    return { mailboxes: Array.isArray(payload.mailboxes) ? payload.mailboxes : [], lastUid: payload.lastUid ?? {} }
+    return {
+      mailboxes: Array.isArray(payload.mailboxes) ? payload.mailboxes : [],
+      lastUid: payload.lastUid ?? {},
+      history: Array.isArray(payload.history) ? payload.history : [],
+    }
   }
 
   async #write(next) {
@@ -80,14 +85,38 @@ export class MailStore {
         if (options.onBoxError) options.onBoxError(box.email, error)
       }
     }
+    // 收件历史(持久,最新在前,截断;不存密码)
+    if (fresh.length) {
+      for (const message of fresh) {
+        state.history.unshift({
+          id: message.email + ':' + message.uid,
+          email: message.email, uid: message.uid, folder: message.folder,
+          from: message.from, to: message.to, subject: message.subject, date: message.date,
+          text: (message.text || '').slice(0, 2000),
+          html: sanitizeHtml(message.html || '', 8000),
+          receivedAt: new Date().toISOString(),
+        })
+      }
+      if (state.history.length > MAX_HISTORY) state.history.length = MAX_HISTORY
+    }
     await this.#write(state)
     // 入通知环(新在前,截断)
     for (const message of fresh.reverse()) {
-      this.notifications.unshift({ id: message.email + ':' + message.uid, seq: ++MailStore.seq, ...message })
+      this.notifications.unshift({
+        id: message.email + ':' + message.uid, seq: ++MailStore.seq, ...message,
+        html: sanitizeHtml(message.html || '', 8000),
+      })
     }
     if (this.notifications.length > MAX_NOTIFICATIONS) this.notifications.length = MAX_NOTIFICATIONS
     if (fresh.length) for (const fn of this.listeners) fn()
     return fresh
+  }
+
+  /** 收件历史(不含密码,最新在前)。 */
+  async history(email = '') {
+    const { history } = await this.#read()
+    const list = email ? history.filter((m) => m.email === email) : history
+    return list
   }
 
   /** 取走通知(客户端轮询)。sinceSeq 之后的消息。 */

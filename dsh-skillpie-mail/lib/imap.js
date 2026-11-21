@@ -290,7 +290,7 @@ function contentTypeOf(headerBlock) {
 }
 
 /** 提取纯文本正文(截断 maxLength)。 */
-export function extractText(rawBuf, maxLength = 800) {
+export function extractText(rawBuf, maxLength = 800, preferHtml = false) {
   const sep = rawBuf.indexOf('\r\n\r\n')
   const headerBlock = rawBuf.subarray(0, sep < 0 ? 0 : sep).toString('latin1')
   const bodyBuf = sep < 0 ? rawBuf : rawBuf.subarray(sep + 4)
@@ -318,15 +318,46 @@ export function extractText(rawBuf, maxLength = 800) {
     const cte = (getHeader(buf.toString('latin1', 0, Math.min(buf.length, 4096)), 'Content-Transfer-Encoding') || '').trim()
     const text = decodeBodyText(buf, cte, ct.charset)
     if (ct.type === 'text/plain' || ct.type === 'text/html' || !ct.type) {
-      return ct.type === 'text/html' ? text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : text.trim()
+      if (ct.type === 'text/html') return preferHtml ? sanitizeHtml(text) : text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      return preferHtml ? '' : text.trim() // html 优先时跳过 plain,等后面的 html part
     }
     return ''
   }
-  const text = walk(bodyBuf, contentTypeOf(headerBlock)) || bodyBuf.toString('utf-8')
+  const text = walk(bodyBuf, contentTypeOf(headerBlock)) || (preferHtml ? '' : bodyBuf.toString('utf-8'))
   return text.length > maxLength ? text.slice(0, maxLength) + '…' : text
 }
 
-/** 解析整封邮件 → {from, to, subject, date, text}。 */
+/**
+ * 极简 HTML 净化:只保留安全标签与内联排版样式,剥 script/事件属性,输出可信 HTML 字符串。
+ */
+export function sanitizeHtml(html, maxLength = 20000) {
+  let out = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s(?:javascript|vbscript|data)\s*:/gi, ' ')
+  // 统一排版容器样式(邮件客户端自带样式太乱,直接覆盖)
+  out = out.replace(/<(table|tr|td|div|p|span|font|b|strong|i|em|u|a|h[1-6]|ul|ol|li|br)([^>]*)>/gi, (m, tag, attrs) => {
+    const href = /\shref\s*=\s*("([^"]*)"|'([^']*)')/i.exec(attrs)
+    let link = tag === 'a' && href ? (href[2] ?? href[3] ?? '') : ''
+    if (!/^https?:/i.test(link)) link = '' // 只保留 http(s) 链接
+    const style = {
+      table: 'border-collapse:collapse;', tr: '', td: 'padding:2px 6px;vertical-align:top;',
+      div: 'margin:4px 0;', p: 'margin:4px 0;', span: '', font: '', b: '', strong: '', i: '', em: '', u: '',
+      a: 'color:#0a7cff;text-decoration:none;pointer-events:none;',
+      h1: 'font-size:16px;font-weight:600;margin:6px 0;', h2: 'font-size:15px;font-weight:600;margin:6px 0;',
+      h3: 'font-size:14px;font-weight:600;margin:6px 0;', h4: 'font-size:13px;font-weight:600;margin:6px 0;',
+      h5: 'font-size:13px;font-weight:600;margin:4px 0;', h6: 'font-size:13px;font-weight:600;margin:4px 0;',
+      ul: 'margin:4px 0;padding-left:18px;', ol: 'margin:4px 0;padding-left:18px;', li: 'margin:2px 0;',
+    }[tag] ?? ''
+    const attrOut = link ? ` data-href="${link.replace(/"/g, '&quot;')}"` : ''
+    return `<${tag}${attrOut} style="${style}">`
+  })
+  out = out.trim()
+  return out.length > maxLength ? out.slice(0, maxLength) + '…' : out
+}
+
+/** 解析整封邮件 → {from, to, subject, date, text, html}。html 为净化后的 HTML(无则空串)。 */
 export function parseMail(rawBuf) {
   const sep = rawBuf.indexOf('\r\n\r\n')
   const headerBlock = rawBuf.subarray(0, sep < 0 ? rawBuf.length : sep).toString('latin1')
@@ -336,14 +367,44 @@ export function parseMail(rawBuf) {
     subject: decodeHeaderValue(getHeader(headerBlock, 'Subject')),
     date: getHeader(headerBlock, 'Date'),
     text: extractText(rawBuf),
+    html: extractHtml(rawBuf),
   }
+}
+
+/** 提取 text/html 部分并净化,无 html 部分返回空串。 */
+export function extractHtml(rawBuf, maxLength = 20000) {
+  const sep = rawBuf.indexOf('\r\n\r\n')
+  const headerBlock = rawBuf.subarray(0, sep < 0 ? 0 : sep).toString('latin1')
+  const bodyBuf = sep < 0 ? rawBuf : rawBuf.subarray(sep + 4)
+  let found = ''
+  const walk = (buf, ct) => {
+    if (found) return
+    if (ct.type.startsWith('multipart/') && ct.boundary) {
+      const b = '--' + ct.boundary
+      let idx = buf.indexOf(b)
+      while (idx >= 0 && !found) {
+        const next = buf.indexOf(b, idx + b.length)
+        if (next < 0) break
+        const part = buf.subarray(idx + b.length, next)
+        const psep = part.indexOf('\r\n\r\n')
+        if (psep >= 0) walk(part.subarray(psep + 4), contentTypeOf(part.subarray(0, psep).toString('latin1')))
+        idx = next
+      }
+      return
+    }
+    if (ct.type !== 'text/html') return
+    const cte = (getHeader(buf.toString('latin1', 0, Math.min(buf.length, 4096)), 'Content-Transfer-Encoding') || '').trim()
+    found = sanitizeHtml(decodeBodyText(buf, cte, ct.charset))
+  }
+  walk(bodyBuf, contentTypeOf(headerBlock))
+  return found.length > maxLength ? found.slice(0, maxLength) + '…' : found
 }
 
 /* ── 高层:检查一个邮箱的新邮件 ──────────────────────────────────────────── */
 
 /**
  * 检查邮箱自 lastUid 以来的新邮件。
- * @returns {Promise<{messages: Array<{uid, folder, from, to, subject, date, text}>, lastUid}>}
+ * @returns {Promise<{messages: Array<{uid, folder, from, to, subject, date, text, html}>, lastUid}>}
  */
 export async function fetchNewMail({ host, port, user, password, folders = ['INBOX'], lastUid = 0 }) {
   const client = new ImapClient({ host, port, user, password })

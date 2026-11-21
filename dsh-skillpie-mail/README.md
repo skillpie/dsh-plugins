@@ -1,34 +1,32 @@
-# dsh-skillpie-mail — SkillPie邮箱
+# SkillPie邮箱 — 私人接码平台
 
-DeepSeek Harness 插件：在 GUI 里管理自建邮件服务器（mail.skillpie.cn）的邮箱。
+DeepSeek Harness 插件：把自建邮箱变成你的专属接码平台——注册各类网站账号时填 `任意前缀@skillpie.cn`，验证码直接弹到桌面，不用再翻邮箱。
+
+## 为什么好用
+
+- **无限地址**：`taobao@`、`jd01@`、`shop0521@`……任意前缀都能收信，一个网站一个地址，互不混淆
+- **独立密码**：每个地址有专属应用密码，安全隔离
+- **隐私可控**：验证码只落在自己的服务器和本地，不经过任何第三方
+- **不漏码**：验证码常被收进垃圾箱，这里一并监控
 
 ## 功能
 
-- **设置页「SkillPie邮箱」分区**：
-  - 「快速注册」弹窗：输入用户名+备注，调 SkillPie 注册页 API（`https://mail.skillpie.cn/register/api/register`）建号并签发应用密码，成功后自动加入邮箱列表。
-  - 「添加邮箱」：手动录入已有邮箱（邮箱+密码，IMAP 登录校验通过才保存）。
-  - 列表支持逐条移除；密码只存宿主凭据记录，任何 API 都不回传。
-- **全局新邮件弹窗**：宿主半每 20s IMAP 轮询（INBOX + Junk Mail，验证码常进垃圾箱），客户端每 8s 取走通知；收到新邮件时右上角弹窗展示主题/发件人/正文摘要，并注明是哪个邮箱接收的。
+- **快速注册**：输入用户名，一键创建新邮箱地址，自动开始监听
+- **添加已有邮箱**：输前缀（自动补 `@skillpie.cn`）和应用密码即可
+- **新邮件弹窗**：收到验证码时屏幕居中弹出，展示发件人/主题/正文，不自动消失，看完手动关闭
+- **收件箱**：随时回看收过的邮件，本地保存最近 200 封，重启不丢
+- **多邮箱管理**：列表可随时增删，密码只在本地保存，不会外泄
 
-## 配置（Config ~standard）
+## 典型接码流程
 
-| 键 | 默认 | 说明 |
-|---|---|---|
-| `registerUrl` | `https://mail.skillpie.cn/register/api/register` | 注册页 API |
-| `imapHost` | `mail.skillpie.cn` | IMAP 服务器 |
-| `imapPort` | `993` | IMAPS 端口 |
-| `pollInterval` | `20` | 轮询间隔（秒，最小 5） |
+1. 设置页 → 快速注册 → 输入 `taobao01` → 得到 `taobao01@skillpie.cn`
+2. 去目标网站填这个地址注册
+3. 验证码约 20 秒内桌面弹窗，正文清晰可读
+4. 需要回看就点该邮箱的「收件箱」
 
-## 存储
+## 截图
 
-凭据记录 `dsh-skillpie-mail/mailboxes`：`{ mailboxes: [{email,password,note,addedAt}], lastUid: {[email]: n} }`。
-`lastUid` 水位保证每封邮件只提醒一次；插件重启首轮只推进水位、不弹历史邮件。
+| 邮箱管理（设置 → SkillPie邮箱） | 新邮件弹窗 |
+|---|---|
+| ![邮箱管理](docs/screenshots/settings.webp) | ![新邮件弹窗](docs/screenshots/new-mail-popup.webp) |
 
-## 开发
-
-```sh
-for f in lib/*.js; do node --check "$f"; done
-node test/smoke.mjs
-```
-
-安装：`plugin_manager install_bundle(target=dsh-skillpie-mail)`，改宿主代码后 `set_plugin` off→on 重载，客户端改动刷新 GUI 页面。
