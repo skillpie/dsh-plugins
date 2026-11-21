@@ -1016,21 +1016,10 @@ window.__ModuleLoader__.load({
                       },
                     }, '+' + balanceGain[0].amount) : null),
                   h('span', { style: { display: 'inline-flex', gap: 6 } },
-                                        data && data.loggedIn ? h('button', {
-                      type: 'button', 'aria-label': pageT('depositManageTip'),
-                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
-                      onMouseEnter: function () { showTipOnce('deposit') },
-                      onClick: function () {
-                        depTip[1](null)
-                        tbStore.set({ authOpen: false })
-                        tbStore.set({ notify: { kind: 'success', title: pageT('depositGuide'), detail: '' } })
-                        openSettingsPage()
-                      },
-                    }, pageT('depositManage')) : null,
-                    h('button', {
+                                        h('button', {
                       type: 'button', disabled: checkin[0].busy || checkin[0].done,
-                      style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
-                      // 充值面板长驻,按钮固定为「签到」;签到后变「已签到」并禁用
+                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
+                      // 充值面板长驻,按钮固定为「签到」;签到后禁用(文案不改)
                       onMouseEnter: function () { showTipOnce('recharge') },
                       onClick: (!checkin[0].done) ? async function () {
                         if (checkin[0].busy) return
@@ -1057,7 +1046,18 @@ window.__ModuleLoader__.load({
                           innerToast[1]({ text: String(e9.message || e9), error: true })
                         }
                       } : undefined,
-                    }, (!checkin[0].done) ? (checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')) : pageT('checkinDone')),
+                    }, (!checkin[0].done) ? (checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')) : pageT('checkinDone')),                    data && data.loggedIn ? h('button', {
+                      type: 'button', 'aria-label': pageT('depositManageTip'),
+                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)', marginLeft: 'auto' }),
+                      onMouseEnter: function () { showTipOnce('deposit') },
+                      onClick: function () {
+                        depTip[1](null)
+                        tbStore.set({ authOpen: false })
+                        tbStore.set({ notify: { kind: 'success', title: pageT('depositGuide'), detail: '' } })
+                        openSettingsPage()
+                      },
+                    }, pageT('depositManage')) : null,
+
                   ),
                 ),
                 h(InlineRecharge, {
