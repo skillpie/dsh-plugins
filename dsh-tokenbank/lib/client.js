@@ -899,7 +899,7 @@ window.__ModuleLoader__.load({
         h('div', {
           style: {
             position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-            width: 600, maxWidth: 'calc(100vw - 24px)', maxHeight: '80vh', overflow: 'auto',
+            width: 500, maxWidth: 'calc(100vw - 24px)', maxHeight: '80vh', overflow: 'auto',
             background: 'var(--dsw-menu-surface-fill)', backdropFilter: 'var(--dsw-menu-backdrop-filter)',
             WebkitBackdropFilter: 'var(--dsw-menu-backdrop-filter)',
             color: 'var(--dsw-alias-label-primary)',
