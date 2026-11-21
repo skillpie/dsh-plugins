@@ -161,13 +161,14 @@ export default {
     ctx.inject(['credentials'], async (child) => {
       const credentials = await child.credentials
       holder.store = new MailStore(credentials)
+      const imapOpts = { host: cfg.imapHost, port: cfg.imapPort, folders }
       // 首轮立即拉一次,保证基线 lastUid(不推历史邮件:首轮只记水位)
       child.effect(() => {
         const timer = setInterval(() => {
-          holder.store.pollOnce({ ...cfg, folders }).catch(() => {})
+          holder.store.pollOnce(imapOpts).catch(() => {})
         }, cfg.pollInterval * 1000)
         // 首轮只记水位,避免把存量邮件全推成弹窗
-        holder.store.pollOnce({ ...cfg, folders, baseline: true }).catch(() => {})
+        holder.store.pollOnce({ ...imapOpts, baseline: true }).catch(() => {})
         return () => clearInterval(timer)
       }, 'dsh-skillpie-mail: poll timer')
     })
