@@ -875,13 +875,6 @@ window.__ModuleLoader__.load({
       var checkinFlash = React.useState(null) // 签到成功闪现文案(复用获取免费模型按钮样式,2s 回原样)
       var balanceGain = React.useState(null) // { amount } 余额旁 +$x 浮现动画,8s 自动消失
       var checkin = React.useState({ busy: false, done: false })
-      var depTip = React.useState(null) // 说明板块:hover 哪个按钮就显示哪段说明('deposit'|'recharge'|'models')
-      var tipSeen = React.useState({}) // 引导提示已看标记:每个按钮登录后仅第一次 hover 展示,后续不再弹
-      var showTipOnce = function (key) {
-        if (tipSeen[0][key]) return
-        var next = Object.assign({}, tipSeen[0]); next[key] = true
-        tipSeen[1](next); depTip[1](key)
-      }
       React.useEffect(function () {
         if (!snap.authOpen) logoutArm[1](false)
       }, [snap.authOpen])
@@ -989,20 +982,13 @@ window.__ModuleLoader__.load({
               )) : null,
           ),
           data && data.loggedIn
-            ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 }, onMouseLeave: function () { depTip[1](null) } },
+            ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
                 h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 } },
                   h('span', { style: { fontSize: 13, fontWeight: 600 } },
                     (data.user && (data.user.display_name || data.user.name)) || data.email || ''),
                   h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, data.email || ''),
                 ),
-                depTip[0] ? h('div', {
-                  style: {
-                    padding: '8px 10px', borderRadius: 8, fontSize: 12, lineHeight: 1.6,
-                    background: 'var(--dsw-alias-bg-layer-1, #f7f7f8)',
-                    color: 'var(--dsw-alias-label-secondary, #888)',
-                    border: '1px solid var(--dsw-alias-border-l1)',
-                  },
-                }, pageT(depTip[0] === 'recharge' ? 'rechargeTip' : depTip[0] === 'models' ? 'freeModelsTip' : 'depositManageTip')) : null,
+
                                 h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 } },
                   h('div', { style: { position: 'relative', display: 'inline-block', fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } },
                     data.account && typeof data.account.balance_nano_usd === 'number'
@@ -1020,7 +1006,6 @@ window.__ModuleLoader__.load({
                       type: 'button', disabled: checkin[0].busy || checkin[0].done,
                       style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
                       // 充值面板长驻,按钮固定为「签到」;签到后禁用(文案不改)
-                      onMouseEnter: function () { showTipOnce('recharge') },
                       onClick: (!checkin[0].done) ? async function () {
                         if (checkin[0].busy) return
                         checkin[1](Object.assign({}, checkin[0], { busy: true }))
@@ -1049,9 +1034,7 @@ window.__ModuleLoader__.load({
                     }, checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')),                    data && data.loggedIn ? h('button', {
                       type: 'button', 'aria-label': pageT('depositManageTip'),
                       style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)', marginLeft: 'auto' }),
-                      onMouseEnter: function () { showTipOnce('deposit') },
                       onClick: function () {
-                        depTip[1](null)
                         tbStore.set({ authOpen: false })
                         tbStore.set({ notify: { kind: 'success', title: pageT('depositGuide'), detail: '' } })
                         openSettingsPage()
