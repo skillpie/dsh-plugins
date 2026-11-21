@@ -346,8 +346,17 @@ window.__ModuleLoader__.load({
       var flash = React.useState(false)
       var prev = React.useRef(false)
       React.useEffect(function () {
-        if (snap.loggedIn && !prev.current) flash[1](true)
-        prev.current = snap.loggedIn
+        if (!snap.loggedIn) { prev.current = false; return }
+        // 仅「从未登录 → 登录」的跃迁触发一次;已标记过(本会话已提示)不再重亮
+        if (!prev.current) {
+          prev.current = true
+          var seen = false
+          try { seen = window.sessionStorage.getItem('tb-balance-flash-seen') === '1' } catch (e) {}
+          if (!seen) {
+            flash[1](true)
+            try { window.sessionStorage.setItem('tb-balance-flash-seen', '1') } catch (e) {}
+          }
+        }
       }, [snap.loggedIn])
       var onClick = function (e) {
         flash[1](false)
