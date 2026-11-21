@@ -17,13 +17,17 @@
 
 输入框模型选择器旁的橙色 **TokenBank** 按钮,点开就是账户面板;完整门户(托管/交易/流水)浏览器打开:
 
-| 设置·模型:一键托管 + 托管说明 | 账户弹窗:余额 / 签到 / 托管 / 充值一站式 |
+| 账户弹窗:余额 / 签到 / 托管 / 充值一站式 | 门户首页:托管你的闲置 TOKEN |
 |---|---|
-| ![设置托管](docs/screenshots/settings-deposit.jpg) | ![账户弹窗](docs/screenshots/account-popup.jpg) |
+| ![账户弹窗](docs/screenshots/account-popup.jpg) | ![门户首页](docs/screenshots/portal-home.jpg) |
 
-| 门户·账户总览 | 门户·托管凭证 | 门户·交易行情 | 门户·余额流水 |
-|---|---|---|---|
-| ![账户总览](docs/screenshots/portal-overview.jpg) | ![托管凭证](docs/screenshots/portal-deposits.jpg) | ![交易行情](docs/screenshots/portal-market.jpg) | ![余额流水](docs/screenshots/portal-ledger.jpg) |
+| 设置·模型:一键托管 | 门户·账户总览 | 门户·托管凭证 |
+|---|---|---|
+| ![设置托管](docs/screenshots/settings-deposit.jpg) | ![账户总览](docs/screenshots/portal-overview.jpg) | ![托管凭证](docs/screenshots/portal-deposits.jpg) |
+
+| 门户·交易行情 | 门户·余额流水 |
+|---|---|
+| ![交易行情](docs/screenshots/portal-market.jpg) | ![余额流水](docs/screenshots/portal-ledger.jpg) |
 
 ## 安装
 
