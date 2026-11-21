@@ -31,11 +31,14 @@ window.__ModuleLoader__.load({
       registerOk: '注册成功',
       registerResult: '邮箱',
       registerAppPwd: '应用密码（IMAP 登录用，请保存）',
-      registerDone: '已加入下方列表',
+      registerPwd: '应用密码 (IMAP 登录用)',
+      registerDone: '已自动加入下方列表, 无需再手动添加',
       add: '添加邮箱',
       addTitle: '添加已有邮箱',
       email: '邮箱地址',
       password: '密码',
+      appPasswordLabel: '应用密码',
+      appPasswordTip: '填 app_ 开头的应用密码 (注册成功弹窗里有;老账号可在 mail.skillpie.cn/admin 的账户页签发)。账号密码无法用于此登录。',
       addOk: '添加',
       remove: '移除',
       empty: '还没有邮箱，点「快速注册」或「添加邮箱」。',
@@ -58,11 +61,14 @@ window.__ModuleLoader__.load({
       registerOk: 'Registered',
       registerResult: 'Address',
       registerAppPwd: 'App password (for IMAP, save it)',
-      registerDone: 'Added to the list below',
+      registerPwd: 'App password (for IMAP login)',
+      registerDone: 'Added to the list below automatically',
       add: 'Add mailbox',
       addTitle: 'Add an existing mailbox',
       email: 'Email address',
       password: 'Password',
+      appPasswordLabel: 'App password',
+      appPasswordTip: 'Use the app_ password shown in the register dialog (or issue one in mail.skillpie.cn/admin). Account passwords cannot log in here.',
       addOk: 'Add',
       remove: 'Remove',
       empty: 'No mailboxes yet. Try "Quick register" or "Add mailbox".',
@@ -178,7 +184,7 @@ window.__ModuleLoader__.load({
         errorState[1]('')
         api('register', { username: usernameState[0], note: noteState[0] })
           .then(function (data) {
-            resultState[1]({ address: data.address })
+            resultState[1]({ address: data.address, appPassword: data.appPassword })
             props.onChanged()
           })
           .catch(function (error) { errorState[1](error.message) })
@@ -204,6 +210,16 @@ window.__ModuleLoader__.load({
                     copiedState[0] === 'addr' ? t('copied') : t('copy')),
                 ),
               ),
+              result.appPassword
+                ? h('div', { key: 'pwd', style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+                    h('span', { style: labelStyle }, t('registerPwd')),
+                    h('div', { style: { display: 'flex', gap: 6 } },
+                      h('code', { style: { flex: 1, fontSize: 12, wordBreak: 'break-all' } }, result.appPassword),
+                      h('button', { type: 'button', style: btnStyle, onClick: function () { copy(result.appPassword, 'pwd') } },
+                        copiedState[0] === 'pwd' ? t('copied') : t('copy')),
+                    ),
+                  )
+                : null,
               h('div', { key: 'hint', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } }, t('registerDone')),
             ]
           : [
@@ -280,7 +296,21 @@ window.__ModuleLoader__.load({
             }, MAIL_SUFFIX),
           ),
         ),
-        h(Field, { label: t('password'), value: passwordState[0], onChange: passwordState[1] }),
+        h(Field, {
+          label: [
+            t('appPasswordLabel'),
+            h('span', {
+              key: 'tip', title: t('appPasswordTip'),
+              style: {
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                marginLeft: 4, width: 14, height: 14, borderRadius: '50%',
+                border: '1px solid var(--dsw-alias-border-l1)', fontSize: 10,
+                color: 'var(--dsw-alias-label-secondary)', cursor: 'help', userSelect: 'none',
+              },
+            }, '?'),
+          ],
+          value: passwordState[0], onChange: passwordState[1],
+        }),
         errorState[0] ? h('div', { style: { fontSize: 12, color: '#e5484d' } }, errorState[0]) : null,
         h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
           h('button', { type: 'button', style: btnStyle, onClick: props.onClose }, t('close')),

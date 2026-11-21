@@ -125,7 +125,7 @@ async function dispatch(store, cfg, body) {
       const note = String(body.note || '')
       const result = await registerMailbox(cfg.registerUrl, username, note)
       await store.addFromRegister({ address: result.address, appPassword: result.appPassword, note })
-      return { ok: true, address: result.address, mailboxes: await store.list() }
+      return { ok: true, address: result.address, appPassword: result.appPassword, mailboxes: await store.list() }
     }
     case 'poll': {
       const sinceSeq = Number(body.sinceSeq) || 0
