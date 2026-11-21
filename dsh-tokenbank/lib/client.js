@@ -867,19 +867,12 @@ window.__ModuleLoader__.load({
     /** 全局托管弹窗:用户粘贴 API Key 托管(设置页「一键托管」不受影响)。 */
     function DepositOverlay() {
       var snap = useTbStore()
-      var groups = React.useState([])
-      var groupId = React.useState('')
       var keys = React.useState('')
       var busy = React.useState(false)
       var err = React.useState('')
       React.useEffect(function () {
         if (!snap.depositOpen) return
         keys[1](''); err[1](''); busy[1](false)
-        api('groups').then(function (res) {
-          var list = (res && res.groups) || []
-          groups[1](list)
-          if (list.length) groupId[1](String(list[0].id))
-        }).catch(function () {})
       }, [snap.depositOpen])
       if (!snap.depositOpen || !runtimeCtx) return null
       var close = function () { tbStore.set({ depositOpen: false }) }
@@ -888,7 +881,7 @@ window.__ModuleLoader__.load({
         if (!list.length) { err[1](pageT('keyRequired')); return }
         busy[1](true); err[1]('')
         try {
-          await api('deposits-add', { groupId: Number(groupId[0] || 0), keys: list })
+          await api('deposits-add', { keys: list })
           busy[1](false)
           tbStore.set({ depositOpen: false, notify: { kind: 'success', title: pageT('depositDone'), detail: '' } })
         } catch (e) {
@@ -905,7 +898,7 @@ window.__ModuleLoader__.load({
         h('div', {
           style: {
             position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-            width: 360, maxWidth: 'calc(100vw - 24px)', maxHeight: '80vh', overflow: 'auto',
+            width: 420, maxWidth: 'calc(100vw - 24px)', maxHeight: '80vh', overflow: 'auto',
             background: 'var(--dsw-menu-surface-fill)', backdropFilter: 'var(--dsw-menu-backdrop-filter)',
             WebkitBackdropFilter: 'var(--dsw-menu-backdrop-filter)',
             color: 'var(--dsw-alias-label-primary)',
@@ -925,10 +918,6 @@ window.__ModuleLoader__.load({
             h('div', null, pageT('depositIntro4')),
             h('div', { style: { marginBottom: 6 } }, pageT('depositIntro5')),
             h('a', { href: (snap.portalUrl || 'https://bank.skillpie.cn') + '/', target: '_blank', rel: 'noreferrer', style: { color: '#ff4f1f', textDecoration: 'none', fontWeight: 600 } }, pageT('learnMore'))),
-          groups[0].length ? h('div', { style: { marginBottom: 8 } },
-            h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 4 } }, pageT('depositGroup')),
-            h('select', { value: groupId[0], onChange: function (e) { groupId[1](e.target.value) }, style: inputStyle },
-              groups[0].map(function (g) { return h('option', { value: String(g.id), key: g.id }, g.name) }))) : null,
           h('textarea', {
             rows: 4, placeholder: pageT('depositPlaceholder'),
             value: keys[0], onChange: function (e) { keys[1](e.target.value) },
