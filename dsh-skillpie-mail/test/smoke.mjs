@@ -78,7 +78,6 @@ async function main() {
   }
   const ctx = {
     async inject(deps, fn) {
-      assert.deepEqual(deps, ['credentials'])
       const child = {
         credentials, // 插件内 await child.credentials 构造 store
         effect(setup, name) {

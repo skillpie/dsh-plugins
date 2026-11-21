@@ -155,19 +155,24 @@ export default {
     }
     const folders = ['INBOX', 'Junk Mail'] // 验证码常进垃圾箱,一并监控
 
+    // store 由 credentials 注入填充; HTTP 路由不依赖它, 先注册保证 API 可用
+    const holder = { store: null }
+
     ctx.inject(['credentials'], async (child) => {
       const credentials = await child.credentials
-      const store = new MailStore(credentials)
+      holder.store = new MailStore(credentials)
       // 首轮立即拉一次,保证基线 lastUid(不推历史邮件:首轮只记水位)
       child.effect(() => {
         const timer = setInterval(() => {
-          store.pollOnce({ ...cfg, folders }).catch(() => {})
+          holder.store.pollOnce({ ...cfg, folders }).catch(() => {})
         }, cfg.pollInterval * 1000)
         // 首轮只记水位,避免把存量邮件全推成弹窗
-        store.pollOnce({ ...cfg, folders, baseline: true }).catch(() => {})
+        holder.store.pollOnce({ ...cfg, folders, baseline: true }).catch(() => {})
         return () => clearInterval(timer)
       }, 'dsh-skillpie-mail: poll timer')
+    })
 
+    ctx.inject(['webServer'], (child) => {
       child.effect(() => child.webServer.register({
         kind: 'exact',
         path: ROUTE,
@@ -193,7 +198,11 @@ export default {
               send(200, { ok: true, service: 'dsh-skillpie-mail', route: ROUTE })
               return
             }
-            send(200, await dispatch(store, { ...cfg, folders }, await readBody(req)))
+            if (!holder.store) {
+              send(200, { ok: false, error: 'credentials service not ready' })
+              return
+            }
+            send(200, await dispatch(holder.store, { ...cfg, folders }, await readBody(req)))
           } catch (error) {
             send(200, { ok: false, error: error?.message ?? String(error) })
           }

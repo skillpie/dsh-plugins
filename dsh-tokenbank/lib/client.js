@@ -887,7 +887,7 @@ window.__ModuleLoader__.load({
         if (!snap.authOpen) logoutArm[1](false)
       }, [snap.authOpen])
       React.useEffect(function () {
-        if (snap.authOpen) rechargeOpen[1](Boolean(snap.startRecharge))
+        if (snap.authOpen) rechargeOpen[1](snap.loggedIn ? snap.startRecharge !== false : Boolean(snap.startRecharge))
       }, [snap.authOpen])
       React.useEffect(function () {
         if (!snap.authOpen) return
