@@ -40,8 +40,10 @@ window.__ModuleLoader__.load({
       checkinDone: '已签到',
       checkinOk: '签到成功',
       checkinStreak: '已连签 {n} 天',
+      checkinGain: '+0.10',
       rechargePay: '去支付',
       rechargeDone: '充值成功,余额已到账',
+      gainSuffix: '签到奖励',
       rechargePending: '尚未检测到支付结果,如已完成支付请稍后重试或刷新',
       rechargeWaiting: '等待支付中…',
       rechargeOpenPay: '打开支付页',
@@ -140,6 +142,7 @@ window.__ModuleLoader__.load({
       checkinDone: 'Checked in',
       checkinOk: 'Check-in success',
       checkinStreak: '{n}-day streak',
+      checkinGain: '+0.10',
       rechargePay: 'Pay',
       rechargeDone: 'Recharge successful',
       rechargePending: 'No payment detected yet; if you already paid, retry or refresh later',
@@ -840,6 +843,7 @@ window.__ModuleLoader__.load({
       var logoutArm = React.useState(false)
       var innerToast = React.useState(null)
       var checkinFlash = React.useState(null) // 签到成功闪现文案(复用获取免费模型按钮样式,2s 回原样)
+      var balanceGain = React.useState(null) // { amount } 余额旁 +$x 浮现动画,8s 自动消失
       var checkin = React.useState({ busy: false, done: false })
       var depTip = React.useState(null) // 说明板块:hover 哪个按钮就显示哪段说明('deposit'|'recharge'|'models')
       var tipSeen = React.useState({}) // 引导提示已看标记:每个按钮登录后仅第一次 hover 展示,后续不再弹
@@ -951,60 +955,73 @@ window.__ModuleLoader__.load({
                     border: '1px solid var(--dsw-alias-border-l1)',
                   },
                 }, pageT(depTip[0] === 'recharge' ? 'rechargeTip' : depTip[0] === 'models' ? 'freeModelsTip' : 'depositManageTip')) : null,
-                h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 } },
-                  h('div', { style: { fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } },
+                                h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 } },
+                  h('div', { style: { position: 'relative', display: 'inline-block', fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } },
                     data.account && typeof data.account.balance_nano_usd === 'number'
-                      ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—'),
+                      ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—',
+                    balanceGain[0] ? h('span', {
+                      key: 'gain-' + balanceGain[0].ts,
+                      style: {
+                        position: 'absolute', left: '100%', top: 0, marginLeft: 6, whiteSpace: 'nowrap',
+                        fontSize: 12, fontWeight: 700, color: '#d03050', pointerEvents: 'none',
+                        animation: 'tb-balance-gain 1s ease-out both',
+                      },
+                    }, '+' + balanceGain[0].amount) : null),
                   h('span', { style: { display: 'inline-flex', gap: 6 } },
-                    (checkin[0].done || (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9)) ? null : h('button', {
-                      type: 'button', disabled: checkin[0].busy || checkin[0].done,
-                      style: Object.assign({}, buttonStyle, {
-                        height: 26, padding: '0 12px', fontSize: 12,
-                        // 边框色与「托管」按钮同口径（border-l2 浅灰弱化），已签到转绿保留
-                        color: checkin[0].done ? '#22a04a' : undefined,
-                        borderColor: checkin[0].done ? '#22a04a' : 'var(--dsw-alias-border-l2, #c9ccd1)',
-                      }),
-                      onClick: async function () {
-                        if (checkin[0].done || checkin[0].busy) return
+                                        data && data.loggedIn ? h('button', {
+                      type: 'button', 'aria-label': pageT('depositManageTip'),
+                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
+                      onMouseEnter: function () { showTipOnce('deposit') },
+                      onClick: function () { depTip[1](null); tbStore.set({ authOpen: false }); openSettingsPage() },
+                    }, pageT('depositManage')) : null,
+                    h('button', {
+                      type: 'button', disabled: checkin[0].busy,
+                      style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
+                      // 位置固定:可签到时该按钮即「签到」,签到后同一位置变回「充值」
+                      onMouseEnter: function () { if (!(!checkin[0].done)) showTipOnce('recharge') },
+                      onClick: (!checkin[0].done) ? async function () {
+                        if (checkin[0].busy) return
                         checkin[1](Object.assign({}, checkin[0], { busy: true }))
                         try {
                           var res = await api('checkin-do')
                           var ci = res && res.checkin || {}
                           checkin[1]({ busy: false, done: Boolean(ci.checked_today) })
                           if (ci.checked_today) {
+                            var before = data.account && typeof data.account.balance_nano_usd === 'number' ? data.account.balance_nano_usd : null
                             var fresh = await api('status').catch(function () { return null })
-                            if (fresh) { st[1](fresh); tbStore.set({ loggedIn: Boolean(fresh.loggedIn), portalUrl: fresh.portalUrl }) }
+                            var gain = null
+                            if (fresh && fresh.account && typeof fresh.account.balance_nano_usd === 'number') {
+                              st[1](fresh); tbStore.set({ loggedIn: Boolean(fresh.loggedIn), portalUrl: fresh.portalUrl })
+                              if (before != null && fresh.account.balance_nano_usd > before) gain = ((fresh.account.balance_nano_usd - before) / 1e9).toFixed(2)
+                            }
+                            balanceGain[1]({ amount: gain || '0.10', ts: Date.now() })
+                            window.setTimeout(function () { balanceGain[1](null) }, 8000)
                             var streakText = ci.streak > 1 ? '（' + pageT('checkinStreak').replace('{n}', String(ci.streak)) + '）' : ''
                             checkinFlash[1]({ text: pageT('checkinOk') + streakText })
                             window.setTimeout(function () { checkinFlash[1](null) }, 3000)
                           }
                         } catch (e9) {
-                          checkin[1]({ busy: false, done: false })
+                          checkin[1](Object.assign({}, checkin[0], { busy: false }))
                           innerToast[1]({ text: String(e9.message || e9), error: true })
                         }
-                      },
-                    }, checkin[0].done ? pageT('checkinDone') : pageT('checkin')),
-                    data && data.loggedIn ? h('button', {
-                      type: 'button', 'aria-label': pageT('depositManageTip'),
-                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)' }),
-                      onMouseEnter: function () { showTipOnce('deposit') },
-                      onClick: function () { depTip[1](null); tbStore.set({ authOpen: false }); openSettingsPage() },
-                    }, pageT('depositManage')) : null,
-                    (checkin[0].done || (data.account && typeof data.account.balance_nano_usd === 'number' && data.account.balance_nano_usd < 1e9))
-                      ? h('button', {
-                          type: 'button',
-                          style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
-                          onMouseEnter: function () { showTipOnce('recharge') },
-                          onClick: function () { depTip[1](null); rechargeOpen[1](function (v) { return !v }) },
-                        }, pageT('recharge'))
-                      : null,
+                      } : function () { depTip[1](null); rechargeOpen[1](function (v) { return !v }) },
+                    }, (!checkin[0].done) ? (checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')) : pageT('recharge')),
                   ),
                 ),
                 rechargeOpen[0] ? h(InlineRecharge, {
                   onPaid: async function () {
                     rechargeOpen[1](false)
+                    var before = data.account && typeof data.account.balance_nano_usd === 'number' ? data.account.balance_nano_usd : null
                     var fresh = await api('status').catch(function () { return null })
-                    if (fresh) { st[1](fresh); tbStore.set({ loggedIn: Boolean(fresh.loggedIn), portalUrl: fresh.portalUrl }) }
+                    var gain = null
+                    if (fresh) {
+                      st[1](fresh); tbStore.set({ loggedIn: Boolean(fresh.loggedIn), portalUrl: fresh.portalUrl })
+                      if (before != null && fresh.account && fresh.account.balance_nano_usd > before) gain = ((fresh.account.balance_nano_usd - before) / 1e9).toFixed(2)
+                    }
+                    if (gain) {
+                      balanceGain[1]({ amount: gain, ts: Date.now() })
+                      window.setTimeout(function () { balanceGain[1](null) }, 8000)
+                    }
                     tbStore.set({ notify: { kind: 'success', title: pageT('rechargeDone'), detail: '' } })
                   },
                 }) : null,
@@ -1632,7 +1649,7 @@ window.__ModuleLoader__.load({
         }, 'dsh-tokenbank: balance flash style')
         // 入口按钮 hover 形态:灰底 + 箭头反转(与模型选择器 hover 一致)
         var entryCss = document.createElement('style')
-        entryCss.textContent = '#tb-entry-btn:not(:has(.tb-free-tag)):hover{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05))!important;margin:1px 0;height:27px!important}.tb-entry-open .tb-entry-chevron{transition:transform .15s ease;transform:rotate(180deg)}'
+        entryCss.textContent = '@keyframes tb-balance-gain{0%{opacity:0;transform:translateY(4px)}25%{opacity:1;transform:translateY(0)}75%{opacity:1}100%{opacity:0;transform:translateY(-6px)}}' + '#tb-entry-btn:not(:has(.tb-free-tag)):hover{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05))!important;margin:1px 0;height:27px!important}.tb-entry-open .tb-entry-chevron{transition:transform .15s ease;transform:rotate(180deg)}'
         document.head.appendChild(entryCss)
         ctx.effect(function () {
           return function () { if (entryCss.parentNode) entryCss.parentNode.removeChild(entryCss) }
