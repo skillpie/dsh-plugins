@@ -34,9 +34,9 @@ sh integrate.sh --all            # 重跑工作区所有「已接入」插件,�
 ```json
 {
   "package": "billion-context",
-  "title": "上下文压缩",
+  "title": "百万上下文",
   "description": "上下文压缩插件:小窗口(100K 上下文足矣)也能跑长任务,省 5 倍 token。",
-  "tags": ["上下文压缩", "省 token"]
+  "tags": ["百万上下文", "省 token"]
 }
 ```
 

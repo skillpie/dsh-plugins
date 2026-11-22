@@ -208,11 +208,11 @@
     },
     {
       "package": "billion-context",
-      "title": "上下文压缩",
+      "title": "百万上下文",
       "description": "上下文压缩插件:小窗口(100K 上下文足矣)也能跑长任务,省 5 倍 token,支持数月级几十亿 token 的单会话。",
       "version": "0.1.216",
       "tags": [
-        "上下文压缩",
+        "百万上下文",
         "省 token",
         "长会话"
       ],
