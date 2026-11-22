@@ -1,6 +1,6 @@
 {
   "name": "dsh-skillpie",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "SkillPie marketplace for DeepSeek Harness: search and install agent skills from the sidebar.",
   "type": "module",
   "license": "MIT",
