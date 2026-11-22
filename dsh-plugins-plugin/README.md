@@ -35,6 +35,15 @@ sh integrate.sh --all            # 重跑工作区所有「已接入」插件,�
 | 改 client 半(`embed/featured.client.js`:UI/卡片/markdown/弹窗) | client 不能走 npm 依赖(DSH 模块表限制),必须先 `npm update dsh-plugins-plugin` 更新包,再在本包目录 `sh integrate.sh --all` 重跑一次,把新 chunk 同步进各接入插件 |
 | 只改 `plugins.json`(推荐列表内容) | 无需任何操作,它是运行时远程拉取(jsdelivr),推 GitHub 即可 |
 
+## 目录(plugins.json)怎么保持最新
+
+**不用手改版本号**,两条链路自动兜底:
+
+1. **发布即刷新(本地)**:`publish_npm.sh` 发布成功后,自动把 `plugins.json` 里该包的 `version` 改成刚发布的版本(工作区未收录的包自动跳过)。
+2. **定时 + push 富化(GitHub Actions)**:`.github/workflows/enrich.yml` 每天跑一次,并且在**任意插件目录有改动 push 到 main 时立刻触发**——join awesome-dsh-plugin 官方目录补 stars/下载量/截图/简介,同时把版本号对齐 npm latest(国内镜像与官方源都查,取更高版本,镜像滞后也不会写旧版)。
+
+所以新版本发出去后:本地提交 `plugins.json` → push → Actions 再复核一遍 → jsdelivr 刷新 CDN → 用户端看到新版本。想手动补一次就 `node scripts/enrich.mjs`(加 `--dry-run` 只看不写)。
+
 记住这个判断:**动了 `embed/featured.client.js` 或本脚本 `integrate.sh` → 跑 `sh integrate.sh --all`;只动了 `embed/featured.host.js` → `npm update` 就够**。拿不准就两个都做,`--all` 是幂等的、秒级、无副作用。
 
 ## 为什么 client 半要「拷贝」而不是 npm 依赖

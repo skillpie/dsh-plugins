@@ -1,29 +1,55 @@
-# 每日富化精选插件目录:join awesome-dsh-plugin 官方目录(stars/下载量/截图/简介),
-# 未收录条目退化直连 npm / GitHub 探测。有变更则自动提交到 main。
+# 精选插件目录(plugins.json)自动维护:
+#  1) join awesome-dsh-plugin 官方目录(stars/下载量/截图/简介/icon);
+#  2) 版本号对齐 npm latest(镜像源与官方源都查,取更高版本);
+#  3) 有变更自动提交到 main,jsdelivr 随后刷新 CDN。
+#
+# 触发方式:
+#  - 每日定时(cron 0 3 * * * = 北京时间 11:00)
+#  - 任意插件目录有改动 push 到 main(新版本发布后立刻刷新)
+#  - 手动 workflow_dispatch
 name: enrich-plugins
 on:
   schedule:
     - cron: '0 3 * * *' # 每天 11:00 北京时间
+  push:
+    branches: [main]
+    paths:
+      - 'dsh-*/package.json'
+      - 'dsh-plugins-plugin/plugins.json'
+      - 'dsh-plugins-plugin/scripts/enrich.mjs'
+      - '.github/workflows/enrich.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: enrich-plugins
+  cancel-in-progress: true
 
 jobs:
   enrich:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 用 token 推回,避免 bot 提交触发下游工作流时的权限问题
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node dsh-plugins-plugin/scripts/enrich.mjs
-      - name: commit if changed
+      - name: 富化目录(字段 + npm 版本对齐)
+        run: node dsh-plugins-plugin/scripts/enrich.mjs
+      - name: 有变更则提交
         run: |
-          if [ -n "$(git status --porcelain dsh-plugins-plugin/plugins.json)" ]; then
-            git config user.name "enrich-bot"
-            git config user.email "actions@users.noreply.github.com"
-            git add dsh-plugins-plugin/plugins.json
-            git commit -m "chore: 富化精选插件目录(stars/下载量/截图)"
-            git push
+          if [ -z "$(git status --porcelain dsh-plugins-plugin/plugins.json)" ]; then
+            echo "目录无变更,跳过提交"
+            exit 0
           fi
+          git config user.name "enrich-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add dsh-plugins-plugin/plugins.json
+          # 把版本变化写进提交信息,方便回溯
+          SUMMARY=$(git diff --cached -U0 dsh-plugins-plugin/plugins.json | grep '^[+-] *"version"' | sed 's/^[+-] *//' | tr '\n' ' ' | cut -c1-200)
+          git commit -m "chore: 刷新精选插件目录(版本/下载量/star)" -m "$SUMMARY"
+          git push

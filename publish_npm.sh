@@ -126,6 +126,28 @@ else
   echo "   需要可安装确认时执行: npm view $PKG version --registry=$OFFICIAL"
 fi
 
+# ── 7. 自动刷新精选插件目录里的版本号 ───────────────────────────────
+# 精选卡片的「安装」按钮用 plugins.json 的 version 拼 spec，写旧了会装回旧包。
+# 只在「工作区收录了这个包」时写（纯库/第三方包自动跳过）。
+WORKSPACE=$(cd "$(dirname "$0")" && pwd)
+CATALOG="$WORKSPACE/dsh-plugins-plugin/plugins.json"
+if [ -f "$CATALOG" ]; then
+  node - "$CATALOG" "$PKG" "$VERSION" <<'JS' || echo "⚠️ 刷新 plugins.json 版本号失败（不影响已完成的发布）"
+const fs = require('node:fs')
+const [file, pkg, version] = process.argv.slice(2)
+const doc = JSON.parse(fs.readFileSync(file, 'utf8'))
+const entry = (doc.entries || []).find((e) => e.package === pkg)
+if (!entry) { console.log(`目录未收录 ${pkg}，跳过版本刷新`); process.exit(0) }
+if (entry.version === version) { console.log(`目录版本已是 ${version}`); process.exit(0) }
+console.log(`目录版本: ${pkg} ${entry.version} → ${version}`)
+entry.version = version
+entry.enrichedAt = new Date().toISOString().slice(0, 10)
+doc.updated = entry.enrichedAt
+fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n')
+console.log('已写回 plugins.json（记得随代码一起提交）')
+JS
+fi
+
 echo
 echo "🎉 完成: $PKG@$VERSION"
 echo "   官方: $OFFICIAL/$PKG"
