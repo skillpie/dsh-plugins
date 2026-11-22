@@ -367,7 +367,27 @@ async function dispatch(ctx, state, cfg, body) {
     }
     case 'wordcoin-market': {
       const identity = await requireLive()
-      return { ok: true, market: await tb.wordcoinMarket(baseUrl, identity.sessionToken) }
+      return { ok: true, market: await tb.wordcoinMarket(baseUrl, identity.sessionToken, body.buckets) }
+    }
+    case 'wordcoin-account': {
+      const identity = await requireLive()
+      return { ok: true, account: await tb.wordcoinAccount(baseUrl, identity.sessionToken) }
+    }
+    case 'wordcoin-ledger': {
+      const identity = await requireLive()
+      return { ok: true, ledger: await tb.wordcoinLedger(baseUrl, identity.sessionToken, Number(body.page) || 1, Number(body.pageSize) || 20) }
+    }
+    case 'wordcoin-buy': {
+      const identity = await requireLive()
+      const amount = Math.floor(Number(body.amountNanoUSD) || 0)
+      if (!(amount > 0)) throw new PortalError('amount must be positive')
+      return { ok: true, result: await tb.wordcoinBuy(baseUrl, identity.sessionToken, amount) }
+    }
+    case 'wordcoin-sell': {
+      const identity = await requireLive()
+      const amount = Math.floor(Number(body.amountNanoWC) || 0)
+      if (!(amount > 0)) throw new PortalError('amount must be positive')
+      return { ok: true, result: await tb.wordcoinSell(baseUrl, identity.sessionToken, amount) }
     }
     case 'recharge-create': {
       const identity = await requireLive()

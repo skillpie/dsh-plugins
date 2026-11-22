@@ -131,6 +131,58 @@ const portal = createServer((req, res) => {
     res.end(JSON.stringify({ data: [{ id: 'glm-5.3-flash' }, { id: 'glm-5.3' }, { id: 'no-cred-model' }] }))
     return
   }
+  if (url.pathname === '/api/portal/wordcoin/market') {
+    if (cookie !== validSession) { respond(401100, null); return }
+    respond(0, {
+      quote_micros: 907842, price_nano_usd_per_wc: 1101681,
+      bucket_start_ms: Date.now(), capped: false, reused_prev: false,
+      next_bucket_start_ms: Date.now() + 60000, snapshot_interval_ms: 60000,
+      price_today_open_quote_micros: 880500, price_today_high_quote_micros: 880000, price_today_low_quote_micros: 907000,
+      price_formula_base_nano_usd: 0, price_formula_avg_nano_usd: 0,
+      stats: { total_tokens: 0, total_cost_nano_usd: 0, priced_requests: 0 },
+      trading: { enabled: true, calibrated: true, sample_ok: true, sample_gate_pass: true, par_mode: false, min_calib_tokens: 0, priced_required: 0, min_sell_quote_micros: 0, max_sell_quote_micros: 0 },
+      history: [{ bucket_start_ms: Date.now() - 60000, quote_micros: 910000, price_nano_usd_per_wc: 1098901, reused_prev: false, capped: false }],
+    })
+    return
+  }
+  if (url.pathname === '/api/portal/wordcoin/account') {
+    if (cookie !== validSession) { respond(401100, null); return }
+    respond(0, {
+      balance_nano_wc: 20_998_300_000_000, total_bought_nano_wc: 133_994_960_000_000,
+      total_sold_nano_wc: 112_996_660_000_000, realized_pnl_nano_usd: 1_870_000_000,
+      quote_micros: 907842, price_nano_usd_per_wc: 1101681,
+      avg_buy_price_nano_usd_per_wc: 1_101_700, pnl_nano_wc: 24_060_000_000, pnl_percent_micros: 1100,
+      pnl_nano_usd: 24_060_000, limits: { max_buy_nano_usd: 5_000_000_000, par_mode: false, trading_open: true },
+    })
+    return
+  }
+  if (url.pathname === '/api/portal/wordcoin/ledger') {
+    if (cookie !== validSession) { respond(401100, null); return }
+    respond(0, {
+      entries: [{ id: 1, kind: 'wc_buy', amount_nano_wc: 1e12, balance_after_nano_wc: 21e12, quote_micros: 907842, price_nano_usd_per_wc: 1101681, usd_leg_nano_usd: 1_101_681_000, fee_micros: 0, note: '', created_at_ms: Date.now() }],
+      total: 1, page: Number(url.searchParams.get('page')) || 1, page_size: Number(url.searchParams.get('page_size')) || 20,
+    })
+    return
+  }
+  if (url.pathname === '/api/portal/wordcoin/buy' && req.method === 'POST') {
+    let body = ''
+    req.on('data', (c) => { body += c })
+    req.on('end', () => {
+      if (cookie !== validSession) { respond(401100, null); return }
+      const parsed = JSON.parse(body)
+      respond(0, { debited_nano_usd: parsed.amount_nano_usd, credited_nano_wc: 1e12, quote_micros: 907842, price_nano_usd_per_wc: 1101681, usd_balance_after_nano_usd: 3_898_319_000, wc_balance_after_nano_wc: 21e12, request_id: 'r1' })
+    })
+    return
+  }
+  if (url.pathname === '/api/portal/wordcoin/sell' && req.method === 'POST') {
+    let body = ''
+    req.on('data', (c) => { body += c })
+    req.on('end', () => {
+      if (cookie !== validSession) { respond(401100, null); return }
+      respond(0, { sold_nano_wc: 1e12, gross_nano_usd: 1_101_681_000, fee_nano_usd: 1_832_000, net_nano_usd: 1_101_681_000 - 1_832_000, fee_micros: 20000, quote_micros: 907842, price_nano_usd_per_wc: 1101681, par_mode_applied: false, usd_balance_after_nano_usd: 5e9, wc_balance_after_nano_wc: 20e12, request_id: 'r2' })
+    })
+    return
+  }
   respond(404000, null)
 })
 
@@ -239,6 +291,25 @@ try {
   assert.deepEqual(fallback.models.map((m) => m.id), ['glm-5.3-flash', 'glm-5.3', 'no-cred-model'])
   const low = await dispatch({ action: 'low-balance' })
   assert.equal(low.event.message, '余额不足')
+
+  // wordcoin trading actions (行情/账户/流水/买卖)
+  const mkt = await dispatch({ action: 'wordcoin-market', buckets: 720 })
+  assert.equal(mkt.ok, true)
+  assert.equal(mkt.market.trading.sample_gate_pass, true)
+  assert.equal(mkt.market.history.length, 1)
+  const acct = await dispatch({ action: 'wordcoin-account' })
+  assert.equal(acct.account.balance_nano_wc, 20_998_300_000_000)
+  assert.equal(acct.account.limits.trading_open, true)
+  const ledger = await dispatch({ action: 'wordcoin-ledger', page: 1, pageSize: 20 })
+  assert.equal(ledger.ledger.entries.length, 1)
+  assert.equal(ledger.ledger.entries[0].kind, 'wc_buy')
+  const bought = await dispatch({ action: 'wordcoin-buy', amountNanoUSD: 1_101_681_000 })
+  assert.equal(bought.result.credited_nano_wc, 1e12)
+  const sold = await dispatch({ action: 'wordcoin-sell', amountNanoWC: 1e12 })
+  assert.equal(sold.result.sold_nano_wc, 1e12)
+  assert.ok(sold.result.net_nano_usd > 0)
+  await assert.rejects(dispatch({ action: 'wordcoin-buy', amountNanoUSD: 0 }), /amount must be positive/)
+  await assert.rejects(dispatch({ action: 'wordcoin-sell', amountNanoWC: -5 }), /amount must be positive/)
 
   // HTTP carrier: same-origin guard + envelope, against a real server
   const seen = []

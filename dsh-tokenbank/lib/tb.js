@@ -216,4 +216,20 @@ export const checkinStatus = (baseUrl, sessionToken) => call(baseUrl, '/checkin/
 
 export const doCheckin = (baseUrl, sessionToken) => call(baseUrl, '/checkin', { method: 'POST', sessionToken })
 
-export const wordcoinMarket = (baseUrl, sessionToken) => call(baseUrl, '/wordcoin/market', { sessionToken })
+export const wordcoinMarket = (baseUrl, sessionToken, historyBuckets) =>
+  call(baseUrl, '/wordcoin/market' + (Number(historyBuckets) > 0 ? '?history_buckets=' + Math.floor(Number(historyBuckets)) : ''), { sessionToken })
+
+/** GET /wordcoin/account — 词元持仓/盈亏/交易限制(WordCoinAccount)。 */
+export const wordcoinAccount = (baseUrl, sessionToken) => call(baseUrl, '/wordcoin/account', { sessionToken })
+
+/** GET /wordcoin/ledger — 词元成交流水(分页)。 */
+export const wordcoinLedger = (baseUrl, sessionToken, page, pageSize) =>
+  call(baseUrl, `/wordcoin/ledger?page=${Number(page) || 1}&page_size=${Number(pageSize) || 20}`, { sessionToken })
+
+/** POST /wordcoin/buy — 市价买入,body.amount_nano_usd 为整手倍数的 nanoUSD。 */
+export const wordcoinBuy = (baseUrl, sessionToken, amountNanoUSD) =>
+  call(baseUrl, '/wordcoin/buy', { method: 'POST', sessionToken, body: { amount_nano_usd: Math.floor(Number(amountNanoUSD) || 0) } })
+
+/** POST /wordcoin/sell — 市价卖出,body.amount_nano_wc 为整手倍数的 nanoWC。 */
+export const wordcoinSell = (baseUrl, sessionToken, amountNanoWC) =>
+  call(baseUrl, '/wordcoin/sell', { method: 'POST', sessionToken, body: { amount_nano_wc: Math.floor(Number(amountNanoWC) || 0) } })

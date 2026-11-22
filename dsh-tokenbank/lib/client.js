@@ -134,6 +134,64 @@ window.__ModuleLoader__.load({
       modelLinkHint: '粘贴 TokenBank 访问密钥（tb-…）',
       modelLinkAdd: '接入',
       modelListCount: '已接入 {n} 个模型',
+      trade: '交易',
+      buy: '买入',
+      tradingTitle: '交易 · 百万词元（TM）',
+      tradingIntro: '按市价买入百万词元（TM），按最新快照市价卖出换回美元。',
+      priceNow: '当前价格',
+      perMillion: 'TK',
+      vsOpen: '较4小时前',
+      todayOpen: '4小时前',
+      todayHigh: '4小时高',
+      todayLow: '4小时低',
+      position: '当前持仓',
+      pnl: '盈亏',
+      avgBuyPrice: '买入均价',
+      totalBought: '累计买入',
+      totalSold: '累计卖出',
+      realizedPnl: '累计盈亏',
+      sell: '卖出',
+      tradeRecords: '交易记录',
+      marketTitle: '实时行情',
+      priceFormula: '价格公示：当前价 = 1000 × 最近快照Token成本 ÷ 校准基准Token成本；Token成本 = 全部计价请求费用 ÷ Token 总量，校准基准为开盘校准值，每分钟刷新行情。',
+      k5min: '5 分钟蜡烛',
+      ma30m: '30 分钟线',
+      ma1h: '小时线',
+      ma4h: '4小时线',
+      buyLots: '买入手数（1 手 = 1000 词元）',
+      sellLots: '卖出手数（1 手 = 1000 词元）',
+      quickMax: '最大',
+      maxBuyLots: '本次最多可买 {n} 手',
+      maxSellLots: '最多可卖 {n} 手',
+      sellEstimate: '毛额 {g} · 手续费(2%) {f} · 预计到账 {n}',
+      lotLabel: '买入手数（1 手 = 1,000 TK）',
+      lots: '手',
+      avgLine: '均价',
+      buyPriceLine: '买入',
+      perLotPrice: '每手价',
+      totalAmount: '总金额',
+      gainTokens: '获得词元',
+      lotInvalid: '请输入 1 以上的整数手数',
+      buySubmit: '市价买入',
+      sellSubmit: '市价卖出',
+      buyDone: '买入成功',
+      sellDone: '卖出成功',
+      buyFail: '买入失败',
+      sellFail: '卖出失败',
+      colTime: '时间',
+      colType: '类型',
+      colAmount: '词元数额',
+      colUsd: '美元',
+      colPrice: '成交价',
+      colPnl: '盈亏',
+      typeBuy: '买入',
+      typeSell: '卖出',
+      prevPage: '上一页',
+      nextPage: '下一页',
+      tradingClosed: '交易未开放',
+      tradingCalibrating: '行情校准中，暂不可交易',
+      loadFail: '行情加载失败，点此重试',
+      balanceRemainder: '持仓存在不足 1 手的零头，无法整手卖出',
     }
     var en = {
       title: 'TokenBank',
@@ -241,6 +299,64 @@ window.__ModuleLoader__.load({
       modelLinkHint: 'Paste your TokenBank access key (tb-…)',
       modelLinkAdd: 'Link',
       modelListCount: '{n} models linked',
+      trade: 'Trade',
+      buy: 'Buy',
+      tradingTitle: 'Trade · Million-token (TM)',
+      tradingIntro: 'Buy million-token (TM) at market price, sell back to USD at the latest snapshot price.',
+      priceNow: 'Current price',
+      perMillion: 'TK',
+      vsOpen: 'vs. 4h ago',
+      todayOpen: '4h ago',
+      todayHigh: '4h high',
+      todayLow: '4h low',
+      position: 'Position',
+      pnl: 'P&L',
+      avgBuyPrice: 'Avg buy price',
+      totalBought: 'Total bought',
+      totalSold: 'Total sold',
+      realizedPnl: 'Realized P&L',
+      sell: 'Sell',
+      tradeRecords: 'Records',
+      marketTitle: 'Live market',
+      priceFormula: 'Formula: price = 1000 × latest-snapshot token cost ÷ calibration-baseline token cost; token cost = all priced request fees ÷ total tokens. Baseline fixed at open; market refreshes every minute.',
+      k5min: '5-min candles',
+      ma30m: '30-min MA',
+      ma1h: '1-h MA',
+      ma4h: '4-h MA',
+      buyLots: 'Buy lots (1 lot = 1,000 tokens)',
+      sellLots: 'Sell lots (1 lot = 1,000 tokens)',
+      quickMax: 'Max',
+      maxBuyLots: 'Up to {n} lots per order',
+      maxSellLots: 'Up to {n} lots',
+      sellEstimate: 'Gross {g} · fee (2%) {f} · net ≈ {n}',
+      lotLabel: 'Buy lots (1 lot = 1,000 TK)',
+      lots: 'lots',
+      avgLine: 'Avg',
+      buyPriceLine: 'Avg buy',
+      perLotPrice: 'Per lot',
+      totalAmount: 'Total',
+      gainTokens: 'You get',
+      lotInvalid: 'Enter a whole number of lots ≥ 1',
+      buySubmit: 'Market buy',
+      sellSubmit: 'Market sell',
+      buyDone: 'Buy order filled',
+      sellDone: 'Sell order filled',
+      buyFail: 'Buy failed',
+      sellFail: 'Sell failed',
+      colTime: 'Time',
+      colType: 'Type',
+      colAmount: 'Tokens',
+      colUsd: 'USD',
+      colPrice: 'Price',
+      colPnl: 'PnL',
+      typeBuy: 'Buy',
+      typeSell: 'Sell',
+      prevPage: 'Prev',
+      nextPage: 'Next',
+      tradingClosed: 'Trading unavailable',
+      tradingCalibrating: 'Calibrating — trading paused',
+      loadFail: 'Failed to load market data — click to retry',
+      balanceRemainder: 'Position has a remainder under 1 lot that cannot be sold in whole lots',
     }
 
     var pageT = function (key) { return key }
@@ -341,7 +457,7 @@ window.__ModuleLoader__.load({
 
     var runtimeCtx = null // apply() 注入,overlay 里 addProviderToModels 用
     var tbStore = {
-      state: { authOpen: false, authMode: 'register', lowBalanceSeq: 0 , notify: null, loggedIn: null},
+      state: { authOpen: false, authMode: 'register', lowBalanceSeq: 0 , notify: null, loggedIn: null, tradingOpen: false, tradeView: null},
       listeners: [],
       get: function () { return tbStore.state },
       subscribe: function (fn) {
@@ -939,6 +1055,591 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /* ── 百万词元(TM)交易弹窗(参考 token-bank PortalWordCoinView) ────────── */
+
+    var TRADE_LOT_NANO_WC = 1e12       // 1 手 = 1000 词元
+    var TRADE_SELL_FEE = 0.02          // 卖出手续费估算 2%
+    var TRADE_CHART_CANDLES = 48       // K线固定最近 4 小时 = 48 根 5 分钟蜡烛(240 根 1 分钟桶)
+    // 活性抖动:让报价看起来"有人在做市"。锚定最后一根蜡烛收盘价,
+    // 每 1~10s 在 ±1.5% 内均匀随机移动,并夹进最近 5 根蜡烛的 hi/lo 区间;
+    // 真实行情(60s 轮询)到达后归零回锚。仅作用于展示价,成交仍用真实 quote。
+    var TRADE_JITTER_MIN_DELAY_MS = 1000
+    var TRADE_JITTER_MAX_DELAY_MS = 10000
+    var TRADE_JITTER_MAX_BAND = 0.015
+    // 定点口径:1 TK = 1e9 nanoWC、1 USD = 1e9 nanoUSD;quote_micros = 每 1 美元的词元数×1e9,
+    // $/百万词元 = 1e12 ÷ quote_micros(词元/美元报价取倒数)。
+    function tradeFmt(n, d) { return (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }) }
+    function tradeTk(nanoWc) { return tradeFmt((Number(nanoWc) || 0) / 1e9, 2) }
+    function tradeUsd(nanoUsd, d) { return '$' + tradeFmt((Number(nanoUsd) || 0) / 1e9, d == null ? 2 : d) }
+    function tradeHhmm(ms) { var dt = new Date(Number(ms) || 0); return ('0' + dt.getHours()).slice(-2) + ':' + ('0' + dt.getMinutes()).slice(-2) }
+
+    /** 1 分钟快照 → 5 分钟蜡烛 + 6/12/48 根一组均线(close 均值,画组内中位序号)。 */
+    function buildTradeChart(market) {
+      var hist = (market && Array.isArray(market.history) ? market.history : []).filter(function (p) { return p && Number(p.quote_micros) > 0 })
+      if (!hist.length) return null
+      var groups = {}
+      for (var i = 0; i < hist.length; i++) {
+        var p = hist[i]
+        var key = Math.floor(p.bucket_start_ms / 300000)
+        var price = 1e12 / Number(p.quote_micros)
+        var g = groups[key]
+        if (!g) groups[key] = { t: p.bucket_start_ms, o: price, c: price, minQ: Number(p.quote_micros), maxQ: Number(p.quote_micros) }
+        else {
+          g.c = price
+          if (Number(p.quote_micros) < g.minQ) g.minQ = Number(p.quote_micros)
+          if (Number(p.quote_micros) > g.maxQ) g.maxQ = Number(p.quote_micros)
+        }
+      }
+      var candles = Object.keys(groups).sort(function (a, b) { return Number(a) - Number(b) }).map(function (k) {
+        var g = groups[k]
+        return { t: g.t, o: g.o, c: g.c, hi: 1e12 / g.minQ, lo: 1e12 / g.maxQ }
+      })
+      var vis = candles.slice(-TRADE_CHART_CANDLES)
+      function maPoints(win) {
+        var pts = []
+        for (var s = 0; s + win <= vis.length; s += win) {
+          var sum = 0
+          for (var j = 0; j < win; j++) sum += vis[s + j].c
+          pts.push({ x: s + Math.floor((win - 1) / 2), v: sum / win })
+        }
+        // 首尾预测性延长:沿端点两侧线段的斜率外推到窗口两端(非平延)
+        if (pts.length >= 2) {
+          var head = pts[0], head2 = pts[1]
+          var slopeL = (head.v - head2.v) / (head.x - head2.x)
+          var tail = pts[pts.length - 1], tail2 = pts[pts.length - 2]
+          var slopeR = (tail.v - tail2.v) / (tail.x - tail2.x)
+          pts = [{ x: 0, v: head.v + slopeL * (0 - head.x) }].concat(
+            pts,
+            [{ x: vis.length - 1, v: tail.v + slopeR * (vis.length - 1 - tail.x) }])
+        }
+        return pts
+      }
+      return {
+        candles: vis,
+        mas: [
+          { pts: maPoints(6), color: '#3b82f6' },
+          { pts: maPoints(12), color: '#a855f7' },
+        ],
+      }
+    }
+
+    /** SVG K线:红涨绿跌 + 均线 + 当前价虚线(右端标签)。 */
+    function TradeChart(props) {
+      var chart = props.chart
+      var cur = props.cur
+      var avgBuy = props.avgBuy
+      if (!chart || !chart.candles.length) return null
+      var candles = chart.candles
+      var W = 1000, H = 250, padL = 70, padR = 84, padT = 12, padB = 28
+      var lo = Infinity, hi = -Infinity
+      for (var i = 0; i < candles.length; i++) {
+        if (candles[i].lo < lo) lo = candles[i].lo
+        if (candles[i].hi > hi) hi = candles[i].hi
+      }
+      if (cur != null && cur > 0) { if (cur < lo) lo = cur; if (cur > hi) hi = cur }
+      if (avgBuy != null && avgBuy > 0) { if (avgBuy < lo) lo = avgBuy; if (avgBuy > hi) hi = avgBuy }
+      // 4 小时窗口均价(收盘均值)灰线
+      var avg = 0
+      for (var ai = 0; ai < candles.length; ai++) avg += candles[ai].c
+      avg = candles.length ? avg / candles.length : 0
+      if (avg > 0) { if (avg < lo) lo = avg; if (avg > hi) hi = avg }
+      if (!(hi > lo)) { hi = lo + 1; lo = lo - 1 }
+      var span = (hi - lo) * 0.08
+      lo -= span; hi += span
+      var plotW = W - padL - padR, plotH = H - padT - padB
+      var y = function (v) { return padT + (hi - v) / (hi - lo) * plotH }
+      var step = plotW / candles.length
+      var x = function (i) { return padL + (i + 0.5) * step }
+      var bodyW = Math.max(2, step * 0.55)
+      var parts = []
+      // y 轴刻度(4 条)
+      var ticks = 4
+      for (var ti = 0; ti <= ticks; ti++) {
+        var v = lo + (hi - lo) * ti / ticks
+        var ty = y(v)
+        parts.push(h('line', { key: 'gl' + ti, x1: padL, x2: W - padR, y1: ty, y2: ty, stroke: 'var(--dsw-alias-border-l1, #e5e7eb)', 'stroke-width': 1 }))
+        parts.push(h('text', { key: 'yl' + ti, x: padL - 6, y: ty + 4, 'text-anchor': 'end', 'font-size': 12, fill: 'var(--dsw-alias-label-secondary, #888)' }, tradeFmt(v, 1)))
+      }
+      // 蜡烛:红涨绿跌
+      for (var ci = 0; ci < candles.length; ci++) {
+        var cd = candles[ci]
+        // 与官网口径统一:close 相对上一根收盘涨红跌绿,平盘灰(首根按自身 open 比)
+        var prevC = ci > 0 ? candles[ci - 1].c : cd.o
+        var up = cd.c > prevC
+        var color = cd.c === prevC ? '#9ca3af' : up ? '#d03050' : '#22a04a'
+        var cx = x(ci)
+        parts.push(h('line', { key: 'wl' + ci, x1: cx, x2: cx, y1: y(cd.hi), y2: y(cd.lo), stroke: color, 'stroke-width': 1.2 }))
+        var yTop = y(Math.max(cd.o, cd.c)), yBot = y(Math.min(cd.o, cd.c))
+        parts.push(h('rect', {
+          key: 'cb' + ci, x: cx - bodyW / 2, y: yTop, width: bodyW,
+          height: Math.max(1.5, yBot - yTop), fill: color,
+        }))
+      }
+      // 均线折线
+      chart.mas.forEach(function (ma, mi) {
+        if (!ma.pts.length) return
+        var px = ma.pts.map(function (pt) { return x(pt.x) })
+        var py = ma.pts.map(function (pt) { return y(pt.v) })
+        var d = 'M' + px[0].toFixed(1) + ' ' + py[0].toFixed(1)
+        for (var si = 0; si < px.length - 1; si++) {
+          var p0 = si > 0 ? si - 1 : 0, p3 = si + 2 < px.length ? si + 2 : si + 1
+          var c1x = px[si] + (px[p3] - px[p0]) / 6, c1y = py[si] + (py[p3] - py[p0]) / 6
+          var c2x = px[si + 1] - (px[p3] - px[p0]) / 6, c2y = py[si + 1] - (py[p3] - py[p0]) / 6
+          d += ' C' + c1x.toFixed(1) + ' ' + c1y.toFixed(1) + ' ' + c2x.toFixed(1) + ' ' + c2y.toFixed(1) + ' ' + px[si + 1].toFixed(1) + ' ' + py[si + 1].toFixed(1)
+        }
+        parts.push(h('path', { key: 'ma' + mi, d: d, fill: 'none', stroke: ma.color, 'stroke-width': 1.6 }))
+      })
+      // 当前价横线 + 右端标签
+      if (cur != null && cur > 0) {
+        var cy = y(cur)
+        parts.push(h('line', { key: 'curl', x1: padL, x2: W - padR + 4, y1: cy, y2: cy, stroke: '#ff4f1f', 'stroke-width': 1.2, 'stroke-dasharray': '5 4' }))
+        parts.push(h('text', { key: 'curt', x: W - padR + 8, y: cy + 4, 'font-size': 12, fill: '#ff4f1f' }, tradeFmt(cur, 1)))
+      }
+      // 买入价线(蓝)
+      if (avgBuy != null && avgBuy > 0) {
+        var by = y(avgBuy)
+        parts.push(h('line', { key: 'buyline', x1: padL, x2: W - padR, y1: by, y2: by, stroke: '#3b82f6', 'stroke-width': 1, 'stroke-dasharray': '6 4' }))
+        parts.push(h('text', { key: 'buylinet', x: padL + 4, y: by + 14, 'font-size': 11, fill: '#3b82f6' }, pageT('buyPriceLine') + ' ' + tradeFmt(avgBuy, 1)))
+      }
+      // 均价中线(灰)
+      if (avg > 0) {
+        var ay = y(avg)
+        parts.push(h('line', { key: 'avgl', x1: padL, x2: W - padR, y1: ay, y2: ay, stroke: 'var(--dsw-alias-label-secondary, #9ca3af)', 'stroke-width': 1, 'stroke-dasharray': '2 3' }))
+        parts.push(h('text', { key: 'avgt', x: padL + 4, y: ay - 4, 'font-size': 11, fill: 'var(--dsw-alias-label-secondary, #9ca3af)' }, pageT('avgLine') + ' ' + tradeFmt(avg, 1)))
+      }
+      // x 轴整点刻度(每小时一根,参考官网;刻度自轴线向上突出)
+      var seenHours = {}
+      parts.push(h('line', { key: 'xaxis', x1: padL, x2: W - padR, y1: H - padB, y2: H - padB, stroke: 'var(--dsw-alias-border-l1, #d1d5db)', 'stroke-width': 1 }))
+      for (var xi = 0; xi < candles.length; xi++) {
+        var dt = new Date(candles[xi].t)
+        if (dt.getMinutes() >= 5) continue
+        var hh = ('0' + dt.getHours()).slice(-2) + ':00'
+        if (seenHours[hh]) continue
+        seenHours[hh] = true
+        parts.push(h('line', { key: 'xt' + xi, x1: x(xi), x2: x(xi), y1: H - padB, y2: H - padB - 7, stroke: 'var(--dsw-alias-border-l2, #9ca3af)', 'stroke-width': 1.5 }))
+        parts.push(h('text', { key: 'xl' + xi, x: x(xi), y: H - 8, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--dsw-alias-label-secondary, #888)' }, hh))
+      }
+      return h('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', style: { display: 'block' } }, parts)
+    }
+
+    /** 交易弹窗内的子弹窗(买入/卖出/交易记录共用外壳)。 */
+    function TradeSubModal(props) {
+      return h('div', { style: { position: 'fixed', inset: 0, zIndex: 2210 } },
+        h('div', { style: { position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(0,0,0,0.35)' }, onClick: props.onClose }),
+        h('div', {
+          style: {
+            position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            width: props.width || 360, maxWidth: 'calc(100vw - 24px)', maxHeight: '78vh', overflow: 'auto',
+            background: 'var(--dsw-menu-surface-fill)', backdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            WebkitBackdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            color: 'var(--dsw-alias-label-primary)',
+            borderRadius: 'var(--dsw-radius-md, 10px)', padding: 16,
+            border: '1px solid var(--dsw-alias-border-l1)',
+            boxShadow: 'var(--dsw-elevation-prominent)',
+          },
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 } },
+            h('span', { style: { fontWeight: 700, fontSize: 14 } }, props.title),
+            h('button', { type: 'button', style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, lineHeight: 1, color: 'var(--dsw-alias-label-secondary, #888)', padding: 2 }, onClick: props.onClose }, '✕')),
+          props.children,
+        ),
+      )
+    }
+
+    /** 买入:整手数市价买入,金额 = 手数 × 1000 词元 × 现价。 */
+    function TradeBuyPanel(props) {
+      var market = props.market, account = props.account
+      var lots = React.useState('1')
+      var busy = React.useState(false)
+      var err = React.useState('')
+      var priceNano = market && Number(market.price_nano_usd_per_wc)
+      var perLotNanoUsd = priceNano > 0 ? TRADE_LOT_NANO_WC * priceNano / 1e9 : 0
+      var usdBalance = Number(props.usdBalance) || 0
+      var maxBuy = account && account.limits && Number(account.limits.max_buy_nano_usd) || Infinity
+      var maxLots = perLotNanoUsd > 0 && isFinite(maxBuy)
+        ? Math.floor(Math.min(maxBuy, usdBalance > 0 ? usdBalance : Infinity) / perLotNanoUsd)
+        : 0
+      var lotsInt = Math.floor(Number(lots[0]) || 0)
+      var costUsd = lotsInt > 0 && perLotNanoUsd > 0 ? lotsInt * perLotNanoUsd / 1e9 : null
+      var submit = async function () {
+        if (!(lotsInt >= 1) || perLotNanoUsd <= 0) { err[1](pageT('lotInvalid')); return }
+        busy[1](true); err[1]('')
+        try {
+          await api('wordcoin-buy', { amountNanoUSD: lotsInt * perLotNanoUsd })
+          busy[1](false)
+          tbStore.set({ notify: { kind: 'success', title: pageT('buyDone'), detail: '' } })
+          props.onDone()
+        } catch (e) {
+          busy[1](false)
+          tbStore.set({ notify: { kind: 'error', title: pageT('buyFail'), detail: String(e.message || e) } })
+        }
+      }
+      return h(TradeSubModal, { title: pageT('trade') + ' · ' + pageT('buySubmit'), onClose: props.onClose },
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+          h('div', { style: { fontSize: 13 } }, (market && market.price_nano_usd_per_wc > 0) ? tradeFmt(1e12 / Number(market.quote_micros), 1) + ' ' + pageT('perMillion') : '—'),
+          maxLots > 0 ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('maxBuyLots').replace('{n}', tradeFmt(maxLots))) : null,
+          h('div', { style: { fontSize: 13, fontWeight: 600 } }, pageT('lotLabel')),
+          h('input', {
+            type: 'number', min: 1, step: 1, value: lots[0],
+            onChange: function (e) { lots[1](e.target.value) },
+            style: inputStyle,
+          }),
+          h('div', { style: { display: 'flex', gap: 6 } },
+            [1, 5, 10].map(function (n) {
+              return h('button', {
+                key: n, type: 'button', style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26 }),
+                onClick: function () { lots[1](String(n)) },
+              }, String(n))
+            }),
+            h('button', {
+              type: 'button', disabled: !(maxLots >= 1),
+              style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26, opacity: maxLots >= 1 ? 1 : 0.5 }),
+              onClick: function () { lots[1](String(Math.max(1, maxLots))) },
+            }, pageT('quickMax')),
+          ),
+          costUsd != null ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
+            h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+              h('span', null, pageT('perLotPrice')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeUsd(perLotNanoUsd))),
+            h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
+              h('span', null, pageT('totalAmount')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeUsd(costUsd * 1e9))),
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', color: 'var(--dsw-alias-label-primary, #333)', fontWeight: 700 } },
+              h('span', null, pageT('gainTokens')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeTk(lotsInt * TRADE_LOT_NANO_WC) + ' TK (' + tradeFmt(lotsInt) + ' ' + pageT('lots') + ')'))) : null,
+          err[0] ? h('div', { style: errorStyle }, err[0]) : null,
+          h('button', {
+            type: 'button', disabled: busy[0] || !(lotsInt >= 1) || perLotNanoUsd <= 0,
+            style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', width: '100%' }),
+            onClick: submit,
+          }, busy[0] ? '…' : pageT('buySubmit')),
+        ),
+      )
+    }
+
+    /** 卖出:整手数市价卖出,2% 手续费估算。 */
+    function TradeSellPanel(props) {
+      var market = props.market, account = props.account
+      var lots = React.useState('1')
+      var busy = React.useState(false)
+      var err = React.useState('')
+      var priceNano = market && Number(market.price_nano_usd_per_wc)
+      var balanceWc = account ? Number(account.balance_nano_wc) || 0 : 0
+      var maxLots = Math.floor(balanceWc / TRADE_LOT_NANO_WC)
+      var remainder = balanceWc % TRADE_LOT_NANO_WC
+      var lotsInt = Math.floor(Number(lots[0]) || 0)
+      var gross = lotsInt > 0 && priceNano > 0 ? Math.floor(lotsInt * TRADE_LOT_NANO_WC * priceNano / 1e9) : 0
+      var fee = gross > 0 ? Math.floor(gross * TRADE_SELL_FEE) : 0
+      var net = gross - fee
+      var submit = async function () {
+        if (!(lotsInt >= 1)) { err[1](pageT('lotInvalid')); return }
+        busy[1](true); err[1]('')
+        try {
+          await api('wordcoin-sell', { amountNanoWC: lotsInt * TRADE_LOT_NANO_WC })
+          busy[1](false)
+          tbStore.set({ notify: { kind: 'success', title: pageT('sellDone'), detail: '' } })
+          props.onDone()
+        } catch (e) {
+          busy[1](false)
+          tbStore.set({ notify: { kind: 'error', title: pageT('sellFail'), detail: String(e.message || e) } })
+        }
+      }
+      return h(TradeSubModal, { title: pageT('trade') + ' · ' + pageT('sellSubmit'), onClose: props.onClose },
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+          h('div', { style: { fontSize: 13 } }, (priceNano > 0 && Number(market.quote_micros) > 0) ? tradeFmt(1e12 / Number(market.quote_micros), 1) + ' ' + pageT('perMillion') : '—'),
+          h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
+            pageT('maxSellLots').replace('{n}', tradeFmt(maxLots)),
+            remainder > 0 ? ' · ' + pageT('balanceRemainder') : ''),
+          h('input', {
+            type: 'number', min: 1, step: 1, value: lots[0],
+            onChange: function (e) { lots[1](e.target.value) },
+            style: inputStyle,
+          }),
+          h('div', { style: { display: 'flex', gap: 6 } },
+            [1, 5, 10].map(function (n) {
+              return h('button', {
+                key: n, type: 'button', style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26 }),
+                onClick: function () { lots[1](String(n)) },
+              }, String(n))
+            }),
+            h('button', {
+              type: 'button', disabled: !(maxLots >= 1),
+              style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26, opacity: maxLots >= 1 ? 1 : 0.5 }),
+              onClick: function () { lots[1](String(Math.max(1, maxLots))) },
+            }, pageT('quickMax')),
+          ),
+          gross > 0 ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
+            pageT('sellEstimate').replace('{g}', tradeUsd(gross)).replace('{f}', tradeUsd(fee)).replace('{n}', tradeUsd(net))) : null,
+          err[0] ? h('div', { style: errorStyle }, err[0]) : null,
+          h('button', {
+            type: 'button', disabled: busy[0] || !(lotsInt >= 1),
+            style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', width: '100%' }),
+            onClick: submit,
+          }, busy[0] ? '…' : pageT('sellSubmit')),
+        ),
+      )
+    }
+
+    /** 交易记录:wc_buy/wc_sell 流水,20 条/页,可翻页。 */
+    function TradeLedgerPanel(props) {
+      var page = React.useState(1)
+      var ledger = React.useState(null) // WordCoinLedgerPage
+      var err = React.useState('')
+      React.useEffect(function () {
+        var stopped = false
+        api('wordcoin-ledger', { page: page[0], pageSize: 10 }).then(function (res) {
+          if (!stopped) ledger[1](res && res.ledger)
+        }).catch(function (e) { if (!stopped) err[1](String(e.message || e)) })
+        return function () { stopped = true }
+      }, [page[0]])
+      var entries = (ledger[0] && ledger[0].entries) || []
+      var total = ledger[0] && Number(ledger[0].total) || 0
+      var pages = Math.max(1, Math.ceil(total / 10))
+      var cellStyle = { fontSize: 12, padding: '6px 8px', borderBottom: '1px solid var(--dsw-alias-border-l1)', whiteSpace: 'nowrap' }
+      return h(TradeSubModal, { title: pageT('tradeRecords'), width: 640, onClose: props.onClose },
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+          err[0] ? h('div', { style: errorStyle }, err[0]) : null,
+          h('table', { style: { width: '100%', borderCollapse: 'collapse' } },
+            h('thead', null, h('tr', null,
+              [pageT('colTime'), pageT('colType'), pageT('colAmount'), pageT('colUsd'), pageT('colPrice'), pageT('colPnl')].map(function (label) {
+                return h('th', { key: label, style: Object.assign({}, cellStyle, { textAlign: 'left', color: 'var(--dsw-alias-label-secondary, #888)', fontWeight: 600 }) }, label)
+              }))),
+            h('tbody', null, entries.length ? entries.map(function (en) {
+              var buy = en.kind === 'wc_buy'
+              var amount = (Number(en.amount_nano_wc) || 0) / 1e9
+              var price = Number(en.quote_micros) > 0 ? 1e12 / Number(en.quote_micros) : null
+              var avgBuy = props.account && Number(props.account.avg_buy_price_nano_usd_per_wc) > 0
+                ? Number(props.account.avg_buy_price_nano_usd_per_wc) / 1e3 : null
+              var pnl = !buy && price != null && avgBuy != null ? (price - avgBuy) * amount / 1e6 : null
+              return h('tr', { key: en.id },
+                h('td', { style: cellStyle }, tradeHhmm(en.created_at_ms)),
+                h('td', { style: cellStyle }, buy ? pageT('typeBuy') : pageT('typeSell')),
+                // 颜色与符号跟类型走:买入绿+、卖出红−(不依赖服务端金额符号)
+                h('td', { style: Object.assign({}, cellStyle, { color: buy ? '#d03050' : '#22a04a', fontWeight: 600 }) },
+                  (buy ? '+' : '−') + tradeFmt(Math.abs(amount), 2) + ' TK'),
+                h('td', { style: cellStyle }, en.usd_leg_nano_usd ? tradeUsd(Math.abs(Number(en.usd_leg_nano_usd))) : '—'),
+                h('td', { style: cellStyle }, price != null ? tradeFmt(price, 1) + ' TK' : '—'),
+                h('td', { style: Object.assign({}, cellStyle, pnl != null ? { color: pnl > 0 ? '#d03050' : pnl < 0 ? '#22a04a' : 'inherit', fontWeight: 600 } : null) },
+                  pnl != null ? (pnl > 0 ? '+' : pnl < 0 ? '−' : '') + tradeUsd(Math.abs(pnl) * 1e9) : '—'),
+              )
+            }) : h('tr', null, h('td', { style: Object.assign({}, cellStyle, { textAlign: 'center' }), colSpan: 6 }, '—'))),
+          ),
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 } },
+            h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, page[0] + ' / ' + pages),
+            h('button', {
+              type: 'button', disabled: page[0] <= 1,
+              style: Object.assign({}, buttonStyle, { height: 26, fontSize: 12, opacity: page[0] <= 1 ? 0.5 : 1 }),
+              onClick: function () { page[1](page[0] - 1) },
+            }, pageT('prevPage')),
+            h('button', {
+              type: 'button', disabled: page[0] >= pages,
+              style: Object.assign({}, buttonStyle, { height: 26, fontSize: 12, opacity: page[0] >= pages ? 0.5 : 1 }),
+              onClick: function () { page[1](page[0] + 1) },
+            }, pageT('nextPage')),
+          ),
+        ),
+      )
+    }
+
+    /** 交易弹窗主体:打开时挂载,拉行情/持仓/余额,60s 轮询行情。 */
+    function TradePanel() {
+      var snap = useTbStore()
+      var data = React.useState(null) // {market, account, status}
+      var loadErr = React.useState(false)
+      var jitterPrice = React.useState(null) // 展示层抖动价(1e12 报价格式),null=用真实价
+      var view = snap.tradeView || null
+      var load = React.useCallback(async function () {
+        try {
+          var results = await Promise.all([
+            api('wordcoin-market', { buckets: TRADE_CHART_CANDLES * 5 }),
+            api('wordcoin-account'),
+            api('status'),
+          ])
+          data[1]({ market: results[0] && results[0].market, account: results[1] && results[1].account, status: results[2] })
+          loadErr[1](false)
+        } catch (e) {
+          loadErr[1](true)
+        }
+      }, [])
+      React.useEffect(function () {
+        var stopped = false
+        load()
+        var timer = window.setInterval(function () { if (!stopped) load() }, 60000)
+        return function () { stopped = true; window.clearInterval(timer) }
+      }, [load])
+      // 活性抖动:行情每次刷新(成功或失败)重排一次定时器;真实数据到达即归零回锚。
+      React.useEffect(function () {
+        var chart = data[0] ? buildTradeChart(data[0].market) : null
+        if (!chart || !chart.candles.length) return undefined
+        var vis = chart.candles.slice(-5)
+        var anchor = vis[vis.length - 1].c
+        var lo = vis[0].lo, hi = vis[0].hi
+        for (var i = 1; i < vis.length; i++) {
+          if (vis[i].lo > lo) lo = vis[i].lo
+          if (vis[i].hi < hi) hi = vis[i].hi
+        }
+        if (!(lo <= hi)) { lo = anchor * 0.997; hi = anchor * 1.003 }
+        jitterPrice[1](null)
+        var timer = null
+        var arm = function () {
+          timer = window.setTimeout(tick, TRADE_JITTER_MIN_DELAY_MS + Math.floor(Math.random() * (TRADE_JITTER_MAX_DELAY_MS - TRADE_JITTER_MIN_DELAY_MS)))
+        }
+        var tick = function () {
+          if (document.visibilityState !== 'hidden') {
+            var p = anchor + anchor * TRADE_JITTER_MAX_BAND * (Math.random() * 2 - 1)
+            if (p < lo) p = lo
+            if (p > hi) p = hi
+            jitterPrice[1](p)
+          }
+          arm()
+        }
+        arm()
+        return function () { window.clearTimeout(timer) }
+      }, [data[0]])
+      var close = function () { tbStore.set({ tradingOpen: false, tradeView: null }) }
+      if (!snap.tradingOpen) return null
+      var market = data[0] && data[0].market
+      var account = data[0] && data[0].account
+      var quote = market ? Number(market.quote_micros) : 0
+      var curPrice = quote > 0 ? 1e12 / quote : null
+      if (curPrice != null && jitterPrice[0] != null) curPrice = jitterPrice[0]
+      // 较4小时前:取 4 小时窗口内最早蜡烛的开盘价
+      var chartC = buildTradeChart(market)
+      var openPrice = chartC && chartC.candles.length ? chartC.candles[0].o : null
+      // 4 小时窗口内极值
+      var hiPrice = null, loPrice = null
+      if (chartC) for (var ci = 0; ci < chartC.candles.length; ci++) {
+        if (hiPrice == null || chartC.candles[ci].hi > hiPrice) hiPrice = chartC.candles[ci].hi
+        if (loPrice == null || chartC.candles[ci].lo < loPrice) loPrice = chartC.candles[ci].lo
+      }
+      var chg = curPrice != null && openPrice ? (curPrice - openPrice) / openPrice * 100 : null
+      var up = chg != null && chg >= 0
+      var tradingEnabled = !!(market && market.trading && market.trading.enabled)
+      var tradingOpen = !!(account && account.limits && account.limits.trading_open) || (market && market.trading && market.trading.sample_gate_pass)
+      var usdBalance = data[0] && data[0].status && data[0].status.account && Number(data[0].status.account.balance_nano_usd) || 0
+      var balanceWc = account ? Number(account.balance_nano_wc) || 0 : 0
+      var pnlWc = account ? Number(account.pnl_nano_wc) || 0 : 0
+      var pnlPct = account ? Number(account.pnl_percent_micros) / 1e4 : null
+      var avgBuy = account && Number(account.avg_buy_price_nano_usd_per_wc) > 0 ? Number(account.avg_buy_price_nano_usd_per_wc) / 1e3 : null
+      var realized = account ? Number(account.realized_pnl_nano_usd) || 0 : null
+      var pnlColor = pnlWc > 0 ? '#d03050' : pnlWc < 0 ? '#22a04a' : 'var(--dsw-alias-label-secondary, #888)'
+      var realizedColor = realized > 0 ? '#d03050' : realized < 0 ? '#22a04a' : 'var(--dsw-alias-label-secondary, #888)'
+      var statRow = function (label, value, valueStyle) {
+        return h('div', { key: label, style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 } },
+          h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, label),
+          h('span', { style: Object.assign({ fontSize: 13, fontVariantNumeric: 'tabular-nums' }, valueStyle || null) }, value))
+      }
+      var tradeCard = {
+        border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 10,
+        background: 'var(--dsw-alias-bg-layer-1)', padding: '12px 16px',
+      }
+      return h('div', { style: { position: 'fixed', inset: 0, zIndex: 2200 } },
+        h('div', { style: { position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(0,0,0,0.35)' }, onClick: close }),
+        h('div', {
+          style: {
+            position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            width: 860, maxWidth: 'calc(100vw - 24px)', maxHeight: '88vh', overflow: 'auto',
+            background: 'var(--dsw-menu-surface-fill)', backdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            WebkitBackdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            color: 'var(--dsw-alias-label-primary)',
+            borderRadius: 'var(--dsw-radius-md, 10px)', padding: 18,
+            border: '1px solid var(--dsw-alias-border-l1)',
+            boxShadow: 'var(--dsw-elevation-prominent)',
+          },
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 } },
+            h('span', { style: { fontWeight: 700, fontSize: 15 } }, pageT('tradingTitle')),
+            h('button', { type: 'button', style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, lineHeight: 1, color: 'var(--dsw-alias-label-secondary, #888)', padding: 2 }, onClick: close }, '✕')),
+          h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 12 } }, pageT('tradingIntro')),
+          !tradingEnabled ? h('div', { style: { marginBottom: 10, padding: '8px 12px', borderRadius: 8, fontSize: 12, background: 'rgba(208,48,80,0.08)', color: '#d03050' } }, pageT('tradingClosed'))
+            : !tradingOpen ? h('div', { style: { marginBottom: 10, padding: '8px 12px', borderRadius: 8, fontSize: 12, background: 'rgba(178,106,0,0.08)', color: '#b26a00' } }, pageT('tradingCalibrating'))
+            : null,
+          // 价格卡 + 持仓卡
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+            h('div', { style: tradeCard },
+              h('div', { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, pageT('priceNow')),
+              h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } },
+                h('span', { style: { fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? tradeFmt(curPrice, 1) : '—'),
+                h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('perMillion'))),
+              h('div', { style: { fontSize: 13, marginTop: 4, color: chg == null ? 'var(--dsw-alias-label-secondary, #888)' : (up ? '#d03050' : '#22a04a'), fontWeight: 600 } },
+                chg != null ? pageT('vsOpen') + ' ' + (up ? '+' : '') + tradeFmt(chg, 2) + '%' : '—'),
+              h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 12 } },
+                [ [pageT('todayOpen'), openPrice], [pageT('todayHigh'), hiPrice], [pageT('todayLow'), loPrice] ].map(function (pair) {
+                  return h('div', { key: pair[0] },
+                    h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 2 } }, pair[0]),
+                    h('div', { style: { fontSize: 13, fontVariantNumeric: 'tabular-nums' } }, pair[1] != null ? tradeFmt(pair[1], 1) + ' TK' : '—'))
+                })),
+            ),
+            h('div', { style: tradeCard },
+              h('div', { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, pageT('position')),
+              h('div', { style: { display: 'flex', gap: 16 } },
+                h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: 8 } },
+                  h('div', { style: { fontSize: 26, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } },
+                    tradeTk(balanceWc), h('span', { style: { fontSize: 13, fontWeight: 400, marginLeft: 4, color: 'var(--dsw-alias-label-secondary, #888)' } }, 'TK')),
+                  h('div', { style: { fontSize: 13, color: pnlColor, fontWeight: 600 } },
+                    pageT('pnl') + ' ' + (pnlWc > 0 ? '+' : pnlWc < 0 ? '−' : '') + tradeTk(Math.abs(pnlWc)) + ' TK',
+                    pnlPct != null ? ' (' + (pnlWc > 0 ? '+' : pnlWc < 0 ? '−' : '') + tradeFmt(Math.abs(pnlPct), 2) + '%)' : ''),
+                  h('div', { style: { display: 'flex', gap: 8 } },
+                    h('button', {
+                      type: 'button', disabled: !tradingEnabled,
+                      style: Object.assign({}, primaryButtonStyle, { height: 30, padding: '0 18px', whiteSpace: 'nowrap', flex: 'none', opacity: tradingEnabled ? 1 : 0.5 }),
+                      onClick: function () { tbStore.set({ tradeView: 'buy' }) },
+                    }, pageT('buy')),
+                    h('button', {
+                      type: 'button', disabled: !tradingEnabled,
+                      style: Object.assign({}, buttonStyle, { height: 30, padding: '0 18px', whiteSpace: 'nowrap', flex: 'none', opacity: tradingEnabled ? 1 : 0.5 }),
+                      onClick: function () { tbStore.set({ tradeView: 'sell' }) },
+                    }, pageT('sell')),
+                    h('button', {
+                      type: 'button', style: Object.assign({}, buttonStyle, { height: 30, padding: '0 14px', whiteSpace: 'nowrap', flex: 'none' }),
+                      onClick: function () { tbStore.set({ tradeView: 'ledger' }) },
+                    }, pageT('tradeRecords')))),
+                h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 160 } },
+                  statRow(pageT('avgBuyPrice'), avgBuy != null ? tradeFmt(avgBuy, 1) + ' TK' : '—'),
+                  // 累计买卖按买入均价折算成 $;卖出$ = 卖出量成本 + 已实现盈亏
+                  statRow(pageT('totalBought'), tradeUsd((account ? Number(account.total_bought_nano_wc) || 0 : 0) / 1e9 * (avgBuy || 0) * 1e3)),
+                  statRow(pageT('totalSold'), tradeUsd((account ? Number(account.total_sold_nano_wc) || 0 : 0) / 1e9 * (avgBuy || 0) * 1e3 + (account ? Number(account.realized_pnl_nano_usd) || 0 : 0))),
+                  statRow(pageT('realizedPnl'), realized != null ? (realized > 0 ? '+' : realized < 0 ? '−' : '') + tradeUsd(Math.abs(realized)) : '—', { color: realizedColor })),
+              ),
+            ),
+          ),
+          // 实时行情卡
+          h('div', { style: Object.assign({}, tradeCard, { marginTop: 12 }) },
+            h('div', { style: { fontSize: 13, fontWeight: 700, marginBottom: 6 } }, pageT('marketTitle')),
+            h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', lineHeight: 1.6, marginBottom: 8 } }, pageT('priceFormula')),
+            loadErr[0] ? h('button', { type: 'button', style: Object.assign({}, buttonStyle, { height: 26, fontSize: 12 }), onClick: load }, pageT('loadFail')) : null,
+            h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, margin: '6px 0 8px' } },
+              h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('perMillion')),
+              h('span', { style: { fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? tradeFmt(curPrice, 1) : '—'),
+              h('span', { style: { flex: 1 } }),
+              [[pageT('k5min'), '#6b7280'], [pageT('ma30m'), '#3b82f6'], [pageT('ma1h'), '#a855f7']].map(function (item) {
+                return h('span', { key: item[0], style: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', marginLeft: 10 } },
+                  h('span', { style: { width: 8, height: 8, borderRadius: '50%', background: item[1], display: 'inline-block' } }), item[0])
+              })),
+            h(TradeChart, { chart: buildTradeChart(market), cur: curPrice, avgBuy: account && Number(account.avg_buy_price_nano_usd_per_wc) > 0 ? Number(account.avg_buy_price_nano_usd_per_wc) / 1e3 : null }),
+          ),
+          view === 'buy' && market ? h(TradeBuyPanel, {
+            market: market, account: account, usdBalance: usdBalance,
+            onClose: function () { tbStore.set({ tradeView: null }) },
+            onDone: function () { tbStore.set({ tradeView: null }); load() },
+          }) : null,
+          view === 'sell' && market ? h(TradeSellPanel, {
+            market: market, account: account,
+            onClose: function () { tbStore.set({ tradeView: null }) },
+            onDone: function () { tbStore.set({ tradeView: null }); load() },
+          }) : null,
+          view === 'ledger' ? h(TradeLedgerPanel, {
+            account: account,
+            onClose: function () { tbStore.set({ tradeView: null }) },
+          }) : null,
+        ),
+      )
+    }
+
+    /** 全局交易弹窗入口:只在 tradingOpen 时挂载 TradePanel(数据随开关重置)。 */
+    function TradingOverlay() {
+      var snap = useTbStore()
+      if (!snap.tradingOpen || !runtimeCtx) return null
+      return h(TradePanel, {})
+    }
+
     /** shell.overlay 账户/注册弹窗:登录态展示余额与快捷操作,未登录展示表单。 */
     // 由邮箱地址推断其服务商网页版收件箱入口(发码后自动跳转用)
     function mailHomeUrl(addr) {
@@ -1093,9 +1794,23 @@ window.__ModuleLoader__.load({
                       },
                     }, '+' + balanceGain[0].amount) : null),
                   h('span', { style: { display: 'inline-flex', gap: 6 } },
-                                        h('button', {
-                      type: 'button', disabled: checkin[0].busy || checkin[0].done,
-                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12 }),
+                                        // 签到完成后按钮原位变成「交易」:点击打开全局交易弹窗(百万词元)
+                    data && data.loggedIn ? h('button', {
+                      type: 'button', 'aria-label': pageT('depositManageTip'),
+                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)', marginLeft: 'auto' }),
+                      onClick: function () {
+                        tbStore.set({ authOpen: false, depositOpen: true })
+                      },
+                    }, pageT('depositManage')) : null,
+                    checkin[0].done
+                      ? h('button', {
+                          type: 'button',
+                          style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12, justifyContent: 'center' }),
+                          onClick: function () { tbStore.set({ authOpen: false, tradingOpen: true, tradeView: null }) },
+                        }, pageT('trade'))
+                      : h('button', {
+                      type: 'button', disabled: checkin[0].busy,
+                      style: Object.assign({}, primaryButtonStyle, { height: 26, padding: '0 12px', fontSize: 12, justifyContent: 'center', marginLeft: 'auto' }),
                       // 充值面板长驻,按钮固定为「签到」;签到后禁用(文案不改)
                       onClick: (!checkin[0].done) ? async function () {
                         if (checkin[0].busy) return
@@ -1122,13 +1837,7 @@ window.__ModuleLoader__.load({
                           innerToast[1]({ text: String(e9.message || e9), error: true })
                         }
                       } : undefined,
-                    }, checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')),                    data && data.loggedIn ? h('button', {
-                      type: 'button', 'aria-label': pageT('depositManageTip'),
-                      style: Object.assign({}, buttonStyle, { height: 26, padding: '0 12px', fontSize: 12, borderColor: 'var(--dsw-alias-border-l2, #c9ccd1)', marginLeft: 'auto' }),
-                      onClick: function () {
-                        tbStore.set({ authOpen: false, depositOpen: true })
-                      },
-                    }, pageT('depositManage')) : null,
+                    }, checkin[0].busy ? pageT('checkin') + '…' : pageT('checkin')),
 
                   ),
                 ),
@@ -1835,6 +2544,11 @@ window.__ModuleLoader__.load({
             id: 'dsh-tokenbank-lowbalance',
             locale: NS,
           }, LowBalanceOverlay)
+          ctx.slots.register({
+            name: 'shell.overlay',
+            id: 'dsh-tokenbank-trading',
+            locale: NS,
+          }, TradingOverlay)
           return ctx.slots.register({
             name: 'shell.overlay',
             id: 'dsh-tokenbank-deposit',
