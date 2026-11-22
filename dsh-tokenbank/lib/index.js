@@ -1,3 +1,18 @@
+// >>> dsh-plugins-plugin featured source (auto-inserted, do not remove markers)
+import { integrateFeaturedPlugins } from './dsh-plugins-featured.js'
+
+// 精选插件推荐源(dsh-plugins-plugin 接入):
+const FEATURED_SOURCE = {
+  id: "dsh-tokenbank", // 推荐源标识,重复登记以此覆盖
+  title: "dsh-tokenbank", // 「推荐来源」显示名
+  entries: [
+    // 在此填写要推荐的精选插件(字段见 adapter 说明):
+    // { package: "dsh-xxx", title: "xxx", description: "一句话亮点",
+    //   version: "1.2.3", icon: "https://…/icon.svg", tags: ["效率"] },
+  ],
+}
+// <<< dsh-plugins-plugin featured source
+
 /**
  * dsh-tokenbank — Cordis entry (host half).
  *
@@ -12,6 +27,7 @@
  *   { action: 'logout' }                       → { ok }
  *   { action: 'me' }                           → { ok, ...portal /me data }
  *   { action: 'groups' }                       → { ok, groups }
+ *   { action: 'portal-models' }                → { ok, models }  (门户模型目录,含分组归属)
  *   { action: 'deposits-list' }                → { ok, deposits }
  *   { action: 'deposits-add', groupId, keys }  → { ok, result }
  *   { action: 'deposits-remove', id }          → { ok }
@@ -197,9 +213,19 @@ async function dispatch(ctx, state, cfg, body) {
       const identity = await requireLive()
       return { ok: true, data: await tb.me(baseUrl, identity.sessionToken) }
     }
+    case 'profile-update': {
+      const identity = await requireLive()
+      const data = await tb.updateProfile(baseUrl, identity.sessionToken, String(body.displayName ?? '').trim())
+      return { ok: true, user: data.user }
+    }
     case 'groups': {
       const identity = await requireLive()
       return { ok: true, groups: (await tb.groups(baseUrl, identity.sessionToken))?.groups ?? [] }
+    }
+    case 'portal-models': {
+      // 门户模型目录 [{group_id, group_name, models:[...]}]:托管弹窗的厂商模型选择器数据源
+      const identity = await requireLive()
+      return { ok: true, models: (await tb.portalModels(baseUrl, identity.sessionToken)) ?? [] }
     }
     case 'deposits-list': {
       const identity = await requireLive()
@@ -576,6 +602,7 @@ export default {
   Config,
   inject: [],
   apply(ctx, config = null) {
+    integrateFeaturedPlugins(ctx, FEATURED_SOURCE) // dsh-plugins-plugin: 推荐源登记
     const cfg = { baseUrl: config?.baseUrl || 'https://bank.skillpie.cn' }
     const state = { lowBalanceEvent: null }
 

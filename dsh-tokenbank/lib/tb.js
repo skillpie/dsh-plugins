@@ -140,6 +140,10 @@ export const login = (baseUrl, { email, password, captchaId, captchaCode }) =>
 /* ── session endpoints (cookie carried by us) ────────────────────────── */
 
 export const me = (baseUrl, sessionToken) => call(baseUrl, '/me', { sessionToken })
+
+/** 更新昵称:PUT /me { display_name },返回 `{ user }`(http.go portal.profile.update)。 */
+export const updateProfile = (baseUrl, sessionToken, displayName) =>
+  call(baseUrl, '/me', { method: 'PUT', body: { display_name: displayName ?? '' }, sessionToken })
 // 列出当前用户的访问密钥(不含明文)
 export const listAccessKeys = (baseUrl, sessionToken) =>
   call(baseUrl, '/access-keys', { sessionToken })

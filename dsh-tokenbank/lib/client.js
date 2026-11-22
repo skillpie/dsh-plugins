@@ -120,6 +120,7 @@ window.__ModuleLoader__.load({
       probeInconclusive: '上游探活未出结论,已放行托管',
       probeRejected: '{n} 个 Key 探活失败已被剔除',
       keyRequired: '请先粘贴至少一个 Key',
+      groupRequired: '请先选择托管分组（分组列表加载失败时请重试）',
       connectedAs: 'TokenBank 已连接：{email}',
       depositHint: "一键托管：把你的 API Key 凭证托管到 TokenBank,临时额度自动转移为永久额度保留使用。适用于：",
       depositCase1: "1. 周重置快到期了还没用完,重置后白白浪费,不如卖给平台换取永久余额,类似银行的存款业务",
@@ -201,6 +202,8 @@ window.__ModuleLoader__.load({
       tradingCalibrating: '行情校准中，暂不可交易',
       loadFail: '行情加载失败，点此重试',
       balanceRemainder: '持仓存在不足 1 手的零头，无法整手卖出',
+      editNicknameTitle: '点击修改昵称，回车保存',
+      nicknameSaved: '昵称已更新',
     }
     var en = {
       title: 'TokenBank',
@@ -294,6 +297,7 @@ window.__ModuleLoader__.load({
       depositPlaceholder: 'Paste the API key to deposit',
       depositDone: 'Deposited',
       keyRequired: 'Paste at least one key first',
+      groupRequired: 'Pick a deposit group first (retry if the group list failed to load)',
       connectedAs: 'TokenBank connected: {email}',
       depositHint: "One-click deposit: host your API key credentials on TokenBank to convert temporary quota into permanent balance. Useful when:",
       depositCase1: "1. The weekly reset is close and quota remains unused — sell it to the platform for permanent balance (like a bank deposit)",
@@ -375,6 +379,8 @@ window.__ModuleLoader__.load({
       tradingCalibrating: 'Calibrating — trading paused',
       loadFail: 'Failed to load market data — click to retry',
       balanceRemainder: 'Position has a remainder under 1 lot that cannot be sold in whole lots',
+      editNicknameTitle: 'Click to edit nickname, Enter to save',
+      nicknameSaved: 'Nickname updated',
     }
 
     var pageT = function (key) { return key }
@@ -901,6 +907,60 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * 可编辑昵称:点击文字变输入框,回车(或失焦)保存,Esc 取消。
+     * 保存走 profile-update(门户 PUT /me),成功后弹轻提示。
+     */
+    function EditableNickname(props) {
+      var value = React.useState(props.name || '')
+      var editing = React.useState(false)
+      var busy = React.useState(false)
+      var inputRef = React.useRef(null)
+      React.useEffect(function () {
+        if (editing[0] && inputRef.current) { inputRef.current.focus(); inputRef.current.select() }
+      }, [editing[0]])
+      var cancel = function () { editing[1](false); value[1](props.name || '') }
+      var commit = async function () {
+        var next = value[0].trim()
+        if (!next || next === (props.name || '')) { cancel(); return }
+        busy[1](true)
+        try {
+          await api('profile-update', { displayName: next })
+          busy[1](false); editing[1](false)
+          tbStore.set({ notify: { kind: 'success', title: pageT('nicknameSaved'), detail: next } })
+        } catch (e10) {
+          busy[1](false)
+          tbStore.set({ notify: { kind: 'error', title: String(e10.message || e10), detail: '' } })
+        }
+      }
+      if (!editing[0]) {
+        return h('span', {
+          title: pageT('editNicknameTitle'),
+          style: {
+            fontSize: 13, fontWeight: 600, cursor: 'text', borderRadius: 4,
+            borderBottom: '1px dashed var(--dsw-alias-border-l2, #c9ccd1)',
+          },
+          onClick: function (e) { e.stopPropagation(); value[1](props.name || ''); editing[1](true) },
+        }, props.name || props.email || '')
+      }
+      return h('input', {
+        ref: inputRef, value: value[0], maxLength: 64, disabled: busy[0],
+        onClick: function (e) { e.stopPropagation() },
+        onChange: function (e) { value[1](e.target.value) },
+        onKeyDown: function (e) {
+          if (e.key === 'Enter') commit()
+          else if (e.key === 'Escape') cancel()
+        },
+        onBlur: function () { if (!busy[0]) commit() },
+        style: {
+          height: 22, width: 130, fontSize: 13, fontWeight: 600, padding: '0 6px',
+          borderRadius: 5, boxSizing: 'border-box', outline: 'none',
+          border: '1px solid #ff4f1f', background: 'var(--dsw-alias-bg-base)',
+          color: 'var(--dsw-alias-label-primary)',
+        },
+      })
+    }
+
     /** 侧栏底部长驻块:完整展示 logo/账号/余额/托管充值/获取免费模型,无卡片框。 */
     function SidebarCard() {
       var snap = useTbStore()
@@ -1001,25 +1061,100 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 托管分组选项:portal-models 目录按 group_id 去重只取分组;目录为空降级 /groups。 */
+    function fetchGroupOptions() {
+      return api('portal-models').then(function (res) {
+        var catalog = (res && res.models) || []
+        var seen = {}
+        var list = []
+        catalog.forEach(function (g) {
+          if (!g || g.group_id == null || seen[g.group_id]) return
+          seen[g.group_id] = true
+          list.push({ id: g.group_id, label: String(g.group_name || ('分组 #' + g.group_id)) })
+        })
+        if (!list.length) throw new Error('empty catalog')
+        return list
+      }).catch(function () {
+        return api('groups').then(function (res) {
+          return ((res && res.groups) || []).map(function (g) {
+            return { id: g.id, label: String(g.name || ('分组 #' + g.id)) }
+          })
+        })
+      })
+    }
+
+    /** 原生分组选择菜单:锚点按钮下方弹出(设置页一键托管用,按钮是原生 DOM 不能走 React 状态)。 */
+    function openGroupPicker(anchor, onPick) {
+      if (anchor._tbGroupMenu && anchor._tbGroupMenu.parentElement) return
+      var menu = document.createElement('div')
+      menu.style.cssText = 'position:fixed;z-index:2200;min-width:150px;max-height:260px;overflow:auto;' +
+        'background:var(--dsw-menu-surface-fill,#fff);color:var(--dsw-alias-label-primary,#111);' +
+        'border:1px solid var(--dsw-alias-border-l1,#ddd);border-radius:8px;padding:4px;font-size:13px;' +
+        'box-shadow:var(--dsw-elevation-prominent,0 8px 30px rgba(0,0,0,0.18));'
+      var close = function () {
+        anchor._tbGroupMenu = null
+        if (menu.parentElement) menu.parentElement.removeChild(menu)
+        document.removeEventListener('mousedown', onDoc, true)
+        document.removeEventListener('keydown', onKey, true)
+      }
+      var onDoc = function (e) { if (!menu.contains(e.target) && e.target !== anchor) close() }
+      var onKey = function (e) { if (e.key === 'Escape') close() }
+      var add = function (label, id) {
+        var b = document.createElement('button')
+        b.type = 'button'
+        b.textContent = label
+        b.style.cssText = 'display:block;width:100%;text-align:left;border:none;background:transparent;cursor:pointer;padding:6px 10px;border-radius:6px;color:inherit;font-size:13px;white-space:nowrap;'
+        b.addEventListener('mouseenter', function () { b.style.background = 'var(--dsw-alias-interactive-bg-subtle,#f0f0f0)' })
+        b.addEventListener('mouseleave', function () { b.style.background = 'transparent' })
+        b.addEventListener('click', function () { close(); if (id != null) onPick(id) })
+        menu.appendChild(b)
+      }
+      var r = anchor.getBoundingClientRect()
+      menu.style.left = Math.max(4, Math.round(r.left)) + 'px'
+      menu.style.top = Math.round(r.bottom + 4) + 'px'
+      anchor._tbGroupMenu = menu
+      document.body.appendChild(menu)
+      document.addEventListener('mousedown', onDoc, true)
+      document.addEventListener('keydown', onKey, true)
+      add('…', null) // 占位,列表到位后重建
+      fetchGroupOptions().then(function (list) {
+        if (!menu.parentElement) return
+        while (menu.firstChild) menu.removeChild(menu.firstChild)
+        if (!list.length) { add(pageT('depositGroup') + ': -', null); return }
+        list.forEach(function (o) { add(o.label, o.id) })
+      }).catch(function () {
+        if (!menu.parentElement) return
+        while (menu.firstChild) menu.removeChild(menu.firstChild)
+        add(pageT('depositGroup') + ': -', null)
+      })
+    }
+
     /** 全局托管弹窗:用户粘贴 API Key 托管(设置页「一键托管」不受影响)。 */
     function DepositOverlay() {
       var snap = useTbStore()
+      var options = React.useState([]) // [{id, label}] 分组选择项(group_id 去重)
+      var groupId = React.useState('')
       var keys = React.useState('')
       var busy = React.useState(false)
       var err = React.useState('')
       React.useEffect(function () {
         if (!snap.depositOpen) return
         keys[1](''); err[1](''); busy[1](false)
+        fetchGroupOptions().then(function (list) {
+          options[1](list)
+          if (list.length) groupId[1](String(list[0].id))
+        }).catch(function () {})
       }, [snap.depositOpen])
       if (!snap.depositOpen || !runtimeCtx) return null
       var close = function () { tbStore.set({ depositOpen: false }) }
       var submit = async function () {
         var one = keys[0].trim()
         if (!one) { err[1](pageT('keyRequired')); return }
+        if (!groupId[0]) { err[1](pageT('groupRequired')); return }
         var list = [one]
         busy[1](true); err[1]('')
         try {
-          await api('deposits-add', { keys: list })
+          await api('deposits-add', { groupId: Number(groupId[0]), keys: list })
           busy[1](false)
           tbStore.set({ depositOpen: false, notify: { kind: 'success', title: pageT('depositDone'), detail: '' } })
         } catch (e) {
@@ -1058,11 +1193,18 @@ window.__ModuleLoader__.load({
             h('div', null, pageT('depositIntro4')),
             h('div', { style: { marginBottom: 6 } }, pageT('depositIntro5')),
             h('a', { href: (snap.portalUrl || 'https://bank.skillpie.cn') + '/', target: '_blank', rel: 'noreferrer', style: { color: '#ff4f1f', textDecoration: 'none', fontWeight: 600 } }, pageT('learnMore'))),
-          h('input', {
-            type: 'text', placeholder: pageT('depositPlaceholder'),
-            value: keys[0], onChange: function (e) { keys[1](e.target.value) },
-            style: Object.assign({}, inputStyle, { fontFamily: 'monospace' }),
-          }),
+          h('div', { style: { display: 'flex', gap: 8 } },
+            h('select', {
+              value: groupId[0], onChange: function (e) { groupId[1](e.target.value) },
+              'aria-label': pageT('depositGroup'),
+              style: Object.assign({}, inputStyle, { width: 170, flex: 'none', paddingRight: 4 }),
+            },
+              options[0].map(function (o, i) { return h('option', { value: String(o.id), key: o.label + '#' + i }, o.label) })),
+            h('input', {
+              type: 'text', placeholder: pageT('depositPlaceholder'),
+              value: keys[0], onChange: function (e) { keys[1](e.target.value) },
+              style: Object.assign({}, inputStyle, { flex: 1, minWidth: 0, fontFamily: 'monospace' }),
+            })),
           err[0] ? h('div', { style: { fontSize: 12, color: '#d54941', marginTop: 6 } }, err[0]) : null,
           h('button', {
             type: 'button', disabled: busy[0],
@@ -1841,8 +1983,10 @@ window.__ModuleLoader__.load({
           data && data.loggedIn
             ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
                 h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 } },
-                  h('span', { style: { fontSize: 13, fontWeight: 600 } },
-                    (data.user && (data.user.display_name || data.user.name)) || data.email || ''),
+                  h(EditableNickname, {
+                    name: (data.user && (data.user.display_name || data.user.name)) || '',
+                    email: data.email || '',
+                  }),
                   h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, data.email || ''),
                 ),
 
@@ -2053,11 +2197,12 @@ window.__ModuleLoader__.load({
         return function () { stopped = true }
       }, [])
 
-      var submit = React.useCallback(async function () {
+      var submit = React.useCallback(async function (groupId) {
         busy[1](true)
         try {
-          // 不带 groupId:服务端逐个分组探活,自动选第一个能通过的分组托管
-          var res = await api('deposit-configured', { ref: credentialRef() })
+          var body = { ref: credentialRef() }
+          if (groupId != null) body.groupId = Number(groupId) // 不带时服务端逐分组探活自动选
+          var res = await api('deposit-configured', body)
           if (res && res.deposited === false) {
             // 服务端探活失败:Key 打不通上游,拒绝托管
             var detail = res.probe && (res.probe.detail || res.probe.reason)
@@ -2110,7 +2255,7 @@ window.__ModuleLoader__.load({
         var btn = document.createElement('button')
         btn.type = 'button'
         btn.addEventListener('click', function () {
-          if (depositedRef.current != null) cancel(); else submit()
+          if (depositedRef.current != null) cancel(); else openGroupPicker(btn, function (gid) { submit(gid) })
         })
         var sync = function () {
           btn.disabled = busyRef.current
