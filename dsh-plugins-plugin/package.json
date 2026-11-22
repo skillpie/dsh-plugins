@@ -1,0 +1,54 @@
+{
+  "name": "dsh-plugins-plugin",
+  "version": "0.1.0",
+  "description": "精选插件:在官方插件页「已安装」旁边提供一个「精选插件」板块,聚合展示各接入插件推荐收录的精选插件;支持一键安装。其他插件通过 integrate.sh 即可快速接入推荐源。",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "featured-plugins",
+    "skillpie"
+  ],
+  "main": "./lib/index.js",
+  "repository": {
+    "url": "git+https://github.com/skillpie/dsh-plugins.git",
+    "directory": "dsh-plugins-plugin"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "lib",
+    "adapter",
+    "plugins.json",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "icon.svg",
+    "integrate.sh",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.13",
+    "dsh": ">=0.2.2-rc.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

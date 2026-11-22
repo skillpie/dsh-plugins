@@ -1,0 +1,4 @@
+{
+  "meta.title": "精选插件",
+  "meta.description": "在插件页展示接入插件推荐收录的精选插件,可一键安装。其他插件通过 integrate.sh 即可接入推荐源。"
+}
