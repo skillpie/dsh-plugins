@@ -1,5 +1,7 @@
 # SkillPie 邮箱 (dsh-skillpie-mail)
 
+<p align="left"><img src="docs/dsh-skillpie-mail-icon-180.png" width="72" alt="icon"></p>
+
 DeepSeek Harness(DSH)插件:把 [SkillPie 邮箱](https://mail.skillpie.cn) 变成**随身的接码邮箱**——在 DSH 里一键注册 `@skillpie.cn` 邮箱,收到的验证码邮件实时汇总到底部状态栏,点开面板即可查看,**不用切换窗口、不用装邮件客户端**。
 
 ## 功能
