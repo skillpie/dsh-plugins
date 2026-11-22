@@ -1,9 +1,5 @@
 # 网页工具箱 / dsh-webkit
 
-> **二开说明**:本插件基于 [mmyddd/dsh-element-lens](https://github.com/mmyddd/dsh-element-lens) v1.1.3
-> 二开重命名(MIT,原 LICENSE 与版权声明保留),包名/补丁行/client loader 统一为
-> `dsh-webkit`。行为机制未改动,后续增强在 fork 内进行。
-
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 在 DSH 右侧栏浏览器里拾取网页元素，把它送进对话草稿。
@@ -127,17 +123,6 @@ node test/webview.cjs     # guest 通道端到端
 ```
 
 CI 在 Ubuntu 与 Windows 上、Node 22 与 24 下各跑一遍 `npm test`；推 `v*` 标签时同样的检查通过后才会发布 GitHub Release（附带 `.tgz` 与 `SHA256SUMS.txt`）。
-
-## 致谢
-
-本插件的界面复刻自 **[@changfenhuang/dsh-annotation](https://www.npmjs.com/package/@changfenhuang/dsh-annotation)**（批注插件），特此致谢：
-
-- **胶囊（pill）**：`22px` 高、`0 10px` 内距、`11px` 圆角、同款边框/底色/阴影，以及 `<b>` 用 `--dsw-alias-text-accent` 的强调色写法，全部沿用它的规格，位置算法（锚 `[data-composer-card]`、`top = min(card.top, seat.top) - h - 6`、贴顶则隐藏、水平 clamp）也一致。
-- **悬浮面板**：`300px` 宽、`10px 12px` 内距、`12px` 圆角、同款边框/底色/阴影、圆角序号徽章的行式布局，与它的面板同构。
-- **已发送消息的呈现**：把体积庞大的引用正文从用户气泡里移走、只留一个「元素 ×N」小标签、内容靠 hover 回看的做法，也来自它的设计（它对应的是「批注 ×N」）。
-- 双方胶囊同处输入框右上角时的让位规则（先量邻居、留 8px 间隙、放不下就叠高），同样以它的胶囊为基准。
-
-样式规格是从它发布在 profile 里的产物读出来的；本插件的代码全部自行实现，未复制其源码。
 
 ## 许可
 

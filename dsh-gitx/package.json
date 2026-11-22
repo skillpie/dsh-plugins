@@ -1,6 +1,6 @@
 {
   "name": "dsh-gitx",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Git workbench for deepseek-harness: changelists, staging, history, branches, stashes and optional AI assistance",
   "type": "module",
   "main": "lib/index.js",
@@ -11,9 +11,11 @@
     "./client": "./dist/client.js",
     "./package.json": "./package.json",
     "./locale/zh.json": "./locale/zh.json",
-    "./locale/en.json": "./locale/en.json"
+    "./locale/en.json": "./locale/en.json",
+    "./icon": "./icon.svg"
   },
   "files": [
+    "icon.svg",
     "!docs/internal",
     "README.md",
     "cordis.patch.yml",

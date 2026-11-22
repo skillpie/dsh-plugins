@@ -127,9 +127,3 @@ Git 始终跟随当前工作区；切换工作区期间暂不可操作 Git。插
 ## 许可证
 
 MIT
-
-## 关于本 Fork / About this fork
-
-本项目基于 [happyqu/dsh-plugin-git](https://github.com/happyqu/dsh-plugin-git)（MIT License）二次开发，感谢原作者的出色工作。本仓库按自身节奏维护，npm 包名为 `dsh-gitx`。
-
-This project is a fork of [happyqu/dsh-plugin-git](https://github.com/happyqu/dsh-plugin-git) (MIT License). Maintained independently in the skillpie/dsh-plugins monorepo; published to npm as `dsh-gitx`.

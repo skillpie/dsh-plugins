@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- dsh-datasource: stacked database cylinders, echoing the other plugins' currentColor + 0.12/0.18 layering -->
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="currentColor" opacity="0.12"/>
+  <ellipse cx="32" cy="19" rx="17" ry="6.5" fill="currentColor" opacity="0.18"/>
+  <path d="M15 19v11c0 3.6 7.6 6.5 17 6.5s17-2.9 17-6.5V19" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" opacity="0.55"/>
+  <path d="M15 30v11c0 3.6 7.6 6.5 17 6.5s17-2.9 17-6.5V30" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"/>
+  <ellipse cx="32" cy="19" rx="17" ry="6.5" stroke="currentColor" stroke-width="3.6"/>
+</svg>
