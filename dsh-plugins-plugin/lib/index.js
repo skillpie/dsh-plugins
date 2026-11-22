@@ -15,6 +15,8 @@ export const SERVICE = 'featured-plugins'
 /* ── 推荐源/条目规范化 ──────────────────────────────────────────────── */
 
 // 单条推荐:package 必填(npm 包名),title 必填;其余可选。
+// 富字段(author/stars/downloads/screenshots 等)由 scripts/enrich.mjs 在构建期
+// 从 awesome-dsh-plugin 官方目录 join 进 plugins.json,这里原样放行。
 function normalizeEntry(raw, sourceId) {
   if (!raw || typeof raw !== 'object') return null
   const pkg = String(raw.package || raw.name || '').trim()
@@ -25,14 +27,16 @@ function normalizeEntry(raw, sourceId) {
     title,
     source: sourceId,
   }
-  const description = String(raw.description || '').trim()
-  if (description) entry.description = description
-  const version = String(raw.version || '').trim()
-  if (version) entry.version = version
-  const icon = String(raw.icon || '').trim()
-  if (icon) entry.icon = icon
-  const homepage = String(raw.homepage || '').trim()
-  if (homepage) entry.homepage = homepage
+  for (const key of ['description', 'version', 'icon', 'homepage', 'author', 'category']) {
+    const v = String(raw[key] || '').trim()
+    if (v) entry[key] = v
+  }
+  if (Array.isArray(raw.screenshots)) {
+    const shots = raw.screenshots.map((s) => String(s).trim()).filter(Boolean).slice(0, 4)
+    if (shots.length) entry.screenshots = shots
+  }
+  if (typeof raw.stars === 'number' && raw.stars >= 0) entry.stars = raw.stars
+  if (typeof raw.downloads === 'number' && raw.downloads >= 0) entry.downloads = raw.downloads
   if (Array.isArray(raw.tags)) {
     const tags = raw.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 8)
     if (tags.length) entry.tags = tags
@@ -96,19 +100,98 @@ export default {
     // provide 挂在当前 fiber 上:插件停用即注销,注入方自动感知。
     ctx.effect(() => ctx.provide(SERVICE, registry), 'dsh-plugins-plugin: registry service')
 
+    // ── 集中目录(宿主侧拉取) ──
+    // plugins.json 由仓库维护(enrich.mjs 富化后提交)。在宿主侧用 node fetch
+    // 拉取并做 5 分钟内存缓存:绕开浏览器 HTTP 缓存与 CORS,数据始终新鲜。
+    const REMOTE_CATALOG_URLS = [
+      'https://cdn.jsdelivr.net/gh/skillpie/dsh-plugins@main/dsh-plugins-plugin/plugins.json',
+      'https://raw.githubusercontent.com/skillpie/dsh-plugins/main/dsh-plugins-plugin/plugins.json',
+    ]
+    const REMOTE_TTL_MS = 5 * 60_000
+    let remoteCache = { at: 0, doc: null }
+
+    async function fetchRemoteCatalog() {
+      const now = Date.now()
+      if (remoteCache.doc && now - remoteCache.at < REMOTE_TTL_MS) return remoteCache.doc
+      for (const url of REMOTE_CATALOG_URLS) {
+        try {
+          const res = await fetch(url, {
+            headers: { accept: 'application/json' },
+            signal: AbortSignal.timeout(8000),
+            cache: 'no-store',
+          })
+          if (!res.ok) throw new Error('HTTP ' + res.status)
+          const doc = await res.json()
+          if (Array.isArray(doc?.entries)) {
+            remoteCache = { at: now, doc }
+            return doc
+          }
+        } catch { /* 尝试下一源 */ }
+      }
+      return null
+    }
+
     // ── 聚合路由(只读) ──
     // 多个插件接入时客户端只读这一个端点 → 页面上永远只有一块「精选插件」。
-    const aggregate = () => {
+    // 数据 = 远程集中目录(主)+ 接入插件登记源(补充),按包名去重,先到者优先。
+    // ── 已安装列表(host 侧轮询 pluginManager) ──
+    // 客户端据此把已安装条目标成「✓ 已安装」。pluginManager 是 boot 服务,
+    // 独立 inject 作用域:即使这里异常也不影响上面路由的注册。
+    let installedMap = {}
+    ctx.inject(['pluginManager'], (child) => {
+      child.effect(() => {
+        let timer = null
+        const refresh = async () => {
+          try {
+            const bundles = await child.pluginManager.listBundles()
+            const map = {}
+            for (const b of bundles) {
+              if (b && b.name && b.installed) map[b.name] = b.version || ''
+            }
+            installedMap = map
+          } catch { /* 保留上一次结果 */ }
+        }
+        refresh()
+        timer = setInterval(refresh, 30_000)
+        if (timer && typeof timer.unref === 'function') timer.unref() // 不阻塞宿主退出
+        return () => clearInterval(timer)
+      }, 'dsh-plugins-plugin: installed bundles watcher')
+    })
+
+    // 数据 = 远程集中目录(主)+ 接入插件登记源(补充),按包名去重,先到者优先;
+    // 本地条目缺失的富字段(author/stars/downloads/screenshots/icon 等)用远程目录回填。
+    const RICH_KEYS = ['author', 'homepage', 'category', 'icon', 'screenshots', 'stars', 'downloads']
+    const aggregate = async () => {
+      const remoteRaw = Array.isArray(remoteCache.doc?.entries) ? remoteCache.doc.entries : []
+      const remoteIndex = new Map()
+      for (const raw of remoteRaw) {
+        const pkg = String(raw?.package || raw?.name || '').trim()
+        if (pkg && !remoteIndex.has(pkg)) remoteIndex.set(pkg, raw)
+      }
       const seen = new Set()
       const entries = []
-      for (const source of sources.values()) {
-        for (const entry of source.entries) {
-          if (seen.has(entry.package)) continue
-          seen.add(entry.package)
-          entries.push(entry)
+      const push = (normalized) => {
+        if (!normalized || seen.has(normalized.package)) return
+        seen.add(normalized.package)
+        // 本地登记源只有基础字段 → 富字段从远程目录回填(版本/标题/简介仍以本地优先)
+        const rich = remoteIndex.get(normalized.package)
+        if (rich && normalized.source !== 'plugins.json') {
+          for (const key of RICH_KEYS) {
+            if (normalized[key] === undefined && rich[key] !== undefined) normalized[key] = rich[key]
+          }
         }
+        entries.push(normalized)
       }
-      return { entries, sources: [...sources.values()].map((s) => ({ id: s.id, title: s.title, count: s.entries.length })) }
+      for (const raw of remoteRaw) push(normalizeEntry(raw, 'plugins.json'))
+      for (const source of sources.values()) {
+        for (const entry of source.entries) push(entry)
+      }
+      return {
+        entries,
+        sources: [...sources.values()].map((s) => ({ id: s.id, title: s.title, count: s.entries.length })),
+        installed: installedMap,
+        remote: remoteCache.doc ? { fetchedAt: new Date(remoteCache.at).toISOString(), count: entries.length } : null,
+      }
     }
 
     ctx.inject(['webServer'], (child) => {
@@ -119,7 +202,8 @@ export default {
           try {
             if (!sameOrigin(req)) { json(res, 403, { ok: false, error: 'cross-origin request rejected' }); return }
             if (req.method !== 'GET' && req.method !== 'HEAD') { json(res, 405, { ok: false, error: 'method not allowed' }); return }
-            json(res, 200, { ok: true, data: aggregate() })
+            await fetchRemoteCatalog().catch(() => null)
+            json(res, 200, { ok: true, data: await aggregate() })
           } catch (err) {
             json(res, 200, { ok: false, error: String(err?.message || err) })
           }

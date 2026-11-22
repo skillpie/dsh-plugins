@@ -164,6 +164,18 @@ function main() {
         entry.enrichSource = 'npm-probe'
       }
       entry.enrichedAt = today
+      if (!entry.icon && !dryRun) {
+        // icon 兜底:npm 发布的插件按约定带 icon.svg(files 白名单/exports ./icon),
+        // jsdelivr 可按包直接取;HEAD 探测 200 才写入(dsh-datasource 等无 icon 包不造假)。
+        const url = `https://cdn.jsdelivr.net/npm/${encodeURIComponent(pkg).replace('%2F', '/')}/icon.svg`
+        try {
+          const head = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) })
+          if (head.ok) {
+            entry.icon = url
+            console.log(`icon: ${pkg} ← npm 包 icon.svg`)
+          }
+        } catch { /* 探测失败不写 icon */ }
+      }
       if (!dryRun && JSON.stringify(entry) !== before) {
         console.log(`enriched: ${pkg}(source=${entry.enrichSource}, stars=${entry.stars ?? '-'}, downloads=${entry.downloads ?? '-'}, screenshots=${entry.screenshots?.length ?? 0})`)
       }

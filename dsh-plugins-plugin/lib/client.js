@@ -8,17 +8,13 @@ window.__ModuleLoader__.load({
 
     const NS = 'dsh-plugins-plugin'
     const ROUTE = '/dsh-plugins-plugin/featured'
-    // 集中维护的精选列表(GitHub 仓库内 plugins.json):
-    // jsdelivr CDN 为主(国内可达),raw.githubusercontent 兜底。
-    const REMOTE_URLS = [
-      'https://cdn.jsdelivr.net/gh/skillpie/dsh-plugins@main/dsh-plugins-plugin/plugins.json',
-      'https://raw.githubusercontent.com/skillpie/dsh-plugins/main/dsh-plugins-plugin/plugins.json',
-    ]
+    // 数据统一由宿主半提供:host 拉远程集中目录(node fetch,无浏览器缓存/CORS)
+    // 并合并接入插件登记源,client 只读本地路由,永远新鲜。
 
     function fetchJson(url, timeoutMs) {
       const ctrl = typeof AbortController === 'function' ? new AbortController() : null
       const timer = setTimeout(() => ctrl && ctrl.abort(), timeoutMs)
-      return fetch(url, { headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
+      return fetch(url, { cache: 'no-store', headers: { accept: 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
         .then((res) => {
           if (!res.ok) throw new Error('HTTP ' + res.status)
           return res.json()
@@ -26,15 +22,15 @@ window.__ModuleLoader__.load({
         .finally(() => clearTimeout(timer))
     }
 
-    // 拉取远程 plugins.json;全部失败返回 null。
-    function fetchRemote() {
-      let idx = 0
-      const attempt = () => {
-        if (idx >= REMOTE_URLS.length) return Promise.resolve(null)
-        const url = REMOTE_URLS[idx++]
-        return fetchJson(url, 8000).catch(attempt)
-      }
-      return attempt()
+    function fetchText(url, timeoutMs) {
+      const ctrl = typeof AbortController === 'function' ? new AbortController() : null
+      const timer = setTimeout(() => ctrl && ctrl.abort(), timeoutMs)
+      return fetch(url, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+        .then((res) => {
+          if (!res.ok) throw new Error('HTTP ' + res.status)
+          return res.text()
+        })
+        .finally(() => clearTimeout(timer))
     }
 
     // 远程条目规范化(与 host 半 normalizeEntry 对齐的宽松版)。
@@ -83,20 +79,10 @@ window.__ModuleLoader__.load({
       ]
     }
 
-    // 合并:远程为主,本地聚合路由(接入插件登记的推荐源)为补充,按包名去重(先到者优先)。
-    function mergeEntries(remoteEntries, localEntries) {
-      const seen = new Set()
-      const out = []
-      for (const e of remoteEntries.concat(localEntries)) {
-        if (seen.has(e.package)) continue
-        seen.add(e.package)
-        out.push(e)
-      }
-      return out
-    }
+    // 合并已移到宿主半(host 侧远程目录 + 登记源,按包名去重)。
 
     const zh = {
-      tabLabel: '精选插件',
+      tabLabel: '精选推荐',
       title: '精选插件',
       subtitle: '来自接入插件的推荐,可一键安装',
       install: '安装',
@@ -107,6 +93,9 @@ window.__ModuleLoader__.load({
       retry: '重试',
       recommendedBy: '推荐',
       tags: '标签',
+      close: '关闭',
+      readmeLoading: 'README 加载中…',
+      readmeError: 'README 读取失败',
     }
     const en = {
       tabLabel: 'Featured',
@@ -120,70 +109,110 @@ window.__ModuleLoader__.load({
       retry: 'Retry',
       recommendedBy: 'Recommended by',
       tags: 'Tags',
+      close: 'Close',
+      readmeLoading: 'Loading README…',
+      readmeError: 'Failed to load README',
     }
 
     const S = {
       wrap: { padding: '12px 0 24px', display: 'flex', flexDirection: 'column', gap: 12 },
-      head: { margin: 0 },
-      title: { margin: '0 0 2px', fontSize: 16, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' },
-      sub: { margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' },
-      grid: { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 },
+      // 官方 Discover 同款瀑布流:CSS 多列,卡片高度不一自然堆叠
+      grid: { listStyle: 'none', margin: 0, padding: 0, columns: '300px', columnGap: 12 },
       card: {
+        breakInside: 'avoid', WebkitColumnBreakInside: 'avoid', marginBottom: 12,
         display: 'flex', flexDirection: 'column', gap: 8, padding: 14,
         border: '1px solid var(--dsw-alias-border-l1)',
         borderRadius: 12, background: 'var(--dsw-alias-bg-layer-2)',
       },
-      cardHead: { display: 'flex', alignItems: 'center', gap: 10 },
-      icon: { width: 36, height: 36, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-secondary)', fontSize: 16, fontWeight: 600, overflow: 'hidden' },
-      iconImg: { width: 36, height: 36, objectFit: 'contain' },
-      nameCol: { display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 },
-      name: { fontSize: 14, fontWeight: 600, color: 'var(--dsw-alias-label-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-      pkg: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-      desc: { margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--dsw-alias-label-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
-      authorRow: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 },
-      avatar: { width: 16, height: 16, borderRadius: 999, flex: 'none', display: 'block' },
-      author: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-      meta: { display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--dsw-alias-label-secondary)' },
-      shots: { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
-      shot: { display: 'block', width: '100%', height: 110, objectFit: 'cover', objectPosition: 'top', borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)', background: 'var(--dsw-alias-bg-layer-1)', cursor: 'pointer' },
+      head: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
+      // 插件名 + GitHub 图标紧贴成组,右侧留给 安装按钮/已安装徽标
+      nameWrap: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: '1 1 auto' },
+      title: {
+        fontSize: 15, fontWeight: 600, color: 'var(--dsw-alias-label-primary)', minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer',
+      },
+      ghLink: { display: 'flex', flex: 'none', color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' },
+      ghIcon: { width: 15, height: 15, fill: 'currentColor' },
+      badge: { flex: 'none', fontSize: 12, color: 'var(--dsw-alias-state-success-primary)' },
+      iconS: { width: 20, height: 20, borderRadius: 6, objectFit: 'contain', flex: 'none', display: 'block' },
+      // 作者行 + 数据行合并为一行:左头像+作者,右 v·↓·★
+      authorRow: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, marginTop: -4, cursor: 'pointer' },
+      avatar: { width: 14, height: 14, borderRadius: 999, flex: 'none', display: 'block' },
+      author: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+      meta: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', flex: 'none', marginLeft: 'auto' },
+      desc: {
+        margin: 0, fontSize: 13, lineHeight: 1.6, color: 'var(--dsw-alias-label-primary)', cursor: 'pointer',
+        display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      },
+      shots: { display: 'flex', gap: 8 },
+      shot: {
+        display: 'block', flex: 1, minWidth: 0, height: 104, objectFit: 'cover', objectPosition: 'top',
+        borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)', background: 'var(--dsw-alias-bg-layer-1)', cursor: 'pointer',
+      },
       foot: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', paddingTop: 4 },
-      chip: { fontSize: 11, padding: '1px 8px', borderRadius: 999, border: '1px solid var(--dsw-alias-border-l1)', color: 'var(--dsw-alias-label-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-      src: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 },
+      chips: { display: 'flex', flexWrap: 'wrap', gap: 6, flex: '1 1 auto', minWidth: 0 },
+      chip: { fontSize: 12, padding: '3px 10px', borderRadius: 999, border: '1px solid var(--dsw-alias-border-l1)', color: 'var(--dsw-alias-label-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 },
+      src: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
       btn: {
         flex: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12,
         padding: '4px 14px', borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)',
         background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)',
       },
       btnBusy: { opacity: 0.6, cursor: 'default' },
-      btnInstalled: { color: 'var(--dsw-alias-label-secondary)' },
       note: { margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' },
       retryBtn: {
         alignSelf: 'flex-start', cursor: 'pointer', font: 'inherit', fontSize: 12,
         padding: '4px 14px', borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)',
         background: 'transparent', color: 'var(--dsw-alias-label-primary)',
       },
+      // ── 自建详情弹窗(README 从 npm 包 jsdelivr 读取) ──
+      overlay: { position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 },
+      panel: {
+        width: 'min(760px, 92vw)', maxHeight: '84vh', display: 'flex', flexDirection: 'column',
+        background: 'var(--dsw-alias-bg-layer-2)', border: '1px solid var(--dsw-alias-border-l1)',
+        borderRadius: 14, boxShadow: '0 12px 40px rgba(0,0,0,0.25)', overflow: 'hidden',
+      },
+      panelHead: { display: 'flex', alignItems: 'flex-start', gap: 12, padding: '16px 16px 12px' },
+      panelIcon: { width: 44, height: 44, borderRadius: 10, objectFit: 'contain', flex: 'none', background: 'var(--dsw-alias-bg-layer-1)' },
+      panelTitleCol: { display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: '1 1 auto' },
+      panelTitle: { fontSize: 17, fontWeight: 600, color: 'var(--dsw-alias-label-primary)', margin: 0 },
+      panelPkg: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+      panelClose: {
+        flex: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12, border: 'none', background: 'transparent',
+        color: 'var(--dsw-alias-label-secondary)', padding: '4px 6px',
+      },
+      panelMeta: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '0 16px 10px', fontSize: 12, color: 'var(--dsw-alias-label-secondary)' },
+      panelDesc: { margin: '0 16px 12px', fontSize: 13, lineHeight: 1.6, color: 'var(--dsw-alias-label-primary)' },
+      panelBody: { margin: '0 16px', borderTop: '1px solid var(--dsw-alias-border-l1)', padding: '14px 2px 18px', overflowY: 'auto', fontSize: 13, lineHeight: 1.7, color: 'var(--dsw-alias-label-primary)' },
+      mdNote: { margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' },
+      mdH: { fontSize: 15, fontWeight: 600, margin: '18px 0 8px' },
+      mdH2: { fontSize: 14, fontWeight: 600, margin: '16px 0 6px' },
+      mdP: { margin: '0 0 10px' },
+      mdList: { margin: '0 0 10px', paddingLeft: 20 },
+      mdLi: { margin: '0 0 4px' },
+      mdImg: { display: 'block', maxWidth: '100%', borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)', margin: '8px 0' },
+      mdCode: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, background: 'var(--dsw-alias-bg-layer-1)', borderRadius: 4, padding: '1px 5px' },
+      mdPre: { background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 8, padding: 12, overflowX: 'auto', margin: '0 0 10px' },
+      mdPreCode: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, whiteSpace: 'pre-wrap', margin: 0 },
+      mdA: { color: 'var(--dsw-alias-label-primary)' },
     }
 
-    // 图标加载失败兜底为首字母。
-    function FeaturedIcon(props) {
-      const entry = props.entry
-      const pair = React.useState(true)
-      const ok = pair[0], setOk = pair[1]
-      if (entry.icon && ok) {
-        return h('span', { style: S.icon }, h('img', { src: entry.icon, alt: '', style: S.iconImg, onError: () => setOk(false) }))
-      }
-      return h('span', { style: S.icon }, (entry.title || entry.package || '?').trim().charAt(0).toUpperCase())
-    }
+    // GitHub mark(octicon mark-github 16x16 路径)
+    const GH_PATH = 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z'
 
-    // 作者行:GitHub 头像 + 用户名(头像加载失败只隐藏头像)。
+    // 作者行:GitHub 头像 + 用户名(左)+ 数据(右,同行);整行可点开详情弹窗。
+    // 头像加载失败只隐藏头像;author 缺失时保留右侧数据。
     function FeaturedAuthor(props) {
       const author = props.author
+      const meta = props.meta
+      const onDetail = props.onDetail
       const pair = React.useState(true)
       const ok = pair[0], setOk = pair[1]
-      if (!author) return null
-      return h('div', { style: S.authorRow },
-        ok ? h('img', { src: `https://github.com/${author}.png?size=32`, alt: '', style: S.avatar, onError: () => setOk(false) }) : null,
-        h('span', { style: S.author }, author))
+      if (!author && !meta) return null
+      return h('div', { style: S.authorRow, onClick: onDetail },
+        author && ok ? h('img', { src: `https://github.com/${author}.png?size=32`, alt: '', style: S.avatar, onError: () => setOk(false) }) : null,
+        author ? h('span', { style: S.author }, author) : null,
+        meta ? h('span', { style: S.meta }, meta) : null)
     }
 
     // 截图:逐个候选地址回退(jsdelivr gh 镜像 → 原始 raw → master 分支),全失败则隐藏。
@@ -200,13 +229,28 @@ window.__ModuleLoader__.load({
       })
     }
 
+    // 卡片布局对齐官方 Discover:
+    // 标题行(标题 + GitHub 链接) → 作者行(头像+作者) → 数据行(v·↓·★)
+    // → 简介(4 行截断) → 截图(≤2) → 脚行(标签 chips + 安装按钮)。
+    // 卡片首行插件图标:候选地址逐个回退(jsdelivr gh 镜像优先),无 icon 或全失败不展示。
+    function FeaturedHeadIcon(props) {
+      const entry = props.entry
+      const pair = React.useState(0)
+      const idx = pair[0], setIdx = pair[1]
+      const candidates = React.useMemo(() => (entry.icon ? shotCandidates(entry.icon) : []), [entry.icon])
+      if (!candidates.length || idx >= candidates.length) return null
+      return h('img', { src: candidates[idx], alt: '', style: props.large ? S.panelIcon : S.iconS, loading: 'lazy', onError: () => setIdx(idx + 1) })
+    }
+
     function FeaturedCard(props) {
       const e = props.entry
       const t = props.t
       const install = props.install
+      const onDetail = props.onDetail // 打开自建详情弹窗
+      const installed = !!props.installed // 宿主侧 pluginManager.listBundles 判定
       const pair = React.useState(false) // busy
       const busy = pair[0], setBusy = pair[1]
-      const donePair = React.useState(false) // 已点过安装(对话框提交与否未知,仅避免重复点击)
+      const donePair = React.useState(false) // 本会话刚装过(仅避免重复点击)
       const done = donePair[0], setDone = donePair[1]
 
       const onClick = () => {
@@ -220,62 +264,206 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const btnLabel = done ? t('installed') : (busy ? '…' : t('install'))
-      const stats = []
-      if (e.downloads != null) stats.push(`↓ ${fmtCount(e.downloads)}`)
-      if (e.stars != null) stats.push(`★ ${fmtCount(e.stars)}`)
+      const btnLabel = busy ? '…' : t('install')
+      const metaParts = []
+      if (e.version) metaParts.push(`v${e.version}`)
+      if (e.downloads != null) metaParts.push(`↓ ${fmtCount(e.downloads)}`)
+      if (e.stars != null) metaParts.push(`★ ${fmtCount(e.stars)}`)
+      const metaText = metaParts.join(' · ')
+
+      const chips = (e.tags || []).slice(0, 2)
       return h('li', { style: S.card },
-        h('div', { style: S.cardHead },
-          h(FeaturedIcon, { entry: e }),
-          h('div', { style: S.nameCol },
-            h('span', { style: S.name, title: e.title }, e.title),
-            e.author ? h(FeaturedAuthor, { author: e.author }) : h('span', { style: S.pkg }, e.package))),
-        e.description ? h('p', { style: S.desc }, e.description) : null,
-        stats.length || e.version ? h('div', { style: S.meta },
-          e.version ? h('span', null, `v${e.version}`) : null,
-          stats.map((s, i) => h('span', { key: i }, s))) : null,
+        h('div', { style: S.head },
+          h(FeaturedHeadIcon, { entry: e }),
+          h('div', { style: S.nameWrap },
+            h('span', { style: S.title, title: e.title, onClick: onDetail }, e.title),
+            e.homepage ? h('a', { style: S.ghLink, href: e.homepage, target: '_blank', rel: 'noreferrer noopener', title: e.package },
+              h('svg', { style: S.ghIcon, viewBox: '0 0 16 16', 'aria-hidden': 'true' }, h('path', { d: GH_PATH }))) : null),
+          // 右上角:已安装绿色徽标,否则安装按钮(参考 billion-context 卡片布局)
+          installed || done
+            ? h('span', { style: S.badge }, `✓ ${t('installed')}`)
+            : h('button', {
+                type: 'button', style: Object.assign({}, S.btn, busy ? S.btnBusy : {}),
+                onClick, disabled: busy,
+              }, btnLabel)),
+        h(FeaturedAuthor, { author: e.author, meta: metaText, onDetail }),
+        e.description ? h('p', { style: S.desc, onClick: onDetail }, e.description) : null,
         e.screenshots && e.screenshots.length
           ? h('div', { style: S.shots }, e.screenshots.map((url) => h(FeaturedShot, { key: url, url })))
           : null,
         h('div', { style: S.foot },
-          e.sourceTitle ? h('span', { style: S.src, title: `${t('recommendedBy')} ${e.sourceTitle}` }, `${t('recommendedBy')} ${e.sourceTitle}`) : null,
-          h('button', {
-            type: 'button', style: Object.assign({}, S.btn, done ? S.btnInstalled : {}, busy ? S.btnBusy : {}),
-            onClick, disabled: busy || done,
-          }, btnLabel)))
+          h('div', { style: S.chips },
+            chips.map((c) => h('span', { key: c, style: S.chip, title: c }, c)),
+            e.sourceTitle ? h('span', { style: S.src, title: `${t('recommendedBy')} ${e.sourceTitle}` }, `${t('recommendedBy')} ${e.sourceTitle}`) : null)))
+    }
+
+    // ── 自建详情弹窗:README 从 npm 包(jsdelivr)读取,轻量 markdown 渲染 ──
+    // 相对路径的图片/链接重写到 jsdelivr 包根。
+    function mdAbsUrl(url, base) {
+      const u = String(url).trim()
+      if (/^https?:\/\//i.test(u)) return u
+      return base + u.replace(/^\.\//, '')
+    }
+
+    // 行内解析:图片 / 链接 / 行内代码 / 粗体
+    function mdInline(text, base) {
+      const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]*)\]\(([^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*/g
+      const out = []
+      let last = 0, m, k = 0
+      while ((m = re.exec(text)) !== null) {
+        if (m.index > last) out.push(text.slice(last, m.index))
+        if (m[2] !== undefined) {
+          out.push(h('img', { key: k++, style: S.mdImg, src: mdAbsUrl(m[2], base), alt: m[1] || '', loading: 'lazy' }))
+        } else if (m[4] !== undefined) {
+          out.push(h('a', { key: k++, style: S.mdA, href: mdAbsUrl(m[4], base), target: '_blank', rel: 'noreferrer noopener' }, m[3]))
+        } else if (m[5] !== undefined) {
+          out.push(h('code', { key: k++, style: S.mdCode }, m[5]))
+        } else if (m[6] !== undefined) {
+          out.push(h('strong', { key: k++ }, m[6]))
+        }
+        last = re.lastIndex
+      }
+      if (last < text.length) out.push(text.slice(last))
+      return out
+    }
+
+    // 块级解析:围栏代码块 / 标题 / 列表 / 段落(不追求完整 markdown,够读 README 即可)
+    function renderReadme(text, base) {
+      const lines = String(text).split('\n')
+      const out = []
+      let key = 0, para = [], i = 0
+      const flushPara = () => {
+        if (para.length) {
+          out.push(h('p', { style: S.mdP, key: 'p' + (key++) }, mdInline(para.join(' '), base)))
+          para = []
+        }
+      }
+      while (i < lines.length) {
+        const line = lines[i]
+        if (/^```/.test(line)) {
+          flushPara()
+          const buf = []
+          i++
+          while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++ }
+          i++
+          out.push(h('pre', { style: S.mdPre, key: 'c' + (key++) }, h('code', { style: S.mdPreCode }, buf.join('\n'))))
+          continue
+        }
+        const hm = line.match(/^(#{1,4})\s+(.*)/)
+        if (hm) {
+          flushPara()
+          out.push(h(hm[1].length <= 2 ? 'h3' : 'h4', { style: hm[1].length <= 2 ? S.mdH : S.mdH2, key: 'h' + (key++) }, mdInline(hm[2], base)))
+          i++
+          continue
+        }
+        const lm = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(.*)/)
+        if (lm) {
+          flushPara()
+          const items = []
+          while (i < lines.length) {
+            const m2 = lines[i].match(/^\s*(?:[-*+]|\d+[.)])\s+(.*)/)
+            if (!m2) break
+            items.push(h('li', { style: S.mdLi, key: 'li' + items.length }, mdInline(m2[1], base)))
+            i++
+          }
+          out.push(h('ul', { style: S.mdList, key: 'u' + (key++) }, items))
+          continue
+        }
+        if (!line.trim()) { flushPara(); i++; continue }
+        para.push(line.trim())
+        i++
+      }
+      flushPara()
+      return out
+    }
+
+    function FeaturedModal(props) {
+      const e = props.entry
+      const t = props.t
+      const onClose = props.onClose
+      const pair = React.useState({ status: 'loading', kids: [] })
+      const state = pair[0], setState = pair[1]
+
+      React.useEffect(() => {
+        let alive = true
+        setState({ status: 'loading', kids: [] })
+        const base = `https://cdn.jsdelivr.net/npm/${e.package}/`
+        fetchText(base + 'README.md', 10000).then((txt) => {
+          if (!alive) return
+          setState({ status: 'ready', kids: renderReadme(txt, base) })
+        }).catch(() => {
+          if (!alive) return
+          // jsdelivr npm 主源失败 → GitHub 仓库兜底(README 大小写两种形态)
+          const ghCandidates = e.homepage && /^https?:\/\/github\.com\/([^/]+)\/([^/]+)/i.exec(e.homepage)
+          if (!ghCandidates) { setState({ status: 'error', kids: [] }); return }
+          const ghBase = `https://cdn.jsdelivr.net/gh/${ghCandidates[1]}/${ghCandidates[2]}@main/`
+          fetchText(ghBase + 'README.md', 10000).then((txt2) => {
+            if (!alive) return
+            setState({ status: 'ready', kids: renderReadme(txt2, ghBase) })
+          }).catch(() => { if (alive) setState({ status: 'error', kids: [] }) })
+        })
+        return () => { alive = false }
+      }, [e.package])
+
+      React.useEffect(() => {
+        const onKey = (ev) => { if (ev.key === 'Escape') onClose() }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [onClose])
+
+      const metaParts = []
+      if (e.author) metaParts.push(e.author)
+      if (e.version) metaParts.push(`v${e.version}`)
+      if (e.downloads != null) metaParts.push(`↓ ${fmtCount(e.downloads)}`)
+      if (e.stars != null) metaParts.push(`★ ${fmtCount(e.stars)}`)
+      return h('div', {
+        style: S.overlay,
+        onClick: (ev) => { if (ev.target === ev.currentTarget) onClose() },
+      },
+        h('div', { style: S.panel },
+          h('div', { style: S.panelHead },
+            h(FeaturedHeadIcon, { entry: e, large: true }),
+            h('div', { style: S.panelTitleCol },
+              h('p', { style: S.panelTitle }, e.title),
+              h('span', { style: S.panelPkg }, e.package)),
+            h('button', { type: 'button', style: S.panelClose, onClick: onClose }, '✕')),
+          metaParts.length ? h('div', { style: S.panelMeta }, metaParts.join(' · ')) : null,
+          e.description ? h('p', { style: S.panelDesc }, e.description) : null,
+          h('div', { style: S.panelBody },
+            state.status === 'loading' ? h('p', { style: S.mdNote }, t('readmeLoading')) : null,
+            state.status === 'error' ? h('p', { style: S.mdNote }, t('readmeError')) : null,
+            state.status === 'ready' ? state.kids : null),
+          h('div', { style: Object.assign({}, S.panelMeta, { justifyContent: 'flex-end', paddingTop: 10 }) },
+            h('button', { type: 'button', style: S.retryBtn, onClick: onClose }, t('close')))))
     }
 
     function FeaturedSection(props) {
       const install = props.install
-      const openPackage = props.openPackage
-      void openPackage // 语义对齐 plugins.tab 契约,当前未用
+      void props.openPackage // 详情改为自建弹窗,不再调官方 openPackage
       const t = props.t
 
-      const pair = React.useState({ status: 'loading', entries: [] })
+      const pair = React.useState({ status: 'loading', entries: [], installed: {} })
       const state = pair[0], setState = pair[1]
       const noncePair = React.useState(0)
       const nonce = noncePair[0], setNonce = noncePair[1]
+      const detailPair = React.useState(null)
+      const detail = detailPair[0], setDetail = detailPair[1]
 
       React.useEffect(() => {
         let alive = true
-        setState({ status: 'loading', entries: [] })
-        // 远程 plugins.json 为主;本地聚合路由(接入插件登记源)为补充。
-        Promise.all([
-          fetchRemote(),
-          fetchJson(ROUTE, 8000).catch(() => null),
-        ]).then(([remote, localBody]) => {
+        setState({ status: 'loading', entries: [], installed: {} })
+        // 宿主路由一站式返回:远程集中目录(已富化)+ 接入插件登记源 + 已安装表。
+        fetchJson(ROUTE, 8000).then((body) => {
           if (!alive) return
-          const remoteEntries = (remote && Array.isArray(remote.entries) ? remote.entries : [])
-            .map(normalizeRemoteEntry).filter(Boolean)
-          const localEntries = localBody && localBody.ok && localBody.data && Array.isArray(localBody.data.entries)
-            ? localBody.data.entries
+          const entries = body && body.ok && body.data && Array.isArray(body.data.entries)
+            ? body.data.entries.map(normalizeRemoteEntry).filter(Boolean)
             : []
-          const entries = mergeEntries(remoteEntries, localEntries)
-          if (!remote && !localEntries.length) {
-            setState({ status: 'error', entries: [] })
-            return
-          }
-          setState({ status: entries.length ? 'ready' : 'empty', entries })
+          const installed = body && body.ok && body.data && body.data.installed && typeof body.data.installed === 'object'
+            ? body.data.installed
+            : {}
+          setState({ status: entries.length ? 'ready' : 'empty', entries, installed })
+        }).catch(() => {
+          if (alive) setState({ status: 'error', entries: [] })
         })
         return () => { alive = false }
       }, [nonce])
@@ -292,10 +480,11 @@ window.__ModuleLoader__.load({
         kids.push(h('p', { key: 'note', style: S.note }, t('empty')))
       } else {
         kids.push(h('ul', { key: 'grid', style: S.grid }, state.entries.map((e) => (
-          h(FeaturedCard, { key: e.package, entry: e, t, install })
+          h(FeaturedCard, { key: e.package, entry: e, t, install, onDetail: () => setDetail(e), installed: !!state.installed[e.package] })
         ))))
       }
-      return h('div', { style: S.wrap }, kids)
+      return h('div', { style: S.wrap }, kids,
+        detail ? h(FeaturedModal, { key: detail.package, entry: detail, t, onClose: () => setDetail(null) }) : null)
     }
 
     return {

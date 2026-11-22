@@ -9,6 +9,16 @@ const adapter = await import(new URL('../adapter/dsh-plugins-featured.js', impor
 /* ── 桩 cordis ctx ─────────────────────────────────────────────────── */
 function makeCtx() {
   const services = new Map()
+  // pluginManager 服务桩:官方 boot 服务,apply 会 inject 它轮询已安装列表
+  services.set('pluginManager', {
+    async listBundles() {
+      return [
+        { name: 'dsh-a', installed: true, version: '1.0.0' },
+        { name: 'dsh-x', installed: false },
+        { name: 'dsh-remote', installed: true, version: '0.2.0' },
+      ]
+    },
+  })
   const ctx = {
     provided: null,
     provide(name, value) {
@@ -90,6 +100,22 @@ off1()
 console.log('✓ 登记/覆盖/注销/adapter 行为正确')
 
 /* ── 3. 真实 http 服务器跑路由 ─────────────────────────────────────── */
+// 桩掉 globalThis.fetch:远程目录返回固定 fixture(测试离线、确定性);
+// 其余 URL 一律拒绝。
+const realFetch = globalThis.fetch
+const REMOTE_FIXTURE = {
+  entries: [
+    { package: 'dsh-remote', title: 'Remote', author: 'octo', stars: 5, downloads: 9900, screenshots: ['https://example.com/s.png'] },
+    { package: 'dsh-a', title: 'Remote A(重复包名以远程目录优先)', version: '0.0.1' },
+  ],
+}
+globalThis.fetch = (url, ...rest) => {
+  if (String(url).includes('plugins.json')) {
+    return Promise.resolve(new Response(JSON.stringify(REMOTE_FIXTURE), { status: 200, headers: { 'content-type': 'application/json' } }))
+  }
+  return realFetch(url, ...rest) // 本地 http 服务器照常走真实 fetch
+}
+
 svc.register({
   id: 'src1', title: '来源一',
   entries: [{ package: 'dsh-a', title: 'A', version: '1.0.0' }, { package: 'dsh-b', title: 'B' }],
@@ -104,15 +130,22 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r))
 const port = server.address().port
 const base = `http://127.0.0.1:${port}`
 
-// GET 聚合:去重 + 先登记优先
+// GET 聚合:远程目录优先(富化字段原样放行),本地登记源按包名去重补充
 const res = await fetch(`${base}${mod.ROUTE}`)
 const body = await res.json()
 assert.equal(res.status, 200)
 assert.ok(body.ok)
-assert.deepEqual(body.data.entries.map((e) => e.package), ['dsh-a', 'dsh-b', 'dsh-c'], '应按包名去重且先登记优先')
-assert.equal(body.data.entries[0].version, '1.0.0', '重复包名保留先登记的版本')
-assert.equal(body.data.entries[0].source, 'src1')
+assert.deepEqual(body.data.entries.map((e) => e.package), ['dsh-remote', 'dsh-a', 'dsh-b', 'dsh-c'], '远程目录在前,本地登记源按包名去重且先登记优先')
+const remoteEntry = body.data.entries[0]
+assert.equal(remoteEntry.author, 'octo', '富化字段 author 应放行')
+assert.equal(remoteEntry.stars, 5, '富化字段 stars 应放行')
+assert.equal(remoteEntry.downloads, 9900, '富化字段 downloads 应放行')
+assert.deepEqual(remoteEntry.screenshots, ['https://example.com/s.png'], 'screenshots 应放行')
+assert.equal(body.data.entries[1].version, '0.0.1', '重复包名以远程目录优先(本地 1.0.0 不覆盖远程)')
+assert.equal(body.data.entries[1].source, 'plugins.json')
 assert.deepEqual(body.data.sources.map((s) => s.id), ['src1', 'src2'])
+assert.ok(body.data.remote, '成功拉取远程时应带 remote 元信息')
+assert.deepEqual(body.data.installed, { 'dsh-a': '1.0.0', 'dsh-remote': '0.2.0' }, 'installed 表只含 installed=true 的 bundle')
 
 // 405
 const res405 = await fetch(`${base}${mod.ROUTE}`, { method: 'POST' })
