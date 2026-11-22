@@ -110,12 +110,32 @@ export default {
     const REMOTE_TTL_MS = 5 * 60_000
     let remoteCache = { at: 0, doc: null }
 
-    // 多源并发拉取,取 updated 最新的那份。单源「先到先用」会被 CDN 缓存坑:
+    // 多源并发拉取,取「最新」的那份。单源「先到先用」会被 CDN 缓存坑:
     // jsdelivr 的 @main 有数分钟到数小时的延迟,raw.githubusercontent 通常更快,
     // 谁先返回就用谁会让旧数据长期遮住新数据。
-    const catalogStamp = (doc) => {
+    //
+    // 判新三要素(优先级从高到低):
+    //   1. updated 日期(仓库写入时的时间戳)
+    //   2. 条目数 —— plugins.json 只会增不会减,多的一定更新
+    //   3. 版本号总和 —— 同一条目升级时条目数不变,靠这个比出来
+    // 只比 updated 不够:enrich 脚本按天写 updated(如 "2026-11-22"),
+    // 同一天内的多次提交无法区分,会退化成「谁先返回用谁」。
+    const catalogScore = (doc) => {
       const t = Date.parse(String(doc?.updated || ''))
-      return Number.isFinite(t) ? t : 0
+      const entries = Array.isArray(doc?.entries) ? doc.entries : []
+      let versions = 0
+      for (const e of entries) {
+        const parts = String(e?.version || '0.0.0').split('.').map((n) => Number.parseInt(n, 10) || 0)
+        versions += (parts[0] || 0) * 1_000_000 + (parts[1] || 0) * 1_000 + (parts[2] || 0)
+      }
+      return { at: Number.isFinite(t) ? t : 0, count: entries.length, versions }
+    }
+
+    const newerCatalog = (a, b) => {
+      // a 是否比 b 新
+      if (a.at !== b.at) return a.at > b.at
+      if (a.count !== b.count) return a.count > b.count
+      return a.versions > b.versions
     }
 
     async function fetchRemoteCatalog() {
@@ -137,8 +157,8 @@ export default {
       )
       const docs = results.filter(Boolean)
       if (docs.length === 0) return null
-      // 更新日期相同时,按源顺序(jsdelivr 在前)兜底。
-      const best = docs.reduce((a, b) => (catalogStamp(b) >= catalogStamp(a) ? b : a))
+      // 三要素比较;完全相同时保留并发顺序靠前者(jsdelivr 在前)。
+    const best = docs.reduce((a, b) => (newerCatalog(catalogScore(b), catalogScore(a)) ? b : a))
       remoteCache = { at: now, doc: best }
       return best
     }

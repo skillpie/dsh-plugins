@@ -1,0 +1,53 @@
+{
+  "name": "dsh-featured",
+  "version": "0.1.4",
+  "description": "精选插件:官方插件页的精选板块。带搜索栏、标签筛选、申请收录入口,数据来自 GitHub 集中维护的 plugins.json;已接入内联欢迎页的插件会自动让位给本插件,界面更新只需发这一个包。",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "featured",
+    "featured-plugins",
+    "skillpie"
+  ],
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "lib",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.13",
+    "dsh": ">=0.2.2-rc.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skillpie/dsh-plugins.git",
+    "directory": "dsh-featured"
+  }
+}

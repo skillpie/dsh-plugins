@@ -735,7 +735,8 @@ console.log('\n--- dictionaries ---')
   // 内联的精选推荐模块用自己的 dsh-plugins-plugin 命名空间取词,
   // 不落在本包词典里,校验时排除(它自带 locale 注册)。
   const FEATURED_KEYS = new Set(['install', 'installed', 'recommendedBy', 'readmeLoading',
-    'readmeError', 'close', 'loading', 'error', 'retry', 'empty', 'tabLabel'])
+    'readmeError', 'close', 'loading', 'error', 'retry', 'empty', 'tabLabel',
+    'welcome', 'installFull', 'installing', 'desc', 'installedShort'])
   const missing = [...used].filter((key) => dicts.zh[key] === undefined && !FEATURED_KEYS.has(key))
   check('every literal translation key exists in the dictionary',
     missing.length === 0, `missing: ${missing.join(', ')}`)

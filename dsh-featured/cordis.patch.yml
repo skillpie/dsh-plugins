@@ -1,0 +1,8 @@
+# dsh-featured bundle patch.
+#
+# 单行双角色:host 半提供「精选推荐」数据路由(远程集中目录 + 已安装表),
+# module loader 引导 client 半在官方插件页注册「精选推荐」tab。
+- insert:
+    - id: dsh-featured
+      name: "dsh-featured"
+      config: {}

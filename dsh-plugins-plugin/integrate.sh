@@ -10,8 +10,9 @@
 # 接入方式:
 #   1. 目标插件 package.json 增加 dependency "dsh-plugins-plugin": "^0.2.0",
 #      并在目标目录 npm install —— 宿主半代码从包内 import,升级只动这一个依赖。
-#   2. <target>/lib/index.js 插入带标记的 import + FEATURED_SOURCE 常量块
-#      (含推荐条目样例,自行编辑),apply(ctx) 开头插入 integrateFeaturedPlugins 调用。
+#   2. <target>/lib/index.js 内联 host 模块(embed/featured.host.js 去 export)+ FEATURED_SOURCE
+#      常量块(含推荐条目样例,自行编辑),apply(ctx) 开头插入 integrateFeaturedPlugins 调用;
+#      同时移除 dsh-plugins-plugin 运行时依赖(卸载不再被依赖守卫拦截)。
 #   3. <target>/lib/client.js 文件末尾内联本包的 featured 模块(embed/featured.client.js),
 #      apply 末尾插入 window.__DSH_FEATURED_INIT__(ctx) 调用。
 #      —— 内联而非运行时 load 新 id:运行时 load 只存 factory 不建 cordis fiber,
@@ -138,47 +139,103 @@ ID=$(node -e '
 ' "$PKG" "$(basename -- "$CAND")")
 TITLE=${TITLE:-$ID}
 
-node - "$PKG" "$DEP_VER" <<'NODE'
+# host 半与 client 半都内联进目标插件,不再需要 dsh-plugins-plugin 运行时依赖。
+# 历史集成可能残留依赖声明/符号链接,这里统一清掉(卸载 dsh-plugins-plugin 不再被拦)。
+node - "$PKG" <<'NODE'
 const fs = require('fs')
-const [pkgPath, ver] = process.argv.slice(2)
+const [pkgPath] = process.argv.slice(2)
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-pkg.dependencies = pkg.dependencies || {}
-if (pkg.dependencies['dsh-plugins-plugin'] === '^' + ver) process.exit(0)
-pkg.dependencies['dsh-plugins-plugin'] = '^' + ver
-fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
-console.log('→ 已把 dsh-plugins-plugin@^' + ver + ' 写入 dependencies')
+if (pkg.dependencies && pkg.dependencies['dsh-plugins-plugin'] !== undefined) {
+  delete pkg.dependencies['dsh-plugins-plugin']
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+  console.log('→ 已从 dependencies 移除 dsh-plugins-plugin(host 半已内联,零运行时依赖)')
+}
 NODE
-
-# 已能解析到包就跳过安装(本地开发常用 link/上级 node_modules)
-RESOLVE_OK=0
-if node -e "require('module').createRequire(process.argv[1] + '/').resolve('dsh-plugins-plugin/host')" "$INDEX" >/dev/null 2>&1; then
-  RESOLVE_OK=1
-  echo "→ dsh-plugins-plugin 已可解析,跳过安装"
-fi
-if [ "$RESOLVE_OK" != "1" ]; then
-  echo "→ 在目标目录执行 npm install(拿不到网络时,可手动 ln -s 本包到 <target>/node_modules/)"
-  if ! (cd "$CAND" && npm install --no-audit --no-fund); then
-    # npm 源上还没有这个包(未发布/离线)→ 本地符号链接兜底
-    mkdir -p "$CAND/node_modules"
-    ln -sfn "$HERE" "$CAND/node_modules/dsh-plugins-plugin"
-    echo "→ npm install 失败,已用符号链接兜底:$CAND/node_modules/dsh-plugins-plugin → $HERE"
-    echo "  (发版后可在目标目录 npm install 切换为正式依赖)"
-  fi
+if [ -e "$CAND/node_modules/dsh-plugins-plugin" ]; then
+  rm -rf "$CAND/node_modules/dsh-plugins-plugin"
+  echo "→ 已清理 $CAND/node_modules/dsh-plugins-plugin"
 fi
 
 # ── 2. lib/index.js:插入推荐源 + apply 调用(幂等) ──────────────────────
-node - "$INDEX" "$ID" "$TITLE" "$LIST" <<'NODE'
+node - "$INDEX" "$ID" "$TITLE" "$LIST" "$HERE/embed/featured.host.js" <<'NODE'
 const fs = require('fs')
-const [index, id, title, listPath] = process.argv.slice(2)
+const [index, id, title, listPath, hostSrc] = process.argv.slice(2)
 
 const BEGIN = '// >>> dsh-plugins-plugin featured source (auto-inserted, do not remove markers)'
 const END = '// <<< dsh-plugins-plugin featured source'
+const HOST_BEGIN = '// >>> dsh-plugins-plugin featured host (auto-inserted, do not remove markers)'
+const HOST_END = '// <<< dsh-plugins-plugin featured host'
+const IMPORT_LINE = "import { integrateFeaturedPlugins } from 'dsh-plugins-plugin/host'"
 const CALL = 'integrateFeaturedPlugins(ctx, FEATURED_SOURCE) // dsh-plugins-plugin: 推荐源登记 + 嵌入宿主'
 
 let src = fs.readFileSync(index, 'utf8')
 
+// host 半内联:读本包 embed/featured.host.js,剥掉 export 后整体插入。
+// 幂等:已有 HOST 标记 → 版本比对后整块替换;旧形态(裸 import)→ 原位升级。
+function hostInline() {
+  const raw = fs.readFileSync(hostSrc, 'utf8') // dsh-plugins-plugin/embed/featured.host.js
+  const body = raw
+    .replace(/^export\s+(?=const|let|var|function|class)/gm, '')
+    .replace(/^export\s*\{[^}]*\}\s*;?\s*$/gm, '')
+    .replace(/^export\s+default\s+/gm, '')
+    .replace(/^/gm, '  ') // 整体缩进进工厂函数
+    .trimEnd()
+  // 工厂包裹:ROUTE/SERVICE 等内部名不污染目标插件;只暴露 integrateFeaturedPlugins
+  return [HOST_BEGIN,
+    'function dshFeaturedHostModule() {',
+    body,
+    '  return { integrateFeaturedPlugins }',
+    '}',
+    'const { integrateFeaturedPlugins } = dshFeaturedHostModule()',
+    HOST_END].join('\n')
+}
+
+function replaceBetween(text, begin, end, next) {
+  const head = text.indexOf(begin)
+  if (head < 0) return { text, hit: false }
+  const tail = text.indexOf(end, head)
+  if (tail < 0) throw new Error('HOST 标记不完整(缺结束标记)')
+  return { text: text.slice(0, head) + next + text.slice(tail + end.length), hit: true }
+}
+
+const inline = hostInline()
+{
+  const r = replaceBetween(src, HOST_BEGIN, HOST_END, inline)
+  if (r.hit) {
+    if (r.text === src) {
+      console.log('→ index.js host 内联已最新,跳过(幂等)')
+    } else {
+      src = r.text
+      console.log('→ 已把 index.js 的 host 内联块升级到最新版本')
+    }
+  } else if (src.includes(IMPORT_LINE)) {
+    // 旧形态:整行 import 换成内联块(import 行可能在 SRC 标记内)
+    src = src.replace(IMPORT_LINE, inline)
+    console.log('→ 已把 import 行升级为 host 内联块')
+  }
+}
+
 if (src.includes(BEGIN)) {
-  console.log('→ index.js 已接入过,跳过(幂等)')
+  // SRC(推荐源数据)块已存在:只做 host 内联升级 + 调用行清理,不再重复插 SRC。
+  // 调用行幂等:先剔除所有历史调用行,再在 apply 开头补一行。
+  const callRe = /^[ \t]*integrateFeaturedPlugins\(ctx, FEATURED_SOURCE\).*$/gm
+  const hadCall = callRe.test(src)
+  src = src.replace(callRe, '')
+  if (!/^integrateFeaturedPlugins\(ctx, FEATURED_SOURCE\)/m.test(src)) {
+    const APP_RE2 = /(^|\s)((?:exports\.)?apply\s*(?::\s*|=)?\s*(?:async\s+)?(?:function\s*)?\(\s*ctx\b[^)]*\)\s*(?:=>\s*)?\{)/
+    const m = src.match(APP_RE2)
+    if (!m) throw new Error('未找到 apply(ctx) 入口')
+    const at = src.match(APP_RE2).index + m[1].length + m[2].length
+    const nl = src.indexOf('\n', at)
+    const nextLine = src.slice(nl + 1)
+    const indent = (nextLine.match(/^[ \t]*/) || [''])[0] || '  '
+    src = src.slice(0, nl + 1) + indent + CALL + '\n' + src.slice(nl + 1)
+    if (hadCall) console.log('→ 已重插 integrateFeaturedPlugins 调用')
+    else console.log('→ 已在 apply 开头插入 integrateFeaturedPlugins 调用')
+  } else {
+    console.log('→ integrateFeaturedPlugins 调用已存在,跳过')
+  }
+  fs.writeFileSync(index, src)
   process.exit(0)
 }
 
@@ -198,7 +255,7 @@ if (listPath) {
 
 const block = [
   BEGIN,
-  `import { integrateFeaturedPlugins } from 'dsh-plugins-plugin/host'`,
+  inline,
   '',
   `// 精选插件推荐源(dsh-plugins-plugin):`,
   `const FEATURED_SOURCE = {`,
@@ -235,7 +292,7 @@ for (let i = 0; i < lines.length; i++) {
 if (!done) throw new Error('未找到 apply(ctx) 入口,请手动在 apply 开头加入:\n' + CALL)
 
 fs.writeFileSync(index, lines.join('\n'))
-console.log('→ 已在 lib/index.js 插入 FEATURED_SOURCE 与 integrateFeaturedPlugins 调用')
+console.log('→ 已在 lib/index.js 内联 host 模块 + FEATURED_SOURCE + 调用(零运行时依赖)')
 NODE
 
 # ── 3. lib/client.js:内联 featured 模块 + apply 末尾挂 init 调用(幂等) ──
@@ -246,11 +303,18 @@ const [client] = process.argv.slice(2)
 
 const SRC = path.join(process.env.HERE, 'embed', 'featured.client.js')
 
-const BEGIN = '// >>> dsh-plugins-plugin featured inline (auto-inserted, do not remove markers)'
-const END = '// <<< dsh-plugins-plugin featured inline'
+const BEGIN = '// >>> dsh-featured inline (auto-inserted, do not remove markers)'
+const END = '// <<< dsh-featured inline'
 const OLD_BEGIN = '// >>> dsh-plugins-plugin featured chunk (auto-inserted, do not remove markers)'
 const OLD_END = '// <<< dsh-plugins-plugin featured chunk'
-const CALL_LINE = "if (typeof window.__DSH_FEATURED_INIT__ === 'function') window.__DSH_FEATURED_INIT__(ctx) // dsh-plugins-plugin: 精选推荐板块"
+// 历史版本的 inline 标记(产品改名之前),重跑时一并替换掉
+const LEGACY_BEGIN = '// >>> dsh-plugins-plugin featured inline (auto-inserted, do not remove markers)'
+const LEGACY_END = '// <<< dsh-plugins-plugin featured inline'
+// init 调用行按前缀识别,兼容任何历史注释尾部
+const CALL_PREFIX = 'if (typeof window.__DSH_FEATURED_INIT__ === \'function\') window.__DSH_FEATURED_INIT__(ctx)'
+const CALL_LINE = CALL_PREFIX + ' // 精选插件'
+// 历史版本的调用行(带 dsh-plugins-plugin 注释),重跑时替换
+const LEGACY_CALL_RE = /^[ \t]*if \(typeof window\.__DSH_FEATURED_INIT__ === 'function'\) window\.__DSH_FEATURED_INIT__\(ctx\)[ \t]*\/\/.*$/gm
 
 let src = fs.readFileSync(client, 'utf8')
 
@@ -267,6 +331,30 @@ if (fs.existsSync(staleChunk)) {
   console.log('→ 已移除旧版 chunk 文件 client.featured.js')
 }
 if (hadOld) console.log('→ 已清理旧版 require.async chunk 接入痕迹')
+
+// 1b) 清理标记之外的历史横幅注释。早期版本的 banner 写在 BEGIN 之前,
+//     而整块替换都从 BEGIN 开始,永远碰不到它,导致旧文案(含旧产品名)长期残留。
+const STALE_BANNER_RE = /^[ \t]*\/\/.*(内联模块|inline module)[^\n]*[。.]?[ \t]*$/m
+{
+  const lines = src.split('\n')
+  const keptLines = []
+  let dropped = 0
+  for (const line of lines) {
+    const t = line.trim()
+    // 只删「本模块」的历史横幅:必须是 // 注释且提到内联模块 + 自动插入/请勿手改
+    const isStaleBanner = t.startsWith('//') &&
+      /内联模块|inline module/.test(t) &&
+      /自动插入|请勿手改|auto-inserted|do not (edit|remove)/.test(t) &&
+      !t.startsWith(BEGIN) && !t.startsWith(END)
+    if (isStaleBanner) { dropped += 1; continue }
+    if (dropped > 0 && t === '' && keptLines.length > 0 && keptLines[keptLines.length - 1].trim() === '') continue
+    keptLines.push(line)
+  }
+  if (dropped > 0) {
+    src = keptLines.join('\n')
+    console.log('→ 已清理 ' + dropped + ' 行历史横幅注释')
+  }
+}
 
 const body = fs.readFileSync(SRC, 'utf8').split('\n')
   .filter(l => l.indexOf('__FEATURED_INLINE_BODY_START__') === -1 && l.indexOf('__FEATURED_INLINE_BODY_END__') === -1)
@@ -359,6 +447,36 @@ function esmInsertIndex(src) {
   return m.index
 }
 
+// 历史版本用 dsh-plugins-plugin 作标记,统一升到新标记
+for (const [b, e] of [[LEGACY_BEGIN, LEGACY_END]]) {
+  if (src.indexOf(b) === -1) continue
+  const s0 = src.indexOf(b)
+  const e0 = src.indexOf(e, s0)
+  if (e0 !== -1) {
+    // 标记行之前若紧跟本模块的注释横幅,一并清掉(会被重建)
+    // 注意:head 必须严格递减,否则当上一行本身就是 banner 时会原地打转(死循环)。
+    let head = s0
+    for (;;) {
+      if (head <= 0) { head = 0; break }
+      const prevNl = src.lastIndexOf('\n', head - 1)
+      const lineStart = prevNl + 1
+      const line = src.slice(lineStart, head)
+      if (line.trim() !== '' && !line.trim().startsWith('//')) break
+      if (lineStart >= head) break
+      head = lineStart
+    }
+    // 去掉 head 之前多余的空行,避免重复插入后留下空白
+    if (head > 0 && src.slice(0, head).endsWith('\n')) {
+      let h2 = head
+      while (h2 > 0 && src[h2 - 1] === '\n') h2--
+      if (h2 !== head) head = h2 + 1
+    }
+    src = src.slice(0, head) + block + src.slice(e0 + e.length)
+    src = src.replace(/^\s*$/m, '')
+    console.log('→ 已把旧标记的内联块升级为新标记')
+  }
+}
+
 if (src.indexOf(BEGIN) !== -1) {
   if (src.indexOf(body) !== -1) {
     console.log('→ featured 模块已内联且内容最新,跳过(幂等)')
@@ -383,7 +501,7 @@ if (src.indexOf(BEGIN) !== -1) {
   const lineIndent = (src.slice(lineStart, at).match(/^[ \t]*/) || [''])[0]
   const banner = [
     '// ' + '='.repeat(70),
-    '// dsh-plugins-plugin:精选推荐(内联模块,自动插入,请勿手改)',
+    '// 精选插件(内联模块,由 dsh-featured 的 integrate.sh 自动插入,请勿手改)',
     '// 注入在 factory(require) 内,可用 factory 的 require 取 react;',
     '// apply 末尾通过 window.__DSH_FEATURED_INIT__(ctx) 注册 tab。',
     '// ' + '='.repeat(70),
@@ -393,7 +511,17 @@ if (src.indexOf(BEGIN) !== -1) {
   console.log(mode === 'factory' ? '→ 已把 featured 模块内联进 factory(require)' : '→ 已把 featured 模块内联进 lib/client.js(ESM 源码,构建后进 dist)')
 }
 
-// 2) apply 末尾插入 init 调用
+// 2) 清理历史 init 调用行:可能带旧注释,也可能因早期脚本重复插入多行。
+//    一律先剔除,再由下面 2b 统一插一行(保持幂等)。
+const callLines = src.split('\n')
+const kept = callLines.filter((l) => l.trim().indexOf(CALL_PREFIX) !== 0)
+const removedCalls = callLines.length - kept.length
+if (removedCalls > 0) {
+  src = kept.join('\n')
+  console.log('→ 已清理 ' + removedCalls + ' 行历史 init 调用')
+}
+
+// 2b) apply 末尾插入 init 调用
 if (src.indexOf(CALL_LINE) !== -1) {
   console.log('→ apply 内 init 调用已存在,跳过(幂等)')
 } else {
@@ -405,7 +533,7 @@ if (src.indexOf(CALL_LINE) !== -1) {
   const lineStart = src.lastIndexOf('\n', close) + 1
   const lineIndent = (src.slice(lineStart, close).match(/^[ \t]*/) || [''])[0]
   src = src.slice(0, lineStart) + lineIndent + '  ' + CALL_LINE + '\n' + src.slice(lineStart)
-  console.log('→ 已在 apply 末尾插入精选推荐初始化调用')
+  console.log('→ 已在 apply 末尾插入精选插件初始化调用')
 }
 
 fs.writeFileSync(client, src)
@@ -422,7 +550,7 @@ cat <<EOF
 接入完成(npm 库依赖方式)。后续步骤:
   1. (可选)编辑 $INDEX 里 FEATURED_SOURCE.entries,填入本插件的补充推荐。
   2. 重启/重载目标插件(plugin_manager set_plugin <目标> off→on),刷新 GUI。
-  3. 打开官方插件页「精选推荐」板块验证。
+  3. 打开官方插件页「精选插件」板块验证。
   4. 升级(更新本包):改 host 半 → 各接入插件目录执行 npm update dsh-plugins-plugin;
      改 client 半或本脚本 → 在本包目录执行 sh integrate.sh --all 重跑内联同步。
 EOF
