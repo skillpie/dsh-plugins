@@ -138,7 +138,8 @@
         "end": "2026-11-20"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-22"
+      "enrichedAt": "2026-11-22",
+      "icon": "https://cdn.jsdelivr.net/npm/dsh-gitx@0.2.2/icon.svg"
     },
     {
       "package": "dsh-webkit",
