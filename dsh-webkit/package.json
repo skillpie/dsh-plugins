@@ -57,7 +57,5 @@
       ]
     }
   },
-  "dependencies": {
-    "dsh-plugins-plugin": "^0.2.0"
-  }
+  "dependencies": {}
 }
