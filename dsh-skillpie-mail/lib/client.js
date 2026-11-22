@@ -963,12 +963,12 @@ window.__ModuleLoader__.load({
   try {
       const React = require('react')
           const h = React.createElement
-
+      
           const NS = 'dsh-plugins-plugin'
           const ROUTE = '/dsh-plugins-plugin/featured'
           // 数据统一由宿主半提供:host 拉远程集中目录(node fetch,无浏览器缓存/CORS)
           // 并合并接入插件登记源,client 只读本地路由,永远新鲜。
-
+      
           function fetchJson(url, timeoutMs) {
             const ctrl = typeof AbortController === 'function' ? new AbortController() : null
             const timer = setTimeout(() => ctrl && ctrl.abort(), timeoutMs)
@@ -979,7 +979,7 @@ window.__ModuleLoader__.load({
               })
               .finally(() => clearTimeout(timer))
           }
-
+      
           function fetchText(url, timeoutMs) {
             const ctrl = typeof AbortController === 'function' ? new AbortController() : null
             const timer = setTimeout(() => ctrl && ctrl.abort(), timeoutMs)
@@ -990,7 +990,7 @@ window.__ModuleLoader__.load({
               })
               .finally(() => clearTimeout(timer))
           }
-
+      
           // 远程条目规范化(与 host 半 normalizeEntry 对齐的宽松版)。
           // 富字段(author/stars/downloads/screenshots 等)由 scripts/enrich.mjs
           // 在构建期从 awesome-dsh-plugin 官方目录 join 进来,这里原样放行。
@@ -1016,14 +1016,14 @@ window.__ModuleLoader__.load({
             }
             return entry
           }
-
+      
           // 数值缩写:586200 → 586.2k,1200000 → 1.2m。
           function fmtCount(n) {
             if (n >= 1e6) return (Math.round(n / 1e5) / 10) + 'm'
             if (n >= 1e3) return (Math.round(n / 100) / 10) + 'k'
             return String(n)
           }
-
+      
           // raw.githubusercontent 在国内常不可达;转 jsdelivr gh 镜像再失败则放弃。
           function shotCandidates(url) {
             const match = String(url).match(/^https?:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/(HEAD|[0-9a-fA-F]{6,}|[^/]+)\/(.+)$/)
@@ -1036,9 +1036,9 @@ window.__ModuleLoader__.load({
               `https://cdn.jsdelivr.net/gh/${owner}/${repo}@master/${file}`,
             ]
           }
-
+      
           // 合并已移到宿主半(host 侧远程目录 + 登记源,按包名去重)。
-
+      
           const zh = {
             tabLabel: '精选推荐',
             title: '精选插件',
@@ -1071,7 +1071,7 @@ window.__ModuleLoader__.load({
             readmeLoading: 'Loading README…',
             readmeError: 'Failed to load README',
           }
-
+      
           const S = {
             wrap: { padding: '12px 0 24px', display: 'flex', flexDirection: 'column', gap: 12 },
             // 官方 Discover 同款瀑布流:CSS 多列,卡片高度不一自然堆叠
@@ -1158,10 +1158,10 @@ window.__ModuleLoader__.load({
             mdTable: { borderCollapse: 'collapse', width: '100%', margin: '0 0 12px', fontSize: 12.5 },
             mdTd: { border: '1px solid var(--dsw-alias-border-l1)', padding: '6px 10px', textAlign: 'left', verticalAlign: 'top' },
           }
-
+      
           // GitHub mark(octicon mark-github 16x16 路径)
           const GH_PATH = 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z'
-
+      
           // 包名行:npm 包名(左,等宽)+ 数据(右,同行);整行可点开详情弹窗。
           // 不展示作者信息(不依赖 awesome-dsh-plugin 的 author 字段)。
           function FeaturedAuthor(props) {
@@ -1173,7 +1173,7 @@ window.__ModuleLoader__.load({
               pkg ? h('span', { style: S.author }, pkg) : null,
               meta ? h('span', { style: S.meta }, meta) : null)
           }
-
+      
           // 截图:逐个候选地址回退(jsdelivr gh 镜像 → 原始 raw → master 分支),全失败则隐藏。
           function FeaturedShot(props) {
             const url = props.url
@@ -1187,7 +1187,7 @@ window.__ModuleLoader__.load({
               onClick: () => window.open(candidates[idx], '_blank', 'noopener'),
             })
           }
-
+      
           // 卡片布局对齐官方 Discover:
           // 标题行(标题 + GitHub 链接) → 作者行(头像+作者) → 数据行(v·↓·★)
           // → 简介(4 行截断) → 截图(≤2) → 脚行(标签 chips + 安装按钮)。
@@ -1200,7 +1200,7 @@ window.__ModuleLoader__.load({
             if (!candidates.length || idx >= candidates.length) return null
             return h('img', { src: candidates[idx], alt: '', style: props.large ? S.panelIcon : S.iconS, loading: 'lazy', onError: () => setIdx(idx + 1) })
           }
-
+      
           function FeaturedCard(props) {
             const e = props.entry
             const t = props.t
@@ -1211,7 +1211,7 @@ window.__ModuleLoader__.load({
             const busy = pair[0], setBusy = pair[1]
             const donePair = React.useState(false) // 本会话刚装过(仅避免重复点击)
             const done = donePair[0], setDone = donePair[1]
-
+      
             const onClick = () => {
               if (busy || done || typeof install !== 'function') return
               setBusy(true)
@@ -1222,12 +1222,12 @@ window.__ModuleLoader__.load({
                 setBusy(false)
               }
             }
-
+      
             const btnLabel = busy ? '…' : t('install')
             const metaParts = []
             if (e.version) metaParts.push(`v${e.version}`)
             const metaText = metaParts.join(' · ')
-
+      
             const chips = (e.tags || []).slice(0, 2)
             return h('li', { style: S.card },
               h('div', { style: S.head },
@@ -1253,7 +1253,7 @@ window.__ModuleLoader__.load({
                   chips.map((c) => h('span', { key: c, style: S.chip, title: c }, c)),
                   e.sourceTitle ? h('span', { style: S.src, title: `${t('recommendedBy')} ${e.sourceTitle}` }, `${t('recommendedBy')} ${e.sourceTitle}`) : null)))
           }
-
+      
           // ── 自建详情弹窗:README 从 npm 包(jsdelivr)读取,轻量 markdown 渲染 ──
           // 相对路径的图片/链接重写到 jsdelivr 包根。
           function mdAbsUrl(url, base) {
@@ -1261,7 +1261,7 @@ window.__ModuleLoader__.load({
             if (/^https?:\/\//i.test(u)) return u
             return base + u.replace(/^\.\//, '')
           }
-
+      
           // 占位符还原:把 s 里 \u0000<idx>\u0000 换回暂存的节点
           function restoreInline(s, tokens) {
             const parts = String(s).split(/\u0000(\d+)\u0000/g)
@@ -1272,7 +1272,7 @@ window.__ModuleLoader__.load({
             }
             return out
           }
-
+      
           // 行内解析(占位符两段式):
           // 粗体 → 图片 → 链接 → 行内代码。图片先于链接,使 [![徽章](i)](l) 外链图可用;
           // 粗体内部递归解析,粗体套链接/链接套图片均正常。
@@ -1302,7 +1302,7 @@ window.__ModuleLoader__.load({
             })
             return restoreInline(s, tokens)
           }
-
+      
           // 块级解析:围栏代码块 / 标题 / 列表 / 段落(不追求完整 markdown,够读 README 即可)
           function renderReadme(text, base) {
             const lines = String(text).split('\n')
@@ -1383,14 +1383,14 @@ window.__ModuleLoader__.load({
             flushPara()
             return out
           }
-
+      
           function FeaturedModal(props) {
             const e = props.entry
             const t = props.t
             const onClose = props.onClose
             const pair = React.useState({ status: 'loading', kids: [] })
             const state = pair[0], setState = pair[1]
-
+      
             React.useEffect(() => {
               let alive = true
               setState({ status: 'loading', kids: [] })
@@ -1411,13 +1411,13 @@ window.__ModuleLoader__.load({
               })
               return () => { alive = false }
             }, [e.package])
-
+      
             React.useEffect(() => {
               const onKey = (ev) => { if (ev.key === 'Escape') onClose() }
               window.addEventListener('keydown', onKey)
               return () => window.removeEventListener('keydown', onKey)
             }, [onClose])
-
+      
             const metaParts = []
             if (e.version) metaParts.push(`v${e.version}`)
             return h('div', {
@@ -1440,19 +1440,19 @@ window.__ModuleLoader__.load({
                 h('div', { style: Object.assign({}, S.panelMeta, { justifyContent: 'flex-end', paddingTop: 10 }) },
                   h('button', { type: 'button', style: S.retryBtn, onClick: onClose }, t('close')))))
           }
-
+      
           function FeaturedSection(props) {
             const install = props.install
             void props.openPackage // 详情改为自建弹窗,不再调官方 openPackage
             const t = props.t
-
+      
             const pair = React.useState({ status: 'loading', entries: [], installed: {} })
             const state = pair[0], setState = pair[1]
             const noncePair = React.useState(0)
             const nonce = noncePair[0], setNonce = noncePair[1]
             const detailPair = React.useState(null)
             const detail = detailPair[0], setDetail = detailPair[1]
-
+      
             React.useEffect(() => {
               let alive = true
               setState({ status: 'loading', entries: [], installed: {} })
@@ -1471,10 +1471,10 @@ window.__ModuleLoader__.load({
               })
               return () => { alive = false }
             }, [nonce])
-
+      
             // tab 标签已表达板块名,不再渲染顶部标题/副标题
             const kids = []
-
+      
             if (state.status === 'loading') {
               kids.push(h('p', { key: 'note', style: S.note }, t('loading')))
             } else if (state.status === 'error') {
@@ -1490,7 +1490,7 @@ window.__ModuleLoader__.load({
             return h('div', { style: S.wrap }, kids,
               detail ? h(FeaturedModal, { key: detail.package, entry: detail, t, onClose: () => setDetail(null) }) : null)
           }
-
+      
           // 导出:接入插件 apply 末尾调用 window.__DSH_FEATURED_INIT__(ctx)。
           // 判重用 window 标志,确保多插件接入只注册一块(最先调用者生效)。
           function initFeatured(ctx) {
@@ -1499,9 +1499,9 @@ window.__ModuleLoader__.load({
             if (typeof window !== 'undefined') window.__DSH_FEATURED_APPLIED__ = true
             try {
             ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-plugins-plugin: locale')
-
+      
             const t = ctx.locale.bind(NS)
-
+      
             ctx.slots.inject('plugins.tab', () => ctx.slots.register({
               name: 'plugins.tab',
               id: 'dsh-plugins-plugin',
@@ -1513,7 +1513,7 @@ window.__ModuleLoader__.load({
               if (typeof window !== 'undefined') window.__FEATURED_ERR__ = String(e && (e.stack || e.message || e))
             }
           }
-
+      
           window.__DSH_FEATURED_INIT__ = initFeatured
   } catch (error) {
     // 内联模块自身故障不能拖垮接入插件:记录原因,由 apply 处的调用方检查标志位。

@@ -77,6 +77,6 @@
   },
   "bugs": "https://github.com/skillpie/dsh-plugins/issues",
   "dependencies": {
-    "dsh-plugins-plugin": "0.2.0"
+    "dsh-plugins-plugin": "^0.2.0"
   }
 }

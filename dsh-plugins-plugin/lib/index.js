@@ -110,25 +110,37 @@ export default {
     const REMOTE_TTL_MS = 5 * 60_000
     let remoteCache = { at: 0, doc: null }
 
+    // 多源并发拉取,取 updated 最新的那份。单源「先到先用」会被 CDN 缓存坑:
+    // jsdelivr 的 @main 有数分钟到数小时的延迟,raw.githubusercontent 通常更快,
+    // 谁先返回就用谁会让旧数据长期遮住新数据。
+    const catalogStamp = (doc) => {
+      const t = Date.parse(String(doc?.updated || ''))
+      return Number.isFinite(t) ? t : 0
+    }
+
     async function fetchRemoteCatalog() {
       const now = Date.now()
       if (remoteCache.doc && now - remoteCache.at < REMOTE_TTL_MS) return remoteCache.doc
-      for (const url of REMOTE_CATALOG_URLS) {
-        try {
-          const res = await fetch(url, {
-            headers: { accept: 'application/json' },
-            signal: AbortSignal.timeout(8000),
-            cache: 'no-store',
-          })
-          if (!res.ok) throw new Error('HTTP ' + res.status)
-          const doc = await res.json()
-          if (Array.isArray(doc?.entries)) {
-            remoteCache = { at: now, doc }
-            return doc
-          }
-        } catch { /* 尝试下一源 */ }
-      }
-      return null
+      const results = await Promise.all(
+        REMOTE_CATALOG_URLS.map(async (url) => {
+          try {
+            const res = await fetch(url, {
+              headers: { accept: 'application/json' },
+              signal: AbortSignal.timeout(8000),
+              cache: 'no-store',
+            })
+            if (!res.ok) return null
+            const doc = await res.json()
+            return Array.isArray(doc?.entries) ? doc : null
+          } catch { return null }
+        }),
+      )
+      const docs = results.filter(Boolean)
+      if (docs.length === 0) return null
+      // 更新日期相同时,按源顺序(jsdelivr 在前)兜底。
+      const best = docs.reduce((a, b) => (catalogStamp(b) >= catalogStamp(a) ? b : a))
+      remoteCache = { at: now, doc: best }
+      return best
     }
 
     // ── 聚合路由(只读) ──
