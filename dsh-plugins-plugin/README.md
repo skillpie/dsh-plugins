@@ -25,6 +25,35 @@ sh integrate.sh --list-targets   # 列出工作区已接入/未接入的插件,�
 sh integrate.sh --all            # 重跑工作区所有「已接入」插件,同步最新代码
 ```
 
+## 收录一个插件(两种方式,选一种)
+
+### 方式一:只在精选板块出现,不需要接入(推荐给第三方插件)
+
+编辑 `plugins.json`,在 `entries` 里加一条即可,**第三方插件本身什么都不用改**:
+
+```json
+{
+  "package": "billion-context",
+  "title": "上下文压缩",
+  "description": "上下文压缩插件:小窗口(100K 上下文足矣)也能跑长任务,省 5 倍 token。",
+  "tags": ["上下文压缩", "省 token"]
+}
+```
+
+必填只有 `package`(npm 包名)和 `title`;`version`/`icon`/`homepage` 都可以不写。提交后运行一次 `node scripts/enrich.mjs`,脚本会自动补齐:
+
+- **版本号** — 查 npm(镜像与官方源都查,取更高版本),之后每次发版由 `publish_npm.sh` 与 Actions 自动刷新;
+- stars、月下载量、英文简介、分类、截图 — join awesome-dsh-plugin 官方目录;
+- icon — 官方目录没有时,按 `https://cdn.jsdelivr.net/npm/<包名>/icon.svg` HEAD 探测,200 才写入(没有就不显示,不造假)。
+
+安装按钮直接拿 `version` 拼 spec(`包名@版本`),所以列表里永远装的是最新发布的版本。
+
+### 方式二:接入本包(推荐给自己的插件)
+
+跑 `sh integrate.sh --plugin=<你的插件>`,插件自己的 `apply` 里会登记一个推荐源,精选板块多一块可信来源,同时拥有 host 半的路由与聚合。
+
+**多插件同时接入只显示一块板块** — 只有最先激活的一方持有路由,其余只贡献数据。
+
 ## 升级约定(重要)
 
 本包拆成两半,**耦合深度不同**,更新后要做的操作也不同:

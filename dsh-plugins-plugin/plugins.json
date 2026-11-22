@@ -1,5 +1,5 @@
 {
-  "$comment": "精选插件列表 — dsh-plugins-plugin 在插件页自动拉取本文件展示。直接编辑提交即可,无需接入任何插件。entries 字段: package(npm 包名,必填) / title(必填) / description / version / icon(URL) / homepage / tags(≤8)。",
+  "$comment": "精选插件列表 — dsh-plugins-plugin 在插件页自动拉取本文件展示。直接编辑提交即可,无需接入任何插件。entries 字段: package(npm 包名,必填) / title(必填) / description / version / icon(URL) / homepage / tags(≤8)。 只需填 package 与 title,提交后跑 node scripts/enrich.mjs 自动补齐版本号、stars、月下载量、英文简介、分类、截图; 版本号之后由日更 Actions 与 publish_npm.sh 自动对齐 npm latest,不用手改。",
   "entries": [
     {
       "package": "dsh-tokenbank",
