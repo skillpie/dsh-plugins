@@ -1,9 +1,9 @@
-// dsh-featured 宿主半冒烟:桩 ctx + 桩 webServer + 真实 http 服务器。
+// dsh-featured 宿主半冒烟:桩 ctx + 桩 webServer + 真实 http 服务器 + 桩 skillpie 公开接口。
 // 不依赖 DSH 进程,`node test/plugin.mjs` 直接跑。
 import assert from 'node:assert/strict'
 import http from 'node:http'
 
-const { apply, ROUTE, SERVICE } = await import('../lib/index.js')
+const { apply, ROUTE } = await import('../lib/index.js')
 
 /* ── 桩:ctx / effect 作用域 ── */
 function makeCtx(services) {
@@ -46,34 +46,54 @@ const webServer = {
   },
 }
 
-/* ── 桩 fetch:远程目录 ── */
-const REMOTE_FIXTURE = {
-  updated: '2026-11-23T00:00:00Z',
-  entries: [
-    { package: 'dsh-a', title: '插件 A', version: '1.0.0', description: 'A 的说明', tags: ['效率'] },
-    { package: 'dsh-b', title: '插件 B', version: '2.0.0', tags: ['数据'] },
-    { package: 'dsh-a', title: '重复条目应被去重' },
+/* ── 桩 fetch:skillpie 公开接口 ── */
+// 列表(第一页,hasNextPage=true)+ 分类。
+const PLUGIN_PAGE_1 = {
+  plugins: [
+    { id: 'p1', name: 'dsh-a', title: '插件 A', version: '1.0.0', detail: 'A 的说明', tags: ['效率'], category: { id: 'c1', name: 'efficiency', displayName: '效率' } },
+    { id: 'p2', name: 'dsh-b', title: '插件 B', version: '2.0.0', tags: ['数据'], readme: '## B 详情' },
+  ],
+  nextCursor: 'p2',
+  hasNextPage: true,
+}
+const PLUGIN_PAGE_2 = {
+  plugins: [
+    { id: 'p2', name: 'dsh-b', title: '插件 B 重复' }, // 重复包名应去重
+    { id: 'p3', name: 'dsh-c', title: '插件 C' },
+  ],
+  nextCursor: null,
+  hasNextPage: false,
+}
+const CATEGORIES = {
+  categories: [
+    { id: 'c1', name: 'efficiency', displayName: '效率' },
+    { id: 'c2', name: 'data', displayName: '数据' },
   ],
 }
 const realFetch = globalThis.fetch
-globalThis.fetch = async (url) => {
+globalThis.fetch = async (url, opts) => {
   const u = String(url)
-  if (u.includes('plugins.json')) {
-    return new Response(JSON.stringify(REMOTE_FIXTURE), { status: 200, headers: { 'content-type': 'application/json' } })
+  if (u.includes('/api/plugin-categories')) {
+    return new Response(JSON.stringify(CATEGORIES), { status: 200, headers: { 'content-type': 'application/json' } })
   }
-  return realFetch(url)
+  if (u.includes('/api/plugins')) {
+    return u.includes('cursor=') ? __resp(PLUGIN_PAGE_2) : __resp(PLUGIN_PAGE_1)
+  }
+  return realFetch(url, opts)
+}
+function __resp(obj) {
+  return new Response(JSON.stringify(obj), { status: 200, headers: { 'content-type': 'application/json' } })
 }
 
-/* ── 1. apply 能跑通,提供 registry + 路由 ── */
-const { ctx, provided } = makeCtx({ webServer })
+/* ── 1. apply 能跑通 ── */
+const { ctx } = makeCtx({ webServer })
 apply(ctx)
 
-assert.ok(provided.has(SERVICE), '应提供 featured-plugins 服务')
 assert.equal(routes.length, 1, '应注册一条聚合路由')
 assert.equal(routes[0].path, ROUTE)
 assert.equal(routes[0].kind, 'exact')
 
-/* ── 2. 真实 http 服务器:GET 聚合结果 ── */
+/* ── 2. 真实 http 服务器:GET 聚合结果(分页拉全 + 去重) ── */
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x')
   const route = routes.find((r) => r.path === url.pathname)
@@ -88,13 +108,15 @@ const res = await fetch(base + ROUTE)
 assert.equal(res.status, 200)
 const body = await res.json()
 assert.equal(body.ok, true)
-assert.equal(body.data.entries.length, 2, '按包名去重后应有 2 条')
-assert.deepEqual(body.data.entries.map((e) => e.package), ['dsh-a', 'dsh-b'])
+assert.equal(body.data.entries.length, 3, '跨页拉全 + 按包名去重后应有 3 条')
+assert.deepEqual(body.data.entries.map((e) => e.package), ['dsh-a', 'dsh-b', 'dsh-c'])
 assert.equal(body.data.entries[0].title, '插件 A', '去重保留第一条')
-assert.ok(Array.isArray(body.data.sources))
+assert.equal(body.data.entries[0].categoryDisplayName, '效率', '分类展示名透传')
+assert.equal(body.data.entries[1].readme, '## B 详情', 'readme 内嵌返回')
+assert.equal(body.data.categories.length, 2, '分类返回')
+assert.equal(body.data.baseUrl, 'https://skillpie.cn', '默认 baseUrl')
 
 /* ── 3. 同源校验与方法限制 ── */
-// node fetch 的 Origin 是禁止头,会被静默丢弃 → 用 http.request 显式发。
 const cross = await new Promise((resolve, reject) => {
   const req = http.request(base + ROUTE, { headers: { origin: 'http://evil.example' } }, (r) => {
     r.resume()
@@ -114,30 +136,6 @@ const bad = await new Promise((resolve, reject) => {
   req.end('{}')
 })
 assert.equal(bad.status, 405, '非 GET/HEAD 应 405')
-
-/* ── 4. 登记源参与聚合(接入插件内联版登记自己的推荐) ── */
-const registry = provided.get(SERVICE)
-const unregister = registry.register({
-  id: 'dsh-some-plugin',
-  title: '某个接入插件',
-  entries: [{ package: 'dsh-local', title: '本地推荐' }],
-})
-const res2 = await fetch(base + ROUTE)
-const body2 = await res2.json()
-assert.equal(body2.data.entries.length, 3, '登记源应补充一条')
-assert.ok(body2.data.entries.some((e) => e.package === 'dsh-local'))
-assert.ok(body2.data.sources.some((s) => s.id === 'dsh-some-plugin'))
-unregister()
-
-const res3 = await fetch(base + ROUTE)
-const body3 = await res3.json()
-assert.equal(body3.data.entries.length, 2, '注销后回到远程目录的 2 条')
-
-/* ── 5. 第二个 apply 不重复提供 registry,但也能用 ── */
-const second = makeCtx({ webServer, [SERVICE]: registry })
-const before = provided.get(SERVICE)
-apply(second.ctx)
-assert.equal(provided.get(SERVICE), before, '服务已存在时应复用')
 
 server.close()
 globalThis.fetch = realFetch

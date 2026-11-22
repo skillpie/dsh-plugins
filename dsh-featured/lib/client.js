@@ -17,8 +17,8 @@ window.__ModuleLoader__.load({
 
     const NS = 'dsh-featured'
     const ROUTE = '/dsh-featured/featured'
-    // 数据统一由宿主半提供:host 拉远程集中目录(node fetch,无浏览器缓存/CORS)
-    // 并合并接入插件登记源,client 只读本地路由,永远新鲜。
+    // 数据统一由宿主半提供:host 从 skillpie 公开接口分页拉取
+    // 「插件分类 + 插件列表 + 详情(readme 内嵌)」,client 只读本地路由,永远新鲜。
 
     function fetchJson(url, timeoutMs) {
       const ctrl = typeof AbortController === 'function' ? new AbortController() : null
@@ -42,19 +42,18 @@ window.__ModuleLoader__.load({
         .finally(() => clearTimeout(timer))
     }
 
-    // 远程条目规范化(与 host 半 normalizeEntry 对齐的宽松版)。
-    // 富字段(author/stars/downloads/screenshots 等)由 scripts/enrich.mjs
-    // 在构建期从 awesome-dsh-plugin 官方目录 join 进来,这里原样放行。
+    // 远程条目规范化(与 host 半 toEntry 对齐的宽松版)。
+    // readme/detail/screenshots 等富字段已由 skillpie 数据库随列表返回,这里原样放行。
     function normalizeRemoteEntry(raw) {
       if (!raw || typeof raw !== 'object') return null
       const pkg = String(raw.package || raw.name || '').trim()
       const title = String(raw.title || '').trim()
       if (!pkg || !title) return null
-      const entry = { package: pkg, title, source: 'plugins.json' }
-      for (const key of ['description', 'version', 'icon', 'homepage', 'author', 'category']) {
-        const v = String(raw[key] || '').trim()
-        if (v) entry[key] = v
+      const entry = { package: pkg, title, source: 'skillpie' }
+      for (const key of ['detail', 'description', 'version', 'spec', 'icon', 'homepage', 'author', 'category', 'categoryDisplayName', 'readme']) {
+        if (raw[key] != null && raw[key] !== '') entry[key] = raw[key]
       }
+      if (raw.categoryId) entry.categoryId = raw.categoryId
       if (Array.isArray(raw.screenshots)) {
         const shots = raw.screenshots.map((x) => String(x).trim()).filter(Boolean).slice(0, 2)
         if (shots.length) entry.screenshots = shots
@@ -419,7 +418,7 @@ window.__ModuleLoader__.load({
                 onClick, disabled: busy,
               }, btnLabel)),
         h(FeaturedAuthor, { pkg: e.package, meta: metaText, onDetail }),
-        e.description ? h('p', { style: S.desc, onClick: onDetail }, e.description) : null,
+        (e.detail || e.description) ? h('p', { style: S.desc, onClick: onDetail }, e.detail || e.description) : null,
         h(ReadmeShots, { entry: e, onOpen: onShots }),
         h('div', { style: S.foot },
           h('div', { style: S.chips },
@@ -567,6 +566,12 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         let alive = true
         setState({ status: 'loading', kids: [] })
+        // 优先用 skillpie 数据库内嵌的 readme(列表已随行返回,零额外请求);
+        // 缺失时回退 jsdelivr npm 包 README。
+        if (e.readme && String(e.readme).trim()) {
+          setState({ status: 'ready', kids: renderReadme(String(e.readme).trim(), readmeBase(e)) })
+          return undefined
+        }
         const base = `https://cdn.jsdelivr.net/npm/${e.package}/`
         fetchText(base + 'README.md', 10000).then((txt) => {
           if (!alive) return
@@ -605,7 +610,7 @@ window.__ModuleLoader__.load({
               h('span', { style: S.panelPkg }, e.package)),
             h('button', { type: 'button', style: S.panelClose, onClick: onClose }, '✕')),
           metaParts.length ? h('div', { style: S.panelMeta }, metaParts.join(' · ')) : null,
-          e.description ? h('p', { style: S.panelDesc }, e.description) : null,
+          (e.detail || e.description) ? h('p', { style: S.panelDesc }, e.detail || e.description) : null,
           h('div', { style: S.panelBody },
             state.status === 'loading' ? h('p', { style: S.mdNote }, t('readmeLoading')) : null,
             state.status === 'error' ? h('p', { style: S.mdNote }, t('readmeError')) : null,
@@ -664,7 +669,7 @@ window.__ModuleLoader__.load({
       void props.openPackage
       const t = props.t
 
-      const pair = React.useState({ status: 'loading', entries: [], installed: {} })
+      const pair = React.useState({ status: 'loading', entries: [], installed: {}, categories: [] })
       const state = pair[0], setState = pair[1]
       const noncePair = React.useState(0)
       const nonce = noncePair[0], setNonce = noncePair[1]
@@ -674,14 +679,14 @@ window.__ModuleLoader__.load({
       const applyOpen = applyPair[0], setApplyOpen = applyPair[1]
       const queryPair = React.useState('')
       const query = queryPair[0], setQuery = queryPair[1]
-      const tagPair = React.useState('')
-      const activeTag = tagPair[0], setActiveTag = tagPair[1]
+      const catPair = React.useState('')
+      const activeCat = catPair[0], setActiveCat = catPair[1]
       const viewerPair = React.useState(null)
       const viewer = viewerPair[0], setViewer = viewerPair[1]
 
       React.useEffect(() => {
         let alive = true
-        setState({ status: 'loading', entries: [], installed: {} })
+        setState({ status: 'loading', entries: [], installed: {}, categories: [] })
         fetchJson(ROUTE, 8000).then((body) => {
           if (!alive) return
           const entries = body && body.ok && body.data && Array.isArray(body.data.entries)
@@ -694,9 +699,12 @@ window.__ModuleLoader__.load({
           const installed = body && body.ok && body.data && body.data.installed && typeof body.data.installed === 'object'
             ? body.data.installed
             : {}
-          setState({ status: entries.length ? 'ready' : 'empty', entries, installed })
+          const categories = body && body.ok && body.data && Array.isArray(body.data.categories)
+            ? body.data.categories
+            : []
+          setState({ status: entries.length ? 'ready' : 'empty', entries, installed, categories })
         }).catch(() => {
-          if (alive) setState({ status: 'error', entries: [], installed: {} })
+          if (alive) setState({ status: 'error', entries: [], installed: {}, categories: [] })
         })
         return () => { alive = false }
       }, [nonce])
@@ -710,16 +718,16 @@ window.__ModuleLoader__.load({
         return set.slice(0, 12)
       }, [state.entries])
 
-      // 过滤:搜索 + 标签
+      // 过滤:搜索 + 分类 + 标签
       const visible = React.useMemo(() => {
         const q = query.trim().toLowerCase()
         return state.entries.filter((e) => {
-          if (activeTag && !(e.tags || []).includes(activeTag)) return false
+          if (activeCat && e.categoryId !== activeCat && e.category !== activeCat) return false
           if (!q) return true
-          const hay = [e.title, e.package, e.description, (e.tags || []).join(' ')].join(' ').toLowerCase()
+          const hay = [e.title, e.package, e.detail, e.description, (e.tags || []).join(' ')].join(' ').toLowerCase()
           return hay.includes(q)
         })
-      }, [state.entries, query, activeTag])
+      }, [state.entries, query, activeCat])
 
       const kids = []
 
@@ -739,16 +747,25 @@ window.__ModuleLoader__.load({
           }),
           h('span', { style: S.count }, t('count')(visible.length)),
           h('button', { key: 'apply', type: 'button', style: S.applyBtn, onClick: () => setApplyOpen(true) }, t('apply'))))
-        // 标签筛选
+        // 标签筛选(分类优先,其次标签)
+        if (state.categories.length) {
+          kids.push(h('div', { key: 'cats', style: S.tabBar },
+            h('button', {
+              type: 'button', style: activeCat ? S.tabBtn : S.tabBtnActive,
+              onClick: () => setActiveCat(''),
+            }, t('allTags')),
+            state.categories.map((c) => h('button', {
+              key: c.id, type: 'button',
+              style: (activeCat === c.id || activeCat === c.name) ? S.tabBtnActive : S.tabBtn,
+              onClick: () => setActiveCat(activeCat === c.id ? '' : c.id),
+              title: c.name,
+            }, c.displayName))))
+        }
         if (tags.length) {
           kids.push(h('div', { key: 'tags', style: S.tabBar },
-            h('button', {
-              type: 'button', style: activeTag ? S.tabBtn : S.tabBtnActive,
-              onClick: () => setActiveTag(''),
-            }, t('allTags')),
             tags.map((tg) => h('button', {
-              key: tg, type: 'button', style: activeTag === tg ? S.tabBtnActive : S.tabBtn,
-              onClick: () => setActiveTag(activeTag === tg ? '' : tg),
+              key: tg, type: 'button', style: activeCat === tg ? S.tabBtnActive : S.tabBtn,
+              onClick: () => setActiveCat(activeCat === tg ? '' : tg),
             }, tg))))
         }
         if (visible.length) {
