@@ -120,7 +120,7 @@
       "package": "dsh-gitx",
       "title": "代码版本管理",
       "description": "Git 工作台:changelist、暂存、历史、分支一站式管理。",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "tags": [
         "Git"
       ],
@@ -145,7 +145,7 @@
       "package": "dsh-webkit",
       "title": "网页工具箱",
       "description": "右侧栏浏览器工具箱:元素拾取器 + 自由尺寸视口。",
-      "version": "1.6.1",
+      "version": "1.6.2",
       "tags": [
         "浏览器",
         "调试"
