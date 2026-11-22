@@ -379,9 +379,9 @@ async function dispatch(ctx, state, cfg, body) {
     }
     case 'wordcoin-buy': {
       const identity = await requireLive()
-      const amount = Math.floor(Number(body.amountNanoUSD) || 0)
-      if (!(amount > 0)) throw new PortalError('amount must be positive')
-      return { ok: true, result: await tb.wordcoinBuy(baseUrl, identity.sessionToken, amount) }
+      const lots = Math.floor(Number(body.lots) || 0)
+      if (!(lots > 0)) throw new PortalError('lots must be positive')
+      return { ok: true, result: await tb.wordcoinBuy(baseUrl, identity.sessionToken, lots) }
     }
     case 'wordcoin-sell': {
       const identity = await requireLive()
@@ -624,7 +624,12 @@ export default {
           try {
             send(200, await dispatch(ctx, state, cfg, body))
           } catch (error) {
-            send(200, { ok: false, error: error?.message ?? String(error) })
+            // 门户的业务拒绝原因（熔断器/门禁）在 error.data 里，一并回传给客户端，
+            // 否则用户只能看到一句 "Access is forbidden"。
+            const detail = error?.data && typeof error.data === 'object'
+              ? ' (' + Object.entries(error.data).map(([key, value]) => key + '=' + value).join(', ') + ')'
+              : ''
+            send(200, { ok: false, error: (error?.message ?? String(error)) + detail, data: error?.data })
           }
         },
       }), 'dsh-tokenbank: http api')

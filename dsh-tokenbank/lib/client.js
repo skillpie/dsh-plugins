@@ -136,10 +136,16 @@ window.__ModuleLoader__.load({
       modelListCount: '已接入 {n} 个模型',
       trade: '交易',
       buy: '买入',
-      tradingTitle: '交易 · 百万词元（TM）',
-      tradingIntro: '按市价买入百万词元（TM），按最新快照市价卖出换回美元。',
+      tradingTitle: '交易 · 百万词元（MT）',
+      tradingIntro: '1 手 = $1 面值，按当前价折算获得词元（MT）；卖出按 MT 数量、以最新快照市价折回美元。',
       priceNow: '当前价格',
-      perMillion: 'TK',
+      perMillion: '$/MT',
+      nowPrice: '当前价',
+      sellLabel: '卖出数量（MT）',
+      sellAmountHint: '当前持仓 {max} MT；按卖出时市价折回美元',
+      sellPlaceholder: '如 1000',
+      colFee: '手续费',
+      marketPriceBreakdown: '当前价',
       vsOpen: '较4小时前',
       todayOpen: '4小时前',
       todayHigh: '4小时高',
@@ -153,7 +159,7 @@ window.__ModuleLoader__.load({
       sell: '卖出',
       tradeRecords: '交易记录',
       marketTitle: '实时行情',
-      priceFormula: '价格公示：当前价 = 1000 × 最近快照Token成本 ÷ 校准基准Token成本；Token成本 = 全部计价请求费用 ÷ Token 总量，校准基准为开盘校准值，每分钟刷新行情。',
+      priceFormula: '价格公示：当前价 ≈ 美元/百万词元（$/MT），数值越大 = 词元越值钱。当前价 = 1000 × 最近快照Token成本 ÷ 校准基准Token成本；Token成本 = 全部计价请求费用 ÷ Token 总量，校准基准为开盘校准值，每分钟刷新行情。',
       k5min: '5 分钟蜡烛',
       ma30m: '30 分钟线',
       ma1h: '小时线',
@@ -161,17 +167,20 @@ window.__ModuleLoader__.load({
       buyLots: '买入手数（1 手 = 1000 词元）',
       sellLots: '卖出手数（1 手 = 1000 词元）',
       quickMax: '最大',
-      maxBuyLots: '本次最多可买 {n} 手',
+      maxBuyLots: '每手 $1 面值，本次最多可买 {n} 手',
       maxSellLots: '最多可卖 {n} 手',
-      sellEstimate: '毛额 {g} · 手续费(2%) {f} · 预计到账 {n}',
-      lotLabel: '买入手数（1 手 = 1,000 TK）',
+      sellEstimate: '毛额 {g} · 手续费 {f} · 预计到账 {n}',
+      lotLabel: '买入手数（1 手 = $1 面值）',
       lots: '手',
       avgLine: '均价',
       buyPriceLine: '买入',
-      perLotPrice: '每手价',
-      totalAmount: '总金额',
+      perLotPrice: '每手获得',
+      totalAmount: '总金额（手数 × $1）',
       gainTokens: '获得词元',
-      lotInvalid: '请输入 1 以上的整数手数',
+      lotInvalid: '请输入 1 以上的整数手数。',
+      quickAll: '全部',
+      sellMin: '单笔卖出不低于 0.001 MT。',
+      sellMax: '当前最多可卖 {max} MT。',
       buySubmit: '市价买入',
       sellSubmit: '市价卖出',
       buyDone: '买入成功',
@@ -180,9 +189,9 @@ window.__ModuleLoader__.load({
       sellFail: '卖出失败',
       colTime: '时间',
       colType: '类型',
-      colAmount: '词元数额',
-      colUsd: '美元',
-      colPrice: '成交价',
+      colAmount: '交易词元',
+      colUsd: '交易金额',
+      colPrice: '单价（$/MT）',
       colPnl: '盈亏',
       typeBuy: '买入',
       typeSell: '卖出',
@@ -301,10 +310,16 @@ window.__ModuleLoader__.load({
       modelListCount: '{n} models linked',
       trade: 'Trade',
       buy: 'Buy',
-      tradingTitle: 'Trade · Million-token (TM)',
-      tradingIntro: 'Buy million-token (TM) at market price, sell back to USD at the latest snapshot price.',
+      tradingTitle: 'Trade · Million-token (MT)',
+      tradingIntro: '1 lot = $1 face, credited as tokens (MT) at the current price; sell any MT amount back to USD at the latest snapshot price.',
       priceNow: 'Current price',
-      perMillion: 'TK',
+      perMillion: '$/MT',
+      nowPrice: 'Current price',
+      sellLabel: 'Amount to sell (MT)',
+      sellAmountHint: 'Holdings {max} MT; converts to USD at the sell-time price',
+      sellPlaceholder: 'e.g. 1000',
+      colFee: 'Fee',
+      marketPriceBreakdown: 'Current price',
       vsOpen: 'vs. 4h ago',
       todayOpen: '4h ago',
       todayHigh: '4h high',
@@ -318,25 +333,28 @@ window.__ModuleLoader__.load({
       sell: 'Sell',
       tradeRecords: 'Records',
       marketTitle: 'Live market',
-      priceFormula: 'Formula: price = 1000 × latest-snapshot token cost ÷ calibration-baseline token cost; token cost = all priced request fees ÷ total tokens. Baseline fixed at open; market refreshes every minute.',
+      priceFormula: 'Price board: current ≈ USD per million tokens ($/MT); higher = tokens worth more. Current = 1000 × latest-snapshot token cost ÷ calibration-baseline token cost; token cost = all priced request fees ÷ total tokens. Baseline fixed at open; market refreshes every minute.',
       k5min: '5-min candles',
       ma30m: '30-min MA',
       ma1h: '1-h MA',
       ma4h: '4-h MA',
       buyLots: 'Buy lots (1 lot = 1,000 tokens)',
-      sellLots: 'Sell lots (1 lot = 1,000 tokens)',
+      sellLots: 'Sell MT amount',
       quickMax: 'Max',
-      maxBuyLots: 'Up to {n} lots per order',
+      maxBuyLots: '$1 face per lot; up to {n} lots per order',
       maxSellLots: 'Up to {n} lots',
-      sellEstimate: 'Gross {g} · fee (2%) {f} · net ≈ {n}',
-      lotLabel: 'Buy lots (1 lot = 1,000 TK)',
+      sellEstimate: 'Gross {g} · fee {f} · net ≈ {n}',
+      lotLabel: 'Lots to buy (1 lot = $1 face)',
       lots: 'lots',
       avgLine: 'Avg',
       buyPriceLine: 'Avg buy',
-      perLotPrice: 'Per lot',
-      totalAmount: 'Total',
+      perLotPrice: 'Per-lot tokens',
+      totalAmount: 'Total (lots × $1)',
       gainTokens: 'You get',
-      lotInvalid: 'Enter a whole number of lots ≥ 1',
+      lotInvalid: 'Enter a whole number of lots ≥ 1.',
+      quickAll: 'All',
+      sellMin: 'Each sell must be at least 0.001 MT.',
+      sellMax: 'You can sell up to {max} MT.',
       buySubmit: 'Market buy',
       sellSubmit: 'Market sell',
       buyDone: 'Buy order filled',
@@ -345,9 +363,9 @@ window.__ModuleLoader__.load({
       sellFail: 'Sell failed',
       colTime: 'Time',
       colType: 'Type',
-      colAmount: 'Tokens',
-      colUsd: 'USD',
-      colPrice: 'Price',
+      colAmount: 'Traded tokens',
+      colUsd: 'Trade amount',
+      colPrice: 'Price ($/MT)',
       colPnl: 'PnL',
       typeBuy: 'Buy',
       typeSell: 'Sell',
@@ -1057,8 +1075,12 @@ window.__ModuleLoader__.load({
 
     /* ── 百万词元(TM)交易弹窗(参考 token-bank PortalWordCoinView) ────────── */
 
-    var TRADE_LOT_NANO_WC = 1e12       // 1 手 = 1000 词元
-    var TRADE_SELL_FEE = 0.02          // 卖出手续费估算 2%
+    // $1 面值体系（与官网 PortalWordCoinView 同口径）：1 手 = $1，
+    // 买入手数 × 当前价 = 获得 MT；卖出按 MT 数量、扣后端实收费率。
+    var TRADE_NANO_USD_PER_LOT = 1e9   // 1 手 = $1 面值
+    var TRADE_SELL_FEE_MICROS = 20000  // 卖出手续费兜底估算（2%），实际以后端 fee_micros 为准
+    var TRADE_UNIT = 'MT'              // 展示单位（百万词元）
+    var MIN_SELL_NANO_WC = 1e6         // 后端 MinSellNanoWC（0.001 MT）
     var TRADE_CHART_CANDLES = 48       // K线固定最近 4 小时 = 48 根 5 分钟蜡烛(240 根 1 分钟桶)
     // 活性抖动:让报价看起来"有人在做市"。锚定最后一根蜡烛收盘价,
     // 每 1~10s 在 ±1.5% 内均匀随机移动,并夹进最近 5 根蜡烛的 hi/lo 区间;
@@ -1066,11 +1088,27 @@ window.__ModuleLoader__.load({
     var TRADE_JITTER_MIN_DELAY_MS = 1000
     var TRADE_JITTER_MAX_DELAY_MS = 10000
     var TRADE_JITTER_MAX_BAND = 0.015
-    // 定点口径:1 TK = 1e9 nanoWC、1 USD = 1e9 nanoUSD;quote_micros = 每 1 美元的词元数×1e9,
-    // $/百万词元 = 1e12 ÷ quote_micros(词元/美元报价取倒数)。
+    // 定点口径:1 MT = 1e9 nanoWC、1 USD = 1e9 nanoUSD;quote_micros = 词元/美元 ×1e6,
+    // 展示价 $/MT = 1e12 ÷ quote_micros(正值,数值越大=词元越值钱)。
     function tradeFmt(n, d) { return (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }) }
-    function tradeTk(nanoWc) { return tradeFmt((Number(nanoWc) || 0) / 1e9, 2) }
+    function tradeMt(nanoWc) { return tradeFmt((Number(nanoWc) || 0) / 1e9, 2) }
     function tradeUsd(nanoUsd, d) { return '$' + tradeFmt((Number(nanoUsd) || 0) / 1e9, d == null ? 2 : d) }
+    /** nanoUSD → 6 位小数美元（手续费/盈亏列用，与官网 formatNanoUSD6 一致）。 */
+    function tradeUsd6(nanoUsd) {
+      var v = (Number(nanoUsd) || 0) / 1e9
+      var sign = v < 0 ? '-' : ''
+      return sign + '$' + tradeFmt(Math.abs(v), 6)
+    }
+    /** 报价定点 → $/MT 数值（1e12 ÷ quote_micros），quote<=0 返回 null。 */
+    function tradePx(quoteMicros) {
+      var q = Number(quoteMicros) || 0
+      return q > 0 ? 1e12 / q : null
+    }
+    /** nanoUSD/MT 定点 → $/MT 数值（÷1e3）。 */
+    function tradeAvgPx(nanoUsdPerWc) {
+      var v = Number(nanoUsdPerWc) || 0
+      return v > 0 ? v / 1e3 : null
+    }
     function tradeHhmm(ms) { var dt = new Date(Number(ms) || 0); return ('0' + dt.getHours()).slice(-2) + ':' + ('0' + dt.getMinutes()).slice(-2) }
 
     /** 1 分钟快照 → 5 分钟蜡烛 + 6/12/48 根一组均线(close 均值,画组内中位序号)。 */
@@ -1193,19 +1231,19 @@ window.__ModuleLoader__.load({
       if (cur != null && cur > 0) {
         var cy = y(cur)
         parts.push(h('line', { key: 'curl', x1: padL, x2: W - padR + 4, y1: cy, y2: cy, stroke: '#ff4f1f', 'stroke-width': 1.2, 'stroke-dasharray': '5 4' }))
-        parts.push(h('text', { key: 'curt', x: W - padR + 8, y: cy + 4, 'font-size': 12, fill: '#ff4f1f' }, tradeFmt(cur, 1)))
+        parts.push(h('text', { key: 'curt', x: W - padR + 8, y: cy + 4, 'font-size': 12, fill: '#ff4f1f' }, tradeFmt(cur, 2)))
       }
       // 买入价线(蓝)
       if (avgBuy != null && avgBuy > 0) {
         var by = y(avgBuy)
         parts.push(h('line', { key: 'buyline', x1: padL, x2: W - padR, y1: by, y2: by, stroke: '#3b82f6', 'stroke-width': 1, 'stroke-dasharray': '6 4' }))
-        parts.push(h('text', { key: 'buylinet', x: padL + 4, y: by + 14, 'font-size': 11, fill: '#3b82f6' }, pageT('buyPriceLine') + ' ' + tradeFmt(avgBuy, 1)))
+        parts.push(h('text', { key: 'buylinet', x: padL + 4, y: by + 14, 'font-size': 11, fill: '#3b82f6' }, pageT('buyPriceLine') + ' ' + tradeFmt(avgBuy, 2)))
       }
       // 均价中线(灰)
       if (avg > 0) {
         var ay = y(avg)
         parts.push(h('line', { key: 'avgl', x1: padL, x2: W - padR, y1: ay, y2: ay, stroke: 'var(--dsw-alias-label-secondary, #9ca3af)', 'stroke-width': 1, 'stroke-dasharray': '2 3' }))
-        parts.push(h('text', { key: 'avgt', x: padL + 4, y: ay - 4, 'font-size': 11, fill: 'var(--dsw-alias-label-secondary, #9ca3af)' }, pageT('avgLine') + ' ' + tradeFmt(avg, 1)))
+        parts.push(h('text', { key: 'avgt', x: padL + 4, y: ay - 4, 'font-size': 11, fill: 'var(--dsw-alias-label-secondary, #9ca3af)' }, pageT('avgLine') + ' ' + tradeFmt(avg, 2)))
       }
       // x 轴整点刻度(每小时一根,参考官网;刻度自轴线向上突出)
       var seenHours = {}
@@ -1246,26 +1284,27 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 买入:整手数市价买入,金额 = 手数 × 1000 词元 × 现价。 */
+    /** 买入:$1 面值手数市价买入,金额 = 手数 × $1,获得词元 = 手数 × 当前价(MT)。 */
     function TradeBuyPanel(props) {
       var market = props.market, account = props.account
       var lots = React.useState('1')
       var busy = React.useState(false)
       var err = React.useState('')
-      var priceNano = market && Number(market.price_nano_usd_per_wc)
-      var perLotNanoUsd = priceNano > 0 ? TRADE_LOT_NANO_WC * priceNano / 1e9 : 0
+      var quote = market ? Number(market.quote_micros) || 0 : 0
+      var price = tradePx(quote) // $/MT
+      var perLotMt = quote > 0 ? quote * 1000 : 0 // 每手获得 nanoWC = quote×1000
       var usdBalance = Number(props.usdBalance) || 0
       var maxBuy = account && account.limits && Number(account.limits.max_buy_nano_usd) || Infinity
-      var maxLots = perLotNanoUsd > 0 && isFinite(maxBuy)
-        ? Math.floor(Math.min(maxBuy, usdBalance > 0 ? usdBalance : Infinity) / perLotNanoUsd)
-        : 0
+      var capUsd = Math.min(isFinite(maxBuy) ? maxBuy : Infinity, usdBalance > 0 ? usdBalance : Infinity)
+      var maxLots = isFinite(capUsd) ? Math.floor(capUsd / TRADE_NANO_USD_PER_LOT) : 0
       var lotsInt = Math.floor(Number(lots[0]) || 0)
-      var costUsd = lotsInt > 0 && perLotNanoUsd > 0 ? lotsInt * perLotNanoUsd / 1e9 : null
+      var costUsd = lotsInt > 0 ? lotsInt * TRADE_NANO_USD_PER_LOT : null
+      var gainMt = lotsInt > 0 && perLotMt > 0 ? lotsInt * perLotMt : null
       var submit = async function () {
-        if (!(lotsInt >= 1) || perLotNanoUsd <= 0) { err[1](pageT('lotInvalid')); return }
+        if (!(lotsInt >= 1)) { err[1](pageT('lotInvalid')); return }
         busy[1](true); err[1]('')
         try {
-          await api('wordcoin-buy', { amountNanoUSD: lotsInt * perLotNanoUsd })
+          await api('wordcoin-buy', { lots: lotsInt })
           busy[1](false)
           tbStore.set({ notify: { kind: 'success', title: pageT('buyDone'), detail: '' } })
           props.onDone()
@@ -1276,7 +1315,7 @@ window.__ModuleLoader__.load({
       }
       return h(TradeSubModal, { title: pageT('trade') + ' · ' + pageT('buySubmit'), onClose: props.onClose },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          h('div', { style: { fontSize: 13 } }, (market && market.price_nano_usd_per_wc > 0) ? tradeFmt(1e12 / Number(market.quote_micros), 1) + ' ' + pageT('perMillion') : '—'),
+          h('div', { style: { fontSize: 13 } }, price != null ? pageT('nowPrice') + ' ' + tradeFmt(price, 2) + ' $/' + TRADE_UNIT : '—'),
           maxLots > 0 ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('maxBuyLots').replace('{n}', tradeFmt(maxLots))) : null,
           h('div', { style: { fontSize: 13, fontWeight: 600 } }, pageT('lotLabel')),
           h('input', {
@@ -1299,14 +1338,14 @@ window.__ModuleLoader__.load({
           ),
           costUsd != null ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
             h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-              h('span', null, pageT('perLotPrice')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeUsd(perLotNanoUsd))),
+              h('span', null, pageT('perLotPrice')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, perLotMt > 0 ? tradeFmt(perLotMt / 1e9, 2) + ' ' + TRADE_UNIT : '—')),
             h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-              h('span', null, pageT('totalAmount')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeUsd(costUsd * 1e9))),
+              h('span', null, pageT('totalAmount')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeUsd(costUsd))),
             h('div', { style: { display: 'flex', justifyContent: 'space-between', color: 'var(--dsw-alias-label-primary, #333)', fontWeight: 700 } },
-              h('span', null, pageT('gainTokens')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeTk(lotsInt * TRADE_LOT_NANO_WC) + ' TK (' + tradeFmt(lotsInt) + ' ' + pageT('lots') + ')'))) : null,
+              h('span', null, pageT('gainTokens')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, gainMt != null ? tradeMt(gainMt) + ' ' + TRADE_UNIT + ' (' + tradeFmt(lotsInt) + ' ' + pageT('lots') + ')' : '—'))) : null,
           err[0] ? h('div', { style: errorStyle }, err[0]) : null,
           h('button', {
-            type: 'button', disabled: busy[0] || !(lotsInt >= 1) || perLotNanoUsd <= 0,
+            type: 'button', disabled: busy[0] || !(lotsInt >= 1),
             style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', width: '100%' }),
             onClick: submit,
           }, busy[0] ? '…' : pageT('buySubmit')),
@@ -1314,25 +1353,36 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 卖出:整手数市价卖出,2% 手续费估算。 */
+    /** 卖出:按 MT 数量市价卖出,手续费率取后端 fee_micros(无则兜底 2%)。 */
     function TradeSellPanel(props) {
       var market = props.market, account = props.account
-      var lots = React.useState('1')
+      var amountText = React.useState('')
       var busy = React.useState(false)
       var err = React.useState('')
-      var priceNano = market && Number(market.price_nano_usd_per_wc)
+      var quote = market ? Number(market.quote_micros) || 0 : 0
+      var price = account && Number(account.price_nano_usd_per_wc) > 0
+        ? Number(account.price_nano_usd_per_wc)
+        : (quote > 0 ? Math.floor(1e15 / quote) : 0)
+      var priceText = tradePx(quote)
+      var feeMicros = account && account.limits && Number(account.limits.sell_fee_micros) > 0
+        ? Number(account.limits.sell_fee_micros) : TRADE_SELL_FEE_MICROS
       var balanceWc = account ? Number(account.balance_nano_wc) || 0 : 0
-      var maxLots = Math.floor(balanceWc / TRADE_LOT_NANO_WC)
-      var remainder = balanceWc % TRADE_LOT_NANO_WC
-      var lotsInt = Math.floor(Number(lots[0]) || 0)
-      var gross = lotsInt > 0 && priceNano > 0 ? Math.floor(lotsInt * TRADE_LOT_NANO_WC * priceNano / 1e9) : 0
-      var fee = gross > 0 ? Math.floor(gross * TRADE_SELL_FEE) : 0
+      var amount = Math.round((Number(String(amountText[0]).trim()) || 0) * 1e9)
+      // 提示按 2 位小数展示，容差 0.01 MT；成交时钳到真实余额。
+      var over = amount - balanceWc
+      var sellError = amount > 0 && amount < MIN_SELL_NANO_WC ? pageT('sellMin')
+        : over > 1e7 ? pageT('sellMax').replace('{max}', tradeMt(balanceWc))
+        : ''
+      var sellAmount = Math.min(amount, balanceWc)
+      var gross = sellAmount > 0 && price > 0 ? Math.floor(sellAmount * price / 1e9) : 0
+      var fee = gross > 0 ? Math.floor(gross * feeMicros / 1e6) : 0
       var net = gross - fee
       var submit = async function () {
-        if (!(lotsInt >= 1)) { err[1](pageT('lotInvalid')); return }
+        if (sellError) { err[1](sellError); return }
+        if (!(sellAmount >= MIN_SELL_NANO_WC)) { err[1](pageT('sellMin')); return }
         busy[1](true); err[1]('')
         try {
-          await api('wordcoin-sell', { amountNanoWC: lotsInt * TRADE_LOT_NANO_WC })
+          await api('wordcoin-sell', { amountNanoWC: sellAmount })
           busy[1](false)
           tbStore.set({ notify: { kind: 'success', title: pageT('sellDone'), detail: '' } })
           props.onDone()
@@ -1341,35 +1391,40 @@ window.__ModuleLoader__.load({
           tbStore.set({ notify: { kind: 'error', title: pageT('sellFail'), detail: String(e.message || e) } })
         }
       }
+      var fill = function (percent) {
+        var v = percent >= 100 ? balanceWc / 1e9 : balanceWc / 1e9 * percent / 100
+        amountText[1](v.toFixed(2))
+      }
       return h(TradeSubModal, { title: pageT('trade') + ' · ' + pageT('sellSubmit'), onClose: props.onClose },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          h('div', { style: { fontSize: 13 } }, (priceNano > 0 && Number(market.quote_micros) > 0) ? tradeFmt(1e12 / Number(market.quote_micros), 1) + ' ' + pageT('perMillion') : '—'),
+          h('div', { style: { fontSize: 13 } }, priceText != null ? pageT('nowPrice') + ' ' + tradeFmt(priceText, 2) + ' $/' + TRADE_UNIT : '—'),
           h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
-            pageT('maxSellLots').replace('{n}', tradeFmt(maxLots)),
-            remainder > 0 ? ' · ' + pageT('balanceRemainder') : ''),
+            pageT('sellAmountHint').replace('{max}', tradeMt(balanceWc))),
+          h('div', { style: { fontSize: 13, fontWeight: 600 } }, pageT('sellLabel')),
           h('input', {
-            type: 'number', min: 1, step: 1, value: lots[0],
-            onChange: function (e) { lots[1](e.target.value) },
+            type: 'text', inputMode: 'decimal', placeholder: pageT('sellPlaceholder'),
+            value: amountText[0],
+            onChange: function (e) { amountText[1](e.target.value) },
             style: inputStyle,
           }),
           h('div', { style: { display: 'flex', gap: 6 } },
-            [1, 5, 10].map(function (n) {
+            [25, 50, 75].map(function (pct) {
               return h('button', {
-                key: n, type: 'button', style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26 }),
-                onClick: function () { lots[1](String(n)) },
-              }, String(n))
+                key: pct, type: 'button', style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26 }),
+                onClick: function () { fill(pct) },
+              }, pct + '%')
             }),
             h('button', {
-              type: 'button', disabled: !(maxLots >= 1),
-              style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26, opacity: maxLots >= 1 ? 1 : 0.5 }),
-              onClick: function () { lots[1](String(Math.max(1, maxLots))) },
-            }, pageT('quickMax')),
+              type: 'button', disabled: !(balanceWc > 0),
+              style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26, opacity: balanceWc > 0 ? 1 : 0.5 }),
+              onClick: function () { fill(100) },
+            }, pageT('quickAll')),
           ),
           gross > 0 ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
             pageT('sellEstimate').replace('{g}', tradeUsd(gross)).replace('{f}', tradeUsd(fee)).replace('{n}', tradeUsd(net))) : null,
-          err[0] ? h('div', { style: errorStyle }, err[0]) : null,
+          sellError ? h('div', { style: errorStyle }, sellError) : (err[0] ? h('div', { style: errorStyle }, err[0]) : null),
           h('button', {
-            type: 'button', disabled: busy[0] || !(lotsInt >= 1),
+            type: 'button', disabled: busy[0] || !!sellError || !(sellAmount >= MIN_SELL_NANO_WC),
             style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', width: '100%' }),
             onClick: submit,
           }, busy[0] ? '…' : pageT('sellSubmit')),
@@ -1398,28 +1453,29 @@ window.__ModuleLoader__.load({
           err[0] ? h('div', { style: errorStyle }, err[0]) : null,
           h('table', { style: { width: '100%', borderCollapse: 'collapse' } },
             h('thead', null, h('tr', null,
-              [pageT('colTime'), pageT('colType'), pageT('colAmount'), pageT('colUsd'), pageT('colPrice'), pageT('colPnl')].map(function (label) {
+              [pageT('colTime'), pageT('colType'), pageT('colAmount'), pageT('colUsd'), pageT('colFee'), pageT('colPrice'), pageT('colPnl')].map(function (label) {
                 return h('th', { key: label, style: Object.assign({}, cellStyle, { textAlign: 'left', color: 'var(--dsw-alias-label-secondary, #888)', fontWeight: 600 }) }, label)
               }))),
             h('tbody', null, entries.length ? entries.map(function (en) {
               var buy = en.kind === 'wc_buy'
-              var amount = (Number(en.amount_nano_wc) || 0) / 1e9
-              var price = Number(en.quote_micros) > 0 ? 1e12 / Number(en.quote_micros) : null
-              var avgBuy = props.account && Number(props.account.avg_buy_price_nano_usd_per_wc) > 0
-                ? Number(props.account.avg_buy_price_nano_usd_per_wc) / 1e3 : null
-              var pnl = !buy && price != null && avgBuy != null ? (price - avgBuy) * amount / 1e6 : null
+              var amount = Number(en.amount_nano_wc) || 0
+              var price = tradePx(en.quote_micros)
+              // 盈亏由后端回放移动加权均价得出（净得美元 − 成本），清仓后历史行依然有效。
+              var pnl = !buy && Number(en.realized_pnl_nano_usd) ? Number(en.realized_pnl_nano_usd) : null
+              var fee = Number(en.fee_nano_usd) || 0
               return h('tr', { key: en.id },
                 h('td', { style: cellStyle }, tradeHhmm(en.created_at_ms)),
                 h('td', { style: cellStyle }, buy ? pageT('typeBuy') : pageT('typeSell')),
-                // 颜色与符号跟类型走:买入绿+、卖出红−(不依赖服务端金额符号)
+                // 颜色与符号跟类型走:买入红+、卖出绿−(不依赖服务端金额符号)
                 h('td', { style: Object.assign({}, cellStyle, { color: buy ? '#d03050' : '#22a04a', fontWeight: 600 }) },
-                  (buy ? '+' : '−') + tradeFmt(Math.abs(amount), 2) + ' TK'),
-                h('td', { style: cellStyle }, en.usd_leg_nano_usd ? tradeUsd(Math.abs(Number(en.usd_leg_nano_usd))) : '—'),
-                h('td', { style: cellStyle }, price != null ? tradeFmt(price, 1) + ' TK' : '—'),
+                  (buy ? '+' : '−') + tradeMt(Math.abs(amount)) + ' ' + TRADE_UNIT),
+                h('td', { style: cellStyle }, en.usd_leg_nano_usd ? tradeUsd6(Math.abs(Number(en.usd_leg_nano_usd))) : '—'),
+                h('td', { style: cellStyle }, fee > 0 ? tradeUsd6(fee) : '—'),
+                h('td', { style: cellStyle }, price != null ? tradeFmt(price, 2) + ' $/' + TRADE_UNIT : '—'),
                 h('td', { style: Object.assign({}, cellStyle, pnl != null ? { color: pnl > 0 ? '#d03050' : pnl < 0 ? '#22a04a' : 'inherit', fontWeight: 600 } : null) },
-                  pnl != null ? (pnl > 0 ? '+' : pnl < 0 ? '−' : '') + tradeUsd(Math.abs(pnl) * 1e9) : '—'),
+                  pnl != null ? (pnl > 0 ? '+' : pnl < 0 ? '−' : '') + tradeUsd6(Math.abs(pnl)) : '—'),
               )
-            }) : h('tr', null, h('td', { style: Object.assign({}, cellStyle, { textAlign: 'center' }), colSpan: 6 }, '—'))),
+            }) : h('tr', null, h('td', { style: Object.assign({}, cellStyle, { textAlign: 'center' }), colSpan: 7 }, '—'))),
           ),
           h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 } },
             h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, page[0] + ' / ' + pages),
@@ -1498,7 +1554,7 @@ window.__ModuleLoader__.load({
       var market = data[0] && data[0].market
       var account = data[0] && data[0].account
       var quote = market ? Number(market.quote_micros) : 0
-      var curPrice = quote > 0 ? 1e12 / quote : null
+      var curPrice = tradePx(quote)
       if (curPrice != null && jitterPrice[0] != null) curPrice = jitterPrice[0]
       // 较4小时前:取 4 小时窗口内最早蜡烛的开盘价
       var chartC = buildTradeChart(market)
@@ -1515,11 +1571,12 @@ window.__ModuleLoader__.load({
       var tradingOpen = !!(account && account.limits && account.limits.trading_open) || (market && market.trading && market.trading.sample_gate_pass)
       var usdBalance = data[0] && data[0].status && data[0].status.account && Number(data[0].status.account.balance_nano_usd) || 0
       var balanceWc = account ? Number(account.balance_nano_wc) || 0 : 0
-      var pnlWc = account ? Number(account.pnl_nano_wc) || 0 : 0
+      // 盈亏按美元口径展示：市值 − 成本（与官网一致），正红负绿。
+      var pnlUsd = account ? Number(account.pnl_nano_usd) || 0 : 0
       var pnlPct = account ? Number(account.pnl_percent_micros) / 1e4 : null
-      var avgBuy = account && Number(account.avg_buy_price_nano_usd_per_wc) > 0 ? Number(account.avg_buy_price_nano_usd_per_wc) / 1e3 : null
+      var avgBuy = account ? tradeAvgPx(account.avg_buy_price_nano_usd_per_wc) : null
       var realized = account ? Number(account.realized_pnl_nano_usd) || 0 : null
-      var pnlColor = pnlWc > 0 ? '#d03050' : pnlWc < 0 ? '#22a04a' : 'var(--dsw-alias-label-secondary, #888)'
+      var pnlColor = pnlUsd > 0 ? '#d03050' : pnlUsd < 0 ? '#22a04a' : 'var(--dsw-alias-label-secondary, #888)'
       var realizedColor = realized > 0 ? '#d03050' : realized < 0 ? '#22a04a' : 'var(--dsw-alias-label-secondary, #888)'
       var statRow = function (label, value, valueStyle) {
         return h('div', { key: label, style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 } },
@@ -1556,15 +1613,15 @@ window.__ModuleLoader__.load({
             h('div', { style: tradeCard },
               h('div', { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, pageT('priceNow')),
               h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } },
-                h('span', { style: { fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? tradeFmt(curPrice, 1) : '—'),
-                h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('perMillion'))),
+                h('span', { style: { fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? tradeFmt(curPrice, 2) : '—'),
+                h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, '$/' + TRADE_UNIT)),
               h('div', { style: { fontSize: 13, marginTop: 4, color: chg == null ? 'var(--dsw-alias-label-secondary, #888)' : (up ? '#d03050' : '#22a04a'), fontWeight: 600 } },
                 chg != null ? pageT('vsOpen') + ' ' + (up ? '+' : '') + tradeFmt(chg, 2) + '%' : '—'),
               h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 12 } },
                 [ [pageT('todayOpen'), openPrice], [pageT('todayHigh'), hiPrice], [pageT('todayLow'), loPrice] ].map(function (pair) {
                   return h('div', { key: pair[0] },
                     h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 2 } }, pair[0]),
-                    h('div', { style: { fontSize: 13, fontVariantNumeric: 'tabular-nums' } }, pair[1] != null ? tradeFmt(pair[1], 1) + ' TK' : '—'))
+                    h('div', { style: { fontSize: 13, fontVariantNumeric: 'tabular-nums' } }, pair[1] != null ? tradeFmt(pair[1], 2) + ' $/' + TRADE_UNIT : '—'))
                 })),
             ),
             h('div', { style: tradeCard },
@@ -1572,10 +1629,11 @@ window.__ModuleLoader__.load({
               h('div', { style: { display: 'flex', gap: 16 } },
                 h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: 8 } },
                   h('div', { style: { fontSize: 26, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } },
-                    tradeTk(balanceWc), h('span', { style: { fontSize: 13, fontWeight: 400, marginLeft: 4, color: 'var(--dsw-alias-label-secondary, #888)' } }, 'TK')),
+                    tradeMt(balanceWc), h('span', { style: { fontSize: 13, fontWeight: 400, marginLeft: 4, color: 'var(--dsw-alias-label-secondary, #888)' } }, TRADE_UNIT)),
+                  // 与官网一致：始终带符号（零值显示 +$0.00），美元走 6 位小数避免小额盈亏被截断。
                   h('div', { style: { fontSize: 13, color: pnlColor, fontWeight: 600 } },
-                    pageT('pnl') + ' ' + (pnlWc > 0 ? '+' : pnlWc < 0 ? '−' : '') + tradeTk(Math.abs(pnlWc)) + ' TK',
-                    pnlPct != null ? ' (' + (pnlWc > 0 ? '+' : pnlWc < 0 ? '−' : '') + tradeFmt(Math.abs(pnlPct), 2) + '%)' : ''),
+                    pageT('pnl') + ' ' + (pnlUsd < 0 ? '-' : '+') + tradeUsd6(Math.abs(pnlUsd)),
+                    pnlPct != null ? ' (' + (pnlPct < 0 ? '-' : '+') + tradeFmt(Math.abs(pnlPct), 2) + '%)' : ''),
                   h('div', { style: { display: 'flex', gap: 8 } },
                     h('button', {
                       type: 'button', disabled: !tradingEnabled,
@@ -1592,10 +1650,10 @@ window.__ModuleLoader__.load({
                       onClick: function () { tbStore.set({ tradeView: 'ledger' }) },
                     }, pageT('tradeRecords')))),
                 h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 160 } },
-                  statRow(pageT('avgBuyPrice'), avgBuy != null ? tradeFmt(avgBuy, 1) + ' TK' : '—'),
-                  // 累计买卖按买入均价折算成 $;卖出$ = 卖出量成本 + 已实现盈亏
-                  statRow(pageT('totalBought'), tradeUsd((account ? Number(account.total_bought_nano_wc) || 0 : 0) / 1e9 * (avgBuy || 0) * 1e3)),
-                  statRow(pageT('totalSold'), tradeUsd((account ? Number(account.total_sold_nano_wc) || 0 : 0) / 1e9 * (avgBuy || 0) * 1e3 + (account ? Number(account.realized_pnl_nano_usd) || 0 : 0))),
+                  statRow(pageT('avgBuyPrice'), avgBuy != null ? tradeFmt(avgBuy, 2) + ' $/' + TRADE_UNIT : '—'),
+                  // 累计买卖直接用后端汇总的美元腿（同一笔买入/卖出实付实收，含手续费）
+                  statRow(pageT('totalBought'), tradeUsd(account ? Number(account.total_bought_nano_usd) || 0 : 0)),
+                  statRow(pageT('totalSold'), tradeUsd(account ? Number(account.total_sold_nano_usd) || 0 : 0)),
                   statRow(pageT('realizedPnl'), realized != null ? (realized > 0 ? '+' : realized < 0 ? '−' : '') + tradeUsd(Math.abs(realized)) : '—', { color: realizedColor })),
               ),
             ),
@@ -1606,14 +1664,14 @@ window.__ModuleLoader__.load({
             h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', lineHeight: 1.6, marginBottom: 8 } }, pageT('priceFormula')),
             loadErr[0] ? h('button', { type: 'button', style: Object.assign({}, buttonStyle, { height: 26, fontSize: 12 }), onClick: load }, pageT('loadFail')) : null,
             h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, margin: '6px 0 8px' } },
-              h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('perMillion')),
-              h('span', { style: { fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? tradeFmt(curPrice, 1) : '—'),
+              h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('marketPriceBreakdown') + ' $/' + TRADE_UNIT),
+              h('span', { style: { fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? tradeFmt(curPrice, 2) : '—'),
               h('span', { style: { flex: 1 } }),
               [[pageT('k5min'), '#6b7280'], [pageT('ma30m'), '#3b82f6'], [pageT('ma1h'), '#a855f7']].map(function (item) {
                 return h('span', { key: item[0], style: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', marginLeft: 10 } },
                   h('span', { style: { width: 8, height: 8, borderRadius: '50%', background: item[1], display: 'inline-block' } }), item[0])
               })),
-            h(TradeChart, { chart: buildTradeChart(market), cur: curPrice, avgBuy: account && Number(account.avg_buy_price_nano_usd_per_wc) > 0 ? Number(account.avg_buy_price_nano_usd_per_wc) / 1e3 : null }),
+            h(TradeChart, { chart: buildTradeChart(market), cur: curPrice, avgBuy: avgBuy }),
           ),
           view === 'buy' && market ? h(TradeBuyPanel, {
             market: market, account: account, usdBalance: usdBalance,

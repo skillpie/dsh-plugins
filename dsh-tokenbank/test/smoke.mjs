@@ -303,12 +303,13 @@ try {
   const ledger = await dispatch({ action: 'wordcoin-ledger', page: 1, pageSize: 20 })
   assert.equal(ledger.ledger.entries.length, 1)
   assert.equal(ledger.ledger.entries[0].kind, 'wc_buy')
-  const bought = await dispatch({ action: 'wordcoin-buy', amountNanoUSD: 1_101_681_000 })
+  // 买入按手数（1 手 = $1 面值），卖出按任意词元数量
+  const bought = await dispatch({ action: 'wordcoin-buy', lots: 1 })
   assert.equal(bought.result.credited_nano_wc, 1e12)
   const sold = await dispatch({ action: 'wordcoin-sell', amountNanoWC: 1e12 })
   assert.equal(sold.result.sold_nano_wc, 1e12)
   assert.ok(sold.result.net_nano_usd > 0)
-  await assert.rejects(dispatch({ action: 'wordcoin-buy', amountNanoUSD: 0 }), /amount must be positive/)
+  await assert.rejects(dispatch({ action: 'wordcoin-buy', lots: 0 }), /lots must be positive/)
   await assert.rejects(dispatch({ action: 'wordcoin-sell', amountNanoWC: -5 }), /amount must be positive/)
 
   // HTTP carrier: same-origin guard + envelope, against a real server

@@ -54,7 +54,12 @@ async function callRaw(baseUrl, path, { method = 'GET', body, sessionToken, time
   }
   if (payload && typeof payload === 'object' && 'code' in payload) {
     if (payload.code !== 0) {
-      throw new PortalError(payload.message || `portal error ${payload.code}`, payload.code, response.status)
+      const error = new PortalError(payload.message || `portal error ${payload.code}`, payload.code, response.status)
+      // 门户把熔断/门禁细节放在 data.reason 等字段里（如 platform_premium_breaker、
+      // price_band_breaker、calibrating），不透传的话用户在插件里只会看到
+      // "Access is forbidden" 而无从判断原因。
+      error.data = payload.data
+      throw error
     }
     return { data: payload.data, response }
   }
@@ -227,9 +232,10 @@ export const wordcoinLedger = (baseUrl, sessionToken, page, pageSize) =>
   call(baseUrl, `/wordcoin/ledger?page=${Number(page) || 1}&page_size=${Number(pageSize) || 20}`, { sessionToken })
 
 /** POST /wordcoin/buy — 市价买入,body.amount_nano_usd 为整手倍数的 nanoUSD。 */
-export const wordcoinBuy = (baseUrl, sessionToken, amountNanoUSD) =>
-  call(baseUrl, '/wordcoin/buy', { method: 'POST', sessionToken, body: { amount_nano_usd: Math.floor(Number(amountNanoUSD) || 0) } })
+/** POST /wordcoin/buy — 市价买入,body.lots 为手数(1 手 = $1 面值,按当前价折算词元)。 */
+export const wordcoinBuy = (baseUrl, sessionToken, lots) =>
+  call(baseUrl, '/wordcoin/buy', { method: 'POST', sessionToken, body: { lots: Math.floor(Number(lots) || 0) } })
 
-/** POST /wordcoin/sell — 市价卖出,body.amount_nano_wc 为整手倍数的 nanoWC。 */
+/** POST /wordcoin/sell — 市价卖出,body.amount_nano_wc 为任意词元数量(nanoWC)，手续费按费率从款项扣除。 */
 export const wordcoinSell = (baseUrl, sessionToken, amountNanoWC) =>
   call(baseUrl, '/wordcoin/sell', { method: 'POST', sessionToken, body: { amount_nano_wc: Math.floor(Number(amountNanoWC) || 0) } })
