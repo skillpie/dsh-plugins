@@ -99,20 +99,29 @@ assert.deepEqual(body.data.installed, {}, 'pluginManager 桩缺失时 installed 
 // client 嵌入模块:作为包本地 chunk 由 owner 的 apply 经 require.async 加载,
 // 不经宿主路由分发。旧 /client.js 分发路由已移除 → 命中 404 兜底。
 const resJs = await fetch(`${base}${host.ROUTE}/client.js`)
-assert.equal(resJs.status, 404, 'client 分发路由已移除,应回 404(由 chunk 机制取代)')
+assert.equal(resJs.status, 404, 'client 分发路由已移除(改为内联进接入插件)')
 server.close()
 globalThis.fetch = realFetch
 console.log('✓ HTTP 聚合路由:去重/405/403;client 分发路由已移除')
 
-/* ── 4. client 嵌入模块静态检查 + 语法(factory 包裹后) ─────────────── */
+/* ── 4. client 内联片段静态检查(注入 factory 而非运行时 chunk)───────── */
 const clientEmbed = readFileSync(new URL('../embed/featured.client.js', import.meta.url), 'utf8')
-assert.ok(clientEmbed.includes("chunk: 'client.featured.js'"), '应以包本地 chunk 注册')
-assert.ok(clientEmbed.includes("id: '__FEATURED_OWNER_ID__'"), 'owner id 应为占位符(integrate.sh 替换)')
-assert.ok(clientEmbed.includes('function initFeatured(ctx)'), '应导出 initFeatured(ctx) 注册函数')
-assert.ok(clientEmbed.includes('window.__DSH_FEATURED_APPLIED__'), '应用内判重守卫,多插件接入只渲染一块')
-assert.ok(clientEmbed.includes("'plugins.tab'"), '应注册 plugins.tab 槽')
-// chunk 需 window.__ModuleLoader__.load 环境;这里验证 load 调用形态能被解析
-assert.ok(clientEmbed.includes('window.__ModuleLoader__.load({'), '应调用 window.__ModuleLoader__.load')
-console.log('✓ client 嵌入模块:chunk 形态/占位符/initFeatured/判重守卫/槽注册')
+const bodyStart = clientEmbed.indexOf('__FEATURED_INLINE_BODY_START__')
+const bodyEnd = clientEmbed.indexOf('__FEATURED_INLINE_BODY_END__')
+assert.ok(bodyStart > 0 && bodyEnd > bodyStart, '应带 __FEATURED_INLINE_BODY_START__/END__ 标记')
+const fragment = clientEmbed
+  .slice(clientEmbed.indexOf('\n', bodyStart), bodyEnd)
+  .split('\n')
+  .filter((l) => !l.includes('__FEATURED_INLINE_BODY_START__') && !l.includes('__FEATURED_INLINE_BODY_END__'))
+  .join('\n')
+assert.ok(!clientEmbed.includes("chunk: 'client.featured.js'"), '不应再依赖包本地 chunk(桌面端 bundle 404)')
+assert.ok(!clientEmbed.includes('__ModuleLoader__.load'), '不应再运行时注册新模块 id(不建 fiber)')
+assert.ok(fragment.includes('function initFeatured(ctx)'), '应导出 initFeatured(ctx) 注册函数')
+assert.ok(fragment.includes('window.__DSH_FEATURED_APPLIED__'), '应用内判重守卫,多插件接入只渲染一块')
+assert.ok(fragment.includes("'plugins.tab'"), '应注册 plugins.tab 槽')
+assert.ok(fragment.includes("require('react')"), '片段必须在 factory 作用域内,直接 require react')
+// 片段自身语法:包一层函数体即可检查(它就是要被注入 factory 的)
+new Function('require', 'window', fragment)
+console.log('✓ client 内联片段:标记/无 chunk 依赖/initFeatured/判重守卫/槽注册/语法')
 
 console.log('\n全部嵌入冒烟通过 ✅')

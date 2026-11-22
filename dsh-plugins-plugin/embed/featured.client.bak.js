@@ -10,7 +10,7 @@
 ;(function () {
   if (typeof window === 'undefined' || !window.__ModuleLoader__) return
   window.__ModuleLoader__.load({
-    id: 'dsh-remote-relay',
+    id: '__FEATURED_OWNER_ID__',
     chunk: 'client.featured.js',
     factory(require) {
       const React = require('react')

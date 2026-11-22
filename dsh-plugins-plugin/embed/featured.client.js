@@ -1,18 +1,16 @@
-// dsh-plugins-plugin — 精选插件 client 模块包本地 chunk(embed/featured.client.js)。
-// 被 integrate.sh 拷贝进接入插件 <target>/lib/client.featured.js,由接入插件
-// 自己的 apply 经 DSH 原生 chunk 机制 `require.async('./client.featured.js')`
-// 加载并按需调用 exports.initFeatured(ctx) 注册「精选推荐」tab。
+// dsh-plugins-plugin — 精选推荐 client 内联模块(embed/featured.client.js)。
+// 这是一段"函数体片段",由 integrate.sh 注入到接入插件 lib/client.js 的
+// factory(require) 内部(MARK 之间的内容),因此可以直接用 factory 的 require
+// 拿 react,并暴露 window.__DSH_FEATURED_INIT__(ctx) 供 apply 末尾调用。
 //
-// 不能走运行时 `window.__ModuleLoader__.load({id: 新id})` —— 那只会把 factory
-// 存进表、不建 cordis fiber,apply 永远不会执行(DSH 只从宿主注入的
-// `__DSH_BOOT__` graph 的 entries(扫描 dsh.client 声明)建 fiber)。故必须作为
-// 接入插件(graph 里的活跃条目)的包本地 chunk 加载,由 owner 的 apply 驱动。
+// 为什么不用 DSH 的 require.async 包本地 chunk:chunk URL 必须与 bundle 的
+// ?rev= 精确匹配,一旦接入包自己的 bundle 加载失败(如 dsh-app:// 404),
+// chunk 永远到不了;内联后 tab 跟随接入插件自己的 bundle,零额外请求。
+// 注意:本片段绝不能放到 factory 之外 —— 那样 require 会落到 Node 全局。
+// __FEATURED_INLINE_BODY_START__
 ;(function () {
-  if (typeof window === 'undefined' || !window.__ModuleLoader__) return
-  window.__ModuleLoader__.load({
-    id: '__FEATURED_OWNER_ID__',
-    chunk: 'client.featured.js',
-    factory(require) {
+  window.__FEATURED_FACTORY_RAN__ = true
+  try {
       const React = require('react')
           const h = React.createElement
       
@@ -543,11 +541,13 @@
               detail ? h(FeaturedModal, { key: detail.package, entry: detail, t, onClose: () => setDetail(null) }) : null)
           }
       
-          // chunk 导出:owner 的 apply 调用 initFeatured(ctx) 注册板块。
+          // 导出:接入插件 apply 末尾调用 window.__DSH_FEATURED_INIT__(ctx)。
           // 判重用 window 标志,确保多插件接入只注册一块(最先调用者生效)。
           function initFeatured(ctx) {
+            if (typeof window !== 'undefined') window.__FEATURED_INIT_CALLED__ = true
             if (typeof window !== 'undefined' && window.__DSH_FEATURED_APPLIED__) return
             if (typeof window !== 'undefined') window.__DSH_FEATURED_APPLIED__ = true
+            try {
             ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-plugins-plugin: locale')
       
             const t = ctx.locale.bind(NS)
@@ -558,9 +558,17 @@
               label: () => t('tabLabel'),
               locale: NS,
             }, FeaturedSection), 'dsh-plugins-plugin: featured tab')
+            if (typeof window !== 'undefined') window.__FEATURED_OK__ = true
+            } catch (e) {
+              if (typeof window !== 'undefined') window.__FEATURED_ERR__ = String(e && (e.stack || e.message || e))
+            }
           }
       
-          return { initFeatured }
-    },
-  })
+          window.__DSH_FEATURED_INIT__ = initFeatured
+  } catch (error) {
+    // 内联模块自身故障不能拖垮接入插件:记录原因,由 apply 处的调用方检查标志位。
+    console.error('[dsh-plugins-plugin] 精选推荐模块初始化失败', error)
+    window.__FEATURED_ERR__ = String((error && (error.stack || error.message)) || error)
+  }
 })()
+// __FEATURED_INLINE_BODY_END__
