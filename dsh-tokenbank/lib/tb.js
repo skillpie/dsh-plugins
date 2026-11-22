@@ -235,7 +235,6 @@ export const wordcoinAccount = (baseUrl, sessionToken) => call(baseUrl, '/wordco
 export const wordcoinLedger = (baseUrl, sessionToken, page, pageSize) =>
   call(baseUrl, `/wordcoin/ledger?page=${Number(page) || 1}&page_size=${Number(pageSize) || 20}`, { sessionToken })
 
-/** POST /wordcoin/buy — 市价买入,body.amount_nano_usd 为整手倍数的 nanoUSD。 */
 /** POST /wordcoin/buy — 市价买入,body.lots 为手数(1 手 = $1 面值,按当前价折算词元)。 */
 export const wordcoinBuy = (baseUrl, sessionToken, lots) =>
   call(baseUrl, '/wordcoin/buy', { method: 'POST', sessionToken, body: { lots: Math.floor(Number(lots) || 0) } })

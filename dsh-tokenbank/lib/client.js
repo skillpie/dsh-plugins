@@ -165,7 +165,7 @@ window.__ModuleLoader__.load({
       ma30m: '30 分钟线',
       ma1h: '小时线',
       ma4h: '4小时线',
-      buyLots: '买入手数（1 手 = 1000 词元）',
+      buyLots: '买入手数（1 手 = $1 面值，按当前价折算词元）',
       sellLots: '卖出手数（1 手 = 1000 词元）',
       quickMax: '最大',
       maxBuyLots: '每手 $1 面值，本次最多可买 {n} 手',
@@ -188,6 +188,13 @@ window.__ModuleLoader__.load({
       sellDone: '卖出成功',
       buyFail: '买入失败',
       sellFail: '卖出失败',
+      sellNoSnapshot: '暂无价格快照，暂不能卖出。',
+      sellBandBelow: '当前市价 {quote} $/MT 已低于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
+      sellBandAbove: '当前市价 {quote} $/MT 已高于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
+      platformPremiumBreaker: '平台当日卖出溢价额度已达上限，卖出已暂停，请稍后再试。',
+      proceedsTooSmall: '卖出金额过小，折算后净额为零。',
+      insufficientUsd: '账户余额不足。',
+      tradingDisabledDetail: '平台暂未启用百万词元交易，开放后可在此买入与卖出。',
       colTime: '时间',
       colType: '类型',
       colAmount: '交易词元',
@@ -342,7 +349,7 @@ window.__ModuleLoader__.load({
       ma30m: '30-min MA',
       ma1h: '1-h MA',
       ma4h: '4-h MA',
-      buyLots: 'Buy lots (1 lot = 1,000 tokens)',
+      buyLots: 'Buy lots (1 lot = $1 face value)',
       sellLots: 'Sell MT amount',
       quickMax: 'Max',
       maxBuyLots: '$1 face per lot; up to {n} lots per order',
@@ -365,6 +372,13 @@ window.__ModuleLoader__.load({
       sellDone: 'Sell order filled',
       buyFail: 'Buy failed',
       sellFail: 'Sell failed',
+      sellNoSnapshot: 'No price snapshot yet; selling is unavailable.',
+      sellBandBelow: 'The market price ({quote} $/MT) is below the sell price band ({band}); selling is paused until the band is adjusted.',
+      sellBandAbove: 'The market price ({quote} $/MT) is above the sell price band ({band}); selling is paused until the band is adjusted.',
+      platformPremiumBreaker: 'The platform daily sell premium budget is exhausted; selling is paused, please retry later.',
+      proceedsTooSmall: 'The amount is too small: net proceeds round to zero.',
+      insufficientUsd: 'Insufficient balance.',
+      tradingDisabledDetail: 'Million-token trading is not enabled yet. You can trade here once it opens.',
       colTime: 'Time',
       colType: 'Type',
       colAmount: 'Traded tokens',
@@ -1426,6 +1440,36 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** 交易拒绝原因映射:门户 403 返回 `data.reason`,直接取 e.message 只会得到
+     *  "Access is forbidden"。按 reason 翻译成具体原因,未识别回退服务端原文。 */
+    function tradeErrorMessage(e) {
+      var data = e && e.data || {}
+      var reason = typeof data.reason === 'string' ? data.reason : ''
+      var quoteMicros = Number(data.quote_micros) || 0
+      var minQ = Number(data.min_quote_micros) || 0
+      var maxQ = Number(data.max_quote_micros) || 0
+      var fmtPx = function (q) { return q > 0 ? tradeFmt(1e12 / q, 2) : '—' }
+      switch (reason) {
+        case 'price_band_breaker': {
+          // micros 侧 [minQ, maxQ] 在 $/MT 侧是 [1e12/maxQ, 1e12/minQ]。
+          var band = fmtPx(maxQ) + '–' + fmtPx(minQ) + ' $/MT'
+          var quote = fmtPx(quoteMicros)
+          // quote 高于上界 ⇒ 词元比允许的最便宜还便宜 ⇒ $/MT 跌破下沿。
+          if (quoteMicros > maxQ) return pageT('sellBandBelow').replace('{quote}', quote).replace('{band}', band)
+          if (quoteMicros < minQ) return pageT('sellBandAbove').replace('{quote}', quote).replace('{band}', band)
+          return String(e && e.message || e)
+        }
+        case 'platform_premium_breaker': return pageT('platformPremiumBreaker')
+        case 'no_market_snapshot': return pageT('sellNoSnapshot')
+        case 'proceeds_round_to_zero': return pageT('proceedsTooSmall')
+        case 'insufficient_wc_balance': return pageT('sellMax').replace('{max}', tradeMt(Number(data.balance_nano_wc) || 0))
+        case 'insufficient_usd_balance': return pageT('insufficientUsd')
+        case 'trading_disabled': return pageT('tradingDisabledDetail')
+        case 'calibrating': return pageT('tradingCalibrating')
+        default: return String(e && e.message || e)
+      }
+    }
+
     /** 买入:$1 面值手数市价买入,金额 = 手数 × $1,获得词元 = 手数 × 当前价(MT)。 */
     function TradeBuyPanel(props) {
       var market = props.market, account = props.account
@@ -1452,7 +1496,7 @@ window.__ModuleLoader__.load({
           props.onDone()
         } catch (e) {
           busy[1](false)
-          tbStore.set({ notify: { kind: 'error', title: pageT('buyFail'), detail: String(e.message || e) } })
+          tbStore.set({ notify: { kind: 'error', title: pageT('buyFail'), detail: tradeErrorMessage(e) } })
         }
       }
       return h(TradeSubModal, { title: pageT('trade') + ' · ' + pageT('buySubmit'), onClose: props.onClose },
@@ -1530,7 +1574,7 @@ window.__ModuleLoader__.load({
           props.onDone()
         } catch (e) {
           busy[1](false)
-          tbStore.set({ notify: { kind: 'error', title: pageT('sellFail'), detail: String(e.message || e) } })
+          tbStore.set({ notify: { kind: 'error', title: pageT('sellFail'), detail: tradeErrorMessage(e) } })
         }
       }
       var fill = function (percent) {
