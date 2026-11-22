@@ -122,7 +122,7 @@ else
     echo
   ) >> "$VERIFY_LOG" 2>&1 < /dev/null &
   disown 2>/dev/null || true
-  echo "🔍 索引与镜像校验已转后台（日志: $VERIFY_LOG）"
+  echo "🔍 索引与镜像校验已转后台（日志: ${VERIFY_LOG}）"
   echo "   需要可安装确认时执行: npm view $PKG version --registry=$OFFICIAL"
 fi
 

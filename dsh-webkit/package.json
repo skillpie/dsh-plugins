@@ -42,8 +42,7 @@
     "icon.svg",
     "README.md",
     "LICENSE",
-    "assets",
-    "client.featured.js"
+    "assets"
   ],
   "scripts": {
     "test": "node test/manifest.cjs && node test/fold.cjs && node test/handoff.cjs && node test/smoke.cjs && node test/sync.cjs && node test/webview.cjs && node test/chip.cjs && node test/viewport.cjs"
@@ -62,6 +61,6 @@
     }
   },
   "dependencies": {
-    "dsh-plugins-plugin": "^0.2.0"
+    "dsh-plugins-plugin": "0.2.0"
   }
 }

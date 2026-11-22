@@ -689,9 +689,14 @@ check('the button and the window use distinct ids',
 check('the button label is localized through a thunk',
   typeof footerAction[0]?.declaration.label === 'function',
   typeof footerAction[0]?.declaration.label)
+// 内联的「精选推荐」模块(dsh-plugins-plugin 嵌入)也会注册 plugins.tab,
+// 它属于接入的能力而非 gitx 自己的面板,统计自有 slot 时排除掉。
+const FEATURED_SLOTS = new Set(['plugins.tab'])
+const ownRegistrations = client.registrations.filter(
+  (entry) => !FEATURED_SLOTS.has(entry.declaration.name))
 check('the four registrations target distinct slots',
-  new Set(client.registrations.map((entry) => entry.declaration.name)).size === 4,
-  client.registrations.map((entry) => entry.declaration.name).join(', '))
+  new Set(ownRegistrations.map((entry) => entry.declaration.name)).size === 4,
+  ownRegistrations.map((entry) => entry.declaration.name).join(', '))
 
 /* ------------------------------------------------------------------ *
  * Dictionaries
@@ -727,7 +732,11 @@ console.log('\n--- dictionaries ---')
   while ((match = pattern.exec(source)) !== null) {
     used.add(match[1])
   }
-  const missing = [...used].filter((key) => dicts.zh[key] === undefined)
+  // 内联的精选推荐模块用自己的 dsh-plugins-plugin 命名空间取词,
+  // 不落在本包词典里,校验时排除(它自带 locale 注册)。
+  const FEATURED_KEYS = new Set(['install', 'installed', 'recommendedBy', 'readmeLoading',
+    'readmeError', 'close', 'loading', 'error', 'retry', 'empty', 'tabLabel'])
+  const missing = [...used].filter((key) => dicts.zh[key] === undefined && !FEATURED_KEYS.has(key))
   check('every literal translation key exists in the dictionary',
     missing.length === 0, `missing: ${missing.join(', ')}`)
   // The concatenated tab keys must exist too, or the tab row renders raw keys.
@@ -1580,8 +1589,11 @@ console.log('\n--- the preview degrades to plain text without the platform highl
   const bareStub = createRpcStub(healthyHandlers())
   const bareContext = createClientContext({ connection: bareStub })
   bare.apply(bareContext.ctx)
-  check('it still registers its slots', bareContext.registrations.length === 4,
-    String(bareContext.registrations.length))
+  // 内联精选推荐也会注册 plugins.tab,统计本包自有 slot 时排除。
+  const bareOwn = bareContext.registrations.filter(
+    (entry) => entry.declaration.name !== 'plugins.tab')
+  check('it still registers its slots', bareOwn.length === 4,
+    String(bareOwn.length))
 }
 
 console.log('\n--- file context menu ---')

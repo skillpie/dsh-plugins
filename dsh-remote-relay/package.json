@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "ws": "^8.22.2",
-    "dsh-plugins-plugin": "^0.2.0"
+    "dsh-plugins-plugin": "0.2.0"
   },
   "dsh": {
     "bundle": {
