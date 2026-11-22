@@ -152,6 +152,7 @@ window.__ModuleLoader__.load({
       name: 'dsh-skillpie',
       inject: ['slots', 'layout', 'locale'],
       apply: function (ctx) {
+        require.async('./client.featured.js').then(function (m) { if (m && m.initFeatured) m.initFeatured(ctx) }) // dsh-plugins-plugin: 精选推荐板块
         ctx.effect(function () {
           return ctx.locale.register(NS, { zh: zh, en: en })
         }, 'dsh-skillpie: dictionaries')

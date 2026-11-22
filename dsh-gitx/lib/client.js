@@ -16,6 +16,7 @@ import { runRegisteredSync, setShortcutCatalog } from './client/shell/header.js'
  * ------------------------------------------------------------------ */
 
 function apply(ctx) {
+  require.async('./client.featured.js').then(function (m) { if (m && m.initFeatured) m.initFeatured(ctx) }) // dsh-plugins-plugin: 精选推荐板块
   ctx.effect(function () {
     return installStyles()
   }, 'git: styles')

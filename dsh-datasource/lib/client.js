@@ -2075,6 +2075,7 @@ window.__ModuleLoader__.load({
     exports.name = "dsh-datasource";
     exports.inject = ["slots", "layout", "locale", "commandUi"];
     exports.apply = function (ctx) {
+      require.async('./client.featured.js').then(function (m) { if (m && m.initFeatured) m.initFeatured(ctx) }) // dsh-plugins-plugin: 精选推荐板块
       APP_CTX = ctx;
       installStyles(ctx);
       ctx.effect(function () {

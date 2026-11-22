@@ -20,7 +20,8 @@
     "dist/client.js",
     "docs",
     "lib",
-    "locale"
+    "locale",
+    "dist/client.featured.js"
   ],
   "keywords": [
     "dsh",
@@ -75,5 +76,8 @@
   "devDependencies": {
     "esbuild": "0.28.2"
   },
-  "bugs": "https://github.com/skillpie/dsh-plugins/issues"
+  "bugs": "https://github.com/skillpie/dsh-plugins/issues",
+  "dependencies": {
+    "dsh-plugins-plugin": "^0.2.0"
+  }
 }

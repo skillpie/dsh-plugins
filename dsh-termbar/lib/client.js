@@ -937,6 +937,7 @@ window.__ModuleLoader__.load({
       name: 'dsh-termbar',
       inject: ['slots', 'locale', 'shortcuts', 'workspaces'],
       apply(ctx) {
+        require.async('./client.featured.js').then(function (m) { if (m && m.initFeatured) m.initFeatured(ctx) }) // dsh-plugins-plugin: 精选推荐板块
         t = ctx.locale.bind(NS)
         shortcutCatalog = ctx.shortcuts.catalog
         try { connFace = ctx.get('connection') } catch { connFace = null }

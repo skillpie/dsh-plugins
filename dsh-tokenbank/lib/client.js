@@ -2686,6 +2686,8 @@ window.__ModuleLoader__.load({
       // 只写子路径会报 cannot get property "remote" without inject
       inject: ['slots', 'locale', 'remote', 'remote.settings', 'remote.credentials'],
       apply: function (ctx) {
+      require.async('./client.featured.js').then(function (m) { if (m && m.initFeatured) m.initFeatured(ctx) }) // dsh-plugins-plugin: 精选推荐板块
+      require.async('./client.featured.js').then(function (m) { if (m && m.initFeatured) m.initFeatured(ctx) }) // dsh-plugins-plugin: 精选推荐板块
       // Frizon 子集字体(@font-face);颜色用 currentColor,暗色模式自动反白
       if (typeof document !== 'undefined' && document.head) {
         var wmCss = document.createElement('style')

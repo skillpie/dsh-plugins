@@ -2598,6 +2598,7 @@ window.__ModuleLoader__.load({
      * of breaking the session the user is already in.
      */
     exports.apply = (ctx) => {
+      require.async('./client.featured.js').then(function (m) { if (m && m.initFeatured) m.initFeatured(ctx) }) // dsh-plugins-plugin: 精选推荐板块
       try {
         return run(ctx)
       } catch (error) {

@@ -1,3 +1,18 @@
+// >>> dsh-plugins-plugin featured source (auto-inserted, do not remove markers)
+import { integrateFeaturedPlugins } from 'dsh-plugins-plugin/host'
+
+// 精选插件推荐源(dsh-plugins-plugin):
+const FEATURED_SOURCE = {
+  id: "dsh-project-report", // 推荐源标识,重复登记以此覆盖
+  title: "dsh-project-report", // 「推荐来源」显示名
+  entries: [
+    // 集中列表在仓库 plugins.json 维护;这里的 entries 只是本插件的补充推荐(可为空):
+    // { package: "dsh-xxx", title: "xxx", description: "一句话亮点",
+    //   version: "1.2.3", icon: "https://…/icon.svg", tags: ["效率"] },
+  ],
+}
+// <<< dsh-plugins-plugin featured source
+
 // dsh-project-report — host half.
 //
 // POST /dsh-project-report/api 单路由 JSON API:
@@ -111,6 +126,7 @@ export default {
   Config,
   inject: [],
   apply(ctx, rawConfig = null) {
+    integrateFeaturedPlugins(ctx, FEATURED_SOURCE) // dsh-plugins-plugin: 推荐源登记 + 嵌入宿主
     const cfg = rawConfig ?? {}
     const state = new PluginState()
     state.applyConfigDefaults(cfg)

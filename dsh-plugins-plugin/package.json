@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugins-plugin",
-  "version": "0.1.0",
-  "description": "精选插件:在官方插件页「已安装」旁边提供一个「精选插件」板块,聚合展示各接入插件推荐收录的精选插件;支持一键安装。其他插件通过 integrate.sh 即可快速接入推荐源。",
+  "version": "0.2.0",
+  "description": "精选插件:官方插件页「精选推荐」板块的全量嵌入代码库。其他插件执行 `sh integrate.sh --plugin=xxx` 即把完整功能(展示端 UI + 数据端)嵌入 xxx,无需单独安装本包;数据来自仓库集中维护的 plugins.json(jsdelivr 分发)。",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -11,42 +11,32 @@
     "featured-plugins",
     "skillpie"
   ],
-  "main": "./lib/index.js",
+  "main": "./embed/featured.host.js",
   "repository": {
     "url": "git+https://github.com/skillpie/dsh-plugins.git",
     "directory": "dsh-plugins-plugin"
   },
   "exports": {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
-    "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg"
+    ".": "./embed/featured.host.js",
+    "./host": "./embed/featured.host.js",
+    "./client": "./embed/featured.client.js",
+    "./standalone": "./lib/index.js",
+    "./standalone-client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
+    "embed",
     "lib",
-    "adapter",
     "plugins.json",
     "locale/*.json",
-    "cordis.patch.yml",
     "icon.svg",
     "integrate.sh",
+    "test",
     "README.md"
   ],
   "engines": {
     "node": ">=22.13",
     "dsh": ">=0.2.2-rc.1"
-  },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web",
-      "inject": [
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-slots"
-      ]
-    }
   },
   "publishConfig": {
     "access": "public"

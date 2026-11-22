@@ -168,7 +168,7 @@ window.__ModuleLoader__.load({
       // ── 自建详情弹窗(README 从 npm 包 jsdelivr 读取) ──
       overlay: { position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 },
       panel: {
-        width: 'min(760px, 92vw)', maxHeight: '84vh', display: 'flex', flexDirection: 'column',
+        width: 'min(860px, 92vw)', maxHeight: '84vh', display: 'flex', flexDirection: 'column',
         background: 'var(--dsw-alias-bg-layer-2)', border: '1px solid var(--dsw-alias-border-l1)',
         borderRadius: 14, boxShadow: '0 12px 40px rgba(0,0,0,0.25)', overflow: 'hidden',
       },
@@ -194,7 +194,11 @@ window.__ModuleLoader__.load({
       mdCode: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, background: 'var(--dsw-alias-bg-layer-1)', borderRadius: 4, padding: '1px 5px' },
       mdPre: { background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 8, padding: 12, overflowX: 'auto', margin: '0 0 10px' },
       mdPreCode: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, whiteSpace: 'pre-wrap', margin: 0 },
-      mdA: { color: 'var(--dsw-alias-label-primary)' },
+      mdA: { color: 'var(--dsw-alias-link)' },
+      linkIcon: { width: 11, height: 11, marginRight: 3, verticalAlign: '-1px', color: 'var(--dsw-alias-link)' },
+      mdQuote: { borderLeft: '3px solid var(--dsw-alias-border-l1)', paddingLeft: 12, margin: '0 0 12px', color: 'var(--dsw-alias-label-secondary)' },
+      mdTable: { borderCollapse: 'collapse', width: '100%', margin: '0 0 12px', fontSize: 12.5 },
+      mdTd: { border: '1px solid var(--dsw-alias-border-l1)', padding: '6px 10px', textAlign: 'left', verticalAlign: 'top' },
     }
 
     // GitHub mark(octicon mark-github 16x16 路径)
@@ -305,26 +309,45 @@ window.__ModuleLoader__.load({
       return base + u.replace(/^\.\//, '')
     }
 
-    // 行内解析:图片 / 链接 / 行内代码 / 粗体
-    function mdInline(text, base) {
-      const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]*)\]\(([^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*/g
+    // 占位符还原:把 s 里 \u0000<idx>\u0000 换回暂存的节点
+    function restoreInline(s, tokens) {
+      const parts = String(s).split(/\u0000(\d+)\u0000/g)
       const out = []
-      let last = 0, m, k = 0
-      while ((m = re.exec(text)) !== null) {
-        if (m.index > last) out.push(text.slice(last, m.index))
-        if (m[2] !== undefined) {
-          out.push(h('img', { key: k++, style: S.mdImg, src: mdAbsUrl(m[2], base), alt: m[1] || '', loading: 'lazy' }))
-        } else if (m[4] !== undefined) {
-          out.push(h('a', { key: k++, style: S.mdA, href: mdAbsUrl(m[4], base), target: '_blank', rel: 'noreferrer noopener' }, m[3]))
-        } else if (m[5] !== undefined) {
-          out.push(h('code', { key: k++, style: S.mdCode }, m[5]))
-        } else if (m[6] !== undefined) {
-          out.push(h('strong', { key: k++ }, m[6]))
-        }
-        last = re.lastIndex
+      for (let i = 0; i < parts.length; i++) {
+        if (i % 2 === 1) out.push(tokens[Number(parts[i])])
+        else if (parts[i]) out.push(parts[i])
       }
-      if (last < text.length) out.push(text.slice(last))
       return out
+    }
+
+    // 行内解析(占位符两段式):
+    // 粗体 → 图片 → 链接 → 行内代码。图片先于链接,使 [![徽章](i)](l) 外链图可用;
+    // 粗体内部递归解析,粗体套链接/链接套图片均正常。
+    function mdInline(text, base) {
+      const tokens = []
+      const stash = (node) => { tokens.push(node); return '\u0000' + (tokens.length - 1) + '\u0000' }
+      const stashText = (t) => { tokens.push(t); return '\u0000' + (tokens.length - 1) + '\u0000' }
+      // 链接统一形态:蓝色 + 前置地球图标(与官方 markdown 链接色一致)
+      const makeLink = (href, kids) => h('a', { style: S.mdA, href, target: '_blank', rel: 'noreferrer noopener' },
+        h('svg', { style: S.linkIcon, viewBox: '0 0 16 16', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.2' },
+          h('circle', { cx: 8, cy: 8, r: 6.3 }),
+          h('path', { d: 'M1.7 8h12.6M8 1.7c2.4 1.9 2.4 10.7 0 12.6M8 1.7c-2.4 1.9-2.4 10.7 0 12.6' })),
+        ...kids)
+      let s = String(text)
+      s = s.replace(/\*\*([^*]+)\*\*/g, (m0, inner) => stash(h('strong', null, mdInline(inner, base))))
+      s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m0, alt, url) => stash(h('img', { style: S.mdImg, src: mdAbsUrl(url, base), alt: alt || '', loading: 'lazy' })))
+      s = s.replace(/\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m0, label, url) => stash(makeLink(mdAbsUrl(url, base), restoreInline(label, tokens))))
+      s = s.replace(/`([^`]+)`/g, (m0, c) => stash(h('code', { style: S.mdCode }, c)))
+      // 裸自动链接:<https://…> 与 http(s)://…(URL 中间允许点/斜杠,仅结尾剔除标点)
+      const TRAIL_PUNCT = /([.,;:!?"'）)\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f\u201d\u2019]|[^\x20-\x7e])+$/
+      s = s.replace(/<(https?:\/\/[^>\s]+)>/g, (m0, url) => stash(makeLink(url, [url])))
+      s = s.replace(/(^|[\s(])(https?:\/\/[^\s<>()\u0000]+)/g, (m0, pre, rawUrl) => {
+        const trailMatch = TRAIL_PUNCT.exec(rawUrl)
+        const trail = trailMatch ? trailMatch[0] : ''
+        const url = trail ? rawUrl.slice(0, -trail.length) : rawUrl
+        return stashText(pre) + stash(makeLink(url, [url])) + (trail ? stashText(trail) : '')
+      })
+      return restoreInline(s, tokens)
     }
 
     // 块级解析:围栏代码块 / 标题 / 列表 / 段落(不追求完整 markdown,够读 README 即可)
@@ -347,6 +370,37 @@ window.__ModuleLoader__.load({
           while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++ }
           i++
           out.push(h('pre', { style: S.mdPre, key: 'c' + (key++) }, h('code', { style: S.mdPreCode }, buf.join('\n'))))
+          continue
+        }
+        // 引用块(> 行,支持连续多行合并)
+        if (/^\s*>\s?/.test(line)) {
+          flushPara()
+          const buf = []
+          while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+            buf.push(lines[i].replace(/^\s*>\s?/, ''))
+            i++
+          }
+          out.push(h('div', { style: S.mdQuote, key: 'q' + (key++) },
+            h('p', { style: S.mdP }, mdInline(buf.join(' ').trim(), base))))
+          continue
+        }
+        // 表格(| 行,第二行为 |---| 分隔)
+        if (/^\s*\|/.test(line)) {
+          const block = []
+          while (i < lines.length && /^\s*\|/.test(lines[i])) { block.push(lines[i].trim()); i++ }
+          const cells = (row) => row.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
+          const isSep = (row) => /^\|?[\s:|-]+\|?$/.test(row) && row.includes('-')
+          if (block.length >= 2 && isSep(block[1])) {
+            flushPara()
+            const head = cells(block[0])
+            const rows = block.slice(2).filter((r) => !isSep(r)).map(cells)
+            out.push(h('table', { style: S.mdTable, key: 't' + (key++) },
+              h('thead', null, h('tr', null, head.map((c) => h('th', { style: S.mdTd }, mdInline(c, base))))),
+              h('tbody', null, rows.map((r) => h('tr', null, head.map((_, ci) => h('td', { style: S.mdTd }, mdInline(r[ci] || '', base))))))))
+            continue
+          }
+          // 非法表格形态 → 按普通段落处理
+          for (const row of block) para.push(row)
           continue
         }
         const hm = line.match(/^(#{1,4})\s+(.*)/)

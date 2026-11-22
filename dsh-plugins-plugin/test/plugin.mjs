@@ -1,10 +1,9 @@
 // dsh-plugins-plugin 冒烟测试:桩 cordis ctx + 桩 webServer + 真实 http 服务器。
-// 覆盖:registry 登记/覆盖/注销、聚合去重、路由 GET/405/sameOrigin、adapter 注入行为。
+// 覆盖:registry 登记/覆盖/注销、聚合去重、路由 GET/405/sameOrigin(standalone 版回归)。
 import { createServer } from 'node:http'
 import assert from 'node:assert/strict'
 
 const mod = await import(new URL('../lib/index.js', import.meta.url).href)
-const adapter = await import(new URL('../adapter/dsh-plugins-featured.js', import.meta.url).href)
 
 /* ── 桩 cordis ctx ─────────────────────────────────────────────────── */
 function makeCtx() {
@@ -79,15 +78,8 @@ assert.equal(svc.list().length, 1)
 assert.equal(svc.list()[0].entries.length, 2, '无效条目应被丢弃')
 assert.equal(svc.list()[0].entries[0].tags.length, 8, 'tags 应截断到 8')
 
-// adapter 集成行为:inject + effect 登记,dispose 注销
-const ctx2 = makeCtx()
-ctx2.provide('featured-plugins', svc) // 模拟宿主中服务已由 dsh-plugins-plugin 提供
-adapter.integrateFeaturedPlugins(ctx2, { id: 'dsh-x', title: 'X', entries: [{ package: 'dsh-c', title: 'C' }] })
-assert.equal(svc.list().length, 2, 'adapter 应登记成功')
-const adapterEffect = ctx2.effects.find((e) => String(e.label).startsWith('featured-plugins source:'))
-assert.ok(adapterEffect, 'adapter 应在子上下文挂登记 effect')
-adapterEffect.dispose() // 注销 → 移除 dsh-x
-assert.equal(svc.list().length, 1, 'adapter 注销后应移除 dsh-x')
+// adapter 段已移除:新架构的嵌入登记行为由 test/embed.mjs 覆盖
+// (integrateFeaturedPlugins 的登记/注销/去重)。本文件只剩 standalone 版回归。
 
 // 同 id 覆盖
 const offOld = svc.register({ id: 'dsh-tokenbank', title: 'v1', entries: [{ package: 'dsh-old', title: 'old' }] })
