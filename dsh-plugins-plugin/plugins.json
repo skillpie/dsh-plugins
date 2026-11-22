@@ -9,7 +9,17 @@
       "tags": [
         "免费模型",
         "API Key"
-      ]
+      ],
+      "downloads": 12313,
+      "downloadsWindow": {
+        "start": "2026-10-23",
+        "end": "2026-11-21"
+      },
+      "stars": 1,
+      "author": "skillpie",
+      "homepage": "https://github.com/skillpie/dsh-plugins",
+      "enrichSource": "npm-probe",
+      "enrichedAt": "2026-11-22"
     },
     {
       "package": "dsh-remote-relay",
@@ -18,7 +28,19 @@
       "version": "1.2.19",
       "tags": [
         "远程"
-      ]
+      ],
+      "author": "skillpie",
+      "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-remote-relay",
+      "category": "remote",
+      "descriptionEn": "Reach any DeepSeek Harness host by its 8-digit code through a relay origin: a browser-surface remote control with relay-prefixed GUI passthrough, per-host WebSocket muxing, a visitor fetch/WebSocket shim that rewrites same-origin calls, owner-only HTTP APIs, and optional concealment of the code in the URL via an origin-level Service Worker. Off by default; it must be enabled from the owner panel in the sidebar. Once enabled, it connects out to the author's relay dsh.skillpie.cn, and whoever holds the code gets full control of the GUI on this machine.",
+      "stars": 1,
+      "downloads": 3009,
+      "downloadsWindow": {
+        "start": "2026-10-22",
+        "end": "2026-11-20"
+      },
+      "enrichSource": "awesome-dsh-plugin",
+      "enrichedAt": "2026-11-22"
     },
     {
       "package": "dsh-skillpie",
@@ -27,7 +49,19 @@
       "version": "1.0.0",
       "tags": [
         "技能市场"
-      ]
+      ],
+      "author": "skillpie",
+      "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-skillpie",
+      "category": "skill",
+      "descriptionEn": "Skill marketplace in the DSH sidebar: browse and search the SkillPie skill library, install agent skills into ~/.agents/skills with one click so new sessions can use them, plus a same-origin search/detail/install/installed API that conversation tools can reuse.",
+      "stars": 1,
+      "downloads": 449,
+      "downloadsWindow": {
+        "start": "2026-10-22",
+        "end": "2026-11-20"
+      },
+      "enrichSource": "awesome-dsh-plugin",
+      "enrichedAt": "2026-11-22"
     },
     {
       "package": "dsh-skillpie-mail",
@@ -36,7 +70,17 @@
       "version": "0.1.4",
       "tags": [
         "邮箱"
-      ]
+      ],
+      "downloads": 875,
+      "downloadsWindow": {
+        "start": "2026-10-23",
+        "end": "2026-11-21"
+      },
+      "stars": 1,
+      "author": "skillpie",
+      "homepage": "https://github.com/skillpie/dsh-plugins",
+      "enrichSource": "npm-probe",
+      "enrichedAt": "2026-11-22"
     },
     {
       "package": "dsh-datasource",
@@ -45,7 +89,19 @@
       "version": "1.0.9",
       "tags": [
         "数据库"
-      ]
+      ],
+      "author": "skillpie",
+      "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-datasource",
+      "category": "tools",
+      "descriptionEn": "Connect SQLite, PostgreSQL, or MySQL databases in DeepSeek Harness: browse table structure and data, run SQL, and let the assistant query and edit data directly in the conversation.",
+      "stars": 1,
+      "downloads": 1103,
+      "downloadsWindow": {
+        "start": "2026-10-22",
+        "end": "2026-11-20"
+      },
+      "enrichSource": "awesome-dsh-plugin",
+      "enrichedAt": "2026-11-22"
     },
     {
       "package": "dsh-gitx",
@@ -54,7 +110,22 @@
       "version": "0.2.0",
       "tags": [
         "Git"
-      ]
+      ],
+      "author": "skillpie",
+      "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-gitx",
+      "category": "git",
+      "screenshots": [
+        "https://raw.githubusercontent.com/skillpie/dsh-plugins/HEAD/dsh-gitx/docs/screenshot.png"
+      ],
+      "descriptionEn": "Git workbench for DeepSeek Harness: session-header chips keep branch, change count and sync state at hand for in-place switching, review and pull/push; the full window adds a lane commit graph, block-level staging, interactive rebase and history rewrite with restore points, batch cherry-pick, a three-way conflict editor, inline blame, worktree management and Git LFS import/export.",
+      "stars": 1,
+      "downloads": 794,
+      "downloadsWindow": {
+        "start": "2026-10-22",
+        "end": "2026-11-20"
+      },
+      "enrichSource": "awesome-dsh-plugin",
+      "enrichedAt": "2026-11-22"
     },
     {
       "package": "dsh-webkit",
@@ -64,7 +135,20 @@
       "tags": [
         "浏览器",
         "调试"
-      ]
+      ],
+      "author": "skillpie",
+      "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-webkit",
+      "category": "browser",
+      "icon": "https://raw.githubusercontent.com/skillpie/dsh-plugins/main/dsh-webkit/assets/icon-180.png",
+      "descriptionEn": "Element picker and free-size viewport for the right-sidebar browser: hover-highlight a page element to send its selector, styles and HTML snippet into the chat draft, and resize the webview to remembered device presets with auto-fit scaling.",
+      "stars": 1,
+      "downloads": 419,
+      "downloadsWindow": {
+        "start": "2026-10-22",
+        "end": "2026-11-20"
+      },
+      "enrichSource": "awesome-dsh-plugin",
+      "enrichedAt": "2026-11-22"
     },
     {
       "package": "dsh-termbar",
@@ -73,7 +157,19 @@
       "version": "0.1.3",
       "tags": [
         "终端"
-      ]
+      ],
+      "author": "skillpie",
+      "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-termbar",
+      "category": "ui",
+      "descriptionEn": "Terminal panel toggle for the DSH web GUI: a header button that opens and closes a bottom terminal panel backed by a PTY engine over the subprocess service, with a same-origin control API, WebSocket I/O, session list and scrollback.",
+      "stars": 1,
+      "downloads": 447,
+      "downloadsWindow": {
+        "start": "2026-10-22",
+        "end": "2026-11-20"
+      },
+      "enrichSource": "awesome-dsh-plugin",
+      "enrichedAt": "2026-11-22"
     },
     {
       "package": "dsh-project-report",
@@ -82,7 +178,20 @@
       "version": "0.1.6",
       "tags": [
         "效率"
-      ]
+      ],
+      "author": "skillpie",
+      "homepage": "https://github.com/skillpie/dsh-plugins/tree/main/dsh-project-report",
+      "category": "workflow",
+      "descriptionEn": "Project reporting in the DSH sidebar: draft a per-project report from its git commits and session records with one click, run it on a built-in schedule with a configurable daily cutover offset, and optionally submit Moka overtime automatically; all sessions of a project share one report.",
+      "stars": 1,
+      "downloads": 460,
+      "downloadsWindow": {
+        "start": "2026-10-22",
+        "end": "2026-11-20"
+      },
+      "enrichSource": "awesome-dsh-plugin",
+      "enrichedAt": "2026-11-22"
     }
-  ]
+  ],
+  "updated": "2026-11-22"
 }
