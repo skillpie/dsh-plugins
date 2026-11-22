@@ -146,7 +146,7 @@ window.__ModuleLoader__.load({
       sellPlaceholder: '如 1000',
       colFee: '手续费',
       marketPriceBreakdown: '当前价',
-      vsOpen: '较4小时前',
+      vsOpen: '较均价',
       todayOpen: '4小时前',
       todayHigh: '4小时高',
       todayLow: '4小时低',
@@ -320,7 +320,7 @@ window.__ModuleLoader__.load({
       sellPlaceholder: 'e.g. 1000',
       colFee: 'Fee',
       marketPriceBreakdown: 'Current price',
-      vsOpen: 'vs. 4h ago',
+      vsOpen: 'vs. avg',
       todayOpen: '4h ago',
       todayHigh: '4h high',
       todayLow: '4h low',
@@ -1559,13 +1559,20 @@ window.__ModuleLoader__.load({
       // 较4小时前:取 4 小时窗口内最早蜡烛的开盘价
       var chartC = buildTradeChart(market)
       var openPrice = chartC && chartC.candles.length ? chartC.candles[0].o : null
+      // 较均价基准:窗口收盘均价(与灰虚线同值)
+      var avgBase = null
+      if (chartC && chartC.candles.length) {
+        var cSum = 0
+        for (var ai = 0; ai < chartC.candles.length; ai++) cSum += chartC.candles[ai].c
+        avgBase = cSum / chartC.candles.length
+      }
       // 4 小时窗口内极值
       var hiPrice = null, loPrice = null
       if (chartC) for (var ci = 0; ci < chartC.candles.length; ci++) {
         if (hiPrice == null || chartC.candles[ci].hi > hiPrice) hiPrice = chartC.candles[ci].hi
         if (loPrice == null || chartC.candles[ci].lo < loPrice) loPrice = chartC.candles[ci].lo
       }
-      var chg = curPrice != null && openPrice ? (curPrice - openPrice) / openPrice * 100 : null
+      var chg = curPrice != null && avgBase ? (curPrice - avgBase) / avgBase * 100 : null
       var up = chg != null && chg >= 0
       var tradingEnabled = !!(market && market.trading && market.trading.enabled)
       var tradingOpen = !!(account && account.limits && account.limits.trading_open) || (market && market.trading && market.trading.sample_gate_pass)
