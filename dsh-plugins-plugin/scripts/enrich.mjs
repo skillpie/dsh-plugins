@@ -85,11 +85,32 @@ function repoFromSibling(pkgName) {
 import { readFileSync } from 'node:fs'
 function readFileSyncLocal(p) { return readFileSync(p, 'utf8') }
 
+// 版本探测:镜像与官方源都查,取更新的那个。只看镜像会写出旧版本(镜像同步有
+// 几十分钟到几小时的延迟);只看官方源国内偶尔连不上。两者取最大版本号最稳。
+function cmpVersion(a, b) {
+  const pa = String(a).split(/[.+-]/).map((x) => (/^\d+$/.test(x) ? Number(x) : x))
+  const pb = String(b).split(/[.+-]/).map((x) => (/^\d+$/.test(x) ? Number(x) : x))
+  for (let i = 0; i < 3; i++) {
+    const x = pa[i] ?? 0
+    const y = pb[i] ?? 0
+    if (x === y) continue
+    if (typeof x === 'number' && typeof y === 'number') return x > y ? 1 : -1
+    return String(x) > String(y) ? 1 : -1
+  }
+  return 0
+}
+
 async function probeNpmVersion(pkg) {
-  try {
-    const data = await fetchJson(`https://registry.npmmirror.com/${encodeURIComponent(pkg)}/latest`, 15_000)
-    return typeof data?.version === 'string' ? data.version : null
-  } catch { return null }
+  const enc = encodeURIComponent(pkg)
+  const seen = []
+  for (const base of ['https://registry.npmmirror.com', 'https://registry.npmjs.org']) {
+    try {
+      const data = await fetchJson(`${base}/${enc}/latest`, 15_000)
+      if (typeof data?.version === 'string' && data.version) seen.push(data.version)
+    } catch { /* 换下一个源 */ }
+  }
+  if (seen.length === 0) return null
+  return seen.reduce((a, b) => (cmpVersion(a, b) >= 0 ? a : b))
 }
 
 async function probeDownloads(pkg) {
@@ -141,17 +162,17 @@ function main() {
           entry.downloads = cat.downloads
           if (cat.downloadsStart) entry.downloadsWindow = { start: cat.downloadsStart, end: cat.downloadsEnd }
         }
-        if (typeof cat.version === 'string' && cat.version) entry.version = cat.version
+        // 版本号一律以 npm 为准(官方目录是构建期快照,常落后于刚发布的版本),
+        // 目录里的 version 只在 npm 探测失败时兜底,见下方 probeNpmVersion。
         entry.enrichSource = 'awesome-dsh-plugin'
       } else {
         // 未收录:直连 npm / GitHub 探测(尽力而为,失败不阻塞)。
         const ownerRepo = repoFromSibling(pkg)
         const [version, downloads, stars] = await Promise.all([
-          entry.version ? Promise.resolve(null) : probeNpmVersion(pkg),
+          probeNpmVersion(pkg),
           probeDownloads(pkg),
           probeStars(ownerRepo),
         ])
-        if (!entry.version && version) entry.version = version
         if (downloads) {
           entry.downloads = downloads.downloads
           entry.downloadsWindow = downloads.window
@@ -162,6 +183,20 @@ function main() {
           if (!entry.homepage) entry.homepage = ownerRepo.url
         }
         entry.enrichSource = 'npm-probe'
+      }
+      // 版本号统一对齐 npm latest:官方目录快照常滞后于刚发布的版本,
+      // 而精选卡片上的「安装」按钮直接拿这个版本号拼 spec,写旧了会装回旧包。
+      // npm 探测失败时才退回官方目录里的 version。
+      if (!dryRun) {
+        const latest = await probeNpmVersion(pkg)
+        if (latest) {
+          if (entry.version !== latest) {
+            console.log(`version: ${pkg} ${entry.version ?? '-'} → ${latest}`)
+            entry.version = latest
+          }
+        } else if (cat && typeof cat.version === 'string' && cat.version) {
+          entry.version = cat.version
+        }
       }
       entry.enrichedAt = today
       if (!entry.icon && !dryRun) {
