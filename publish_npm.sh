@@ -3,7 +3,8 @@
 #
 # 用法（在插件目录里执行，默认发布该目录 package.json 的包）:
 #   ../publish_npm.sh --dry-run        # 只做预检，不发布
-#   ../publish_npm.sh                  # 完整发布
+#   ../publish_npm.sh                  # 发布（索引/镜像校验转后台异步，立即返回）
+#   ../publish_npm.sh --wait           # 发布后前台等待官方索引 + 镜像同步（旧行为）
 #   ../publish_npm.sh @skillpie/dsh-x  # 显式指定包名（默认取 package.json）
 #
 # 前置（一次性）:
@@ -20,11 +21,13 @@ set -euo pipefail
 OFFICIAL="https://registry.npmjs.org"
 MIRROR="https://registry.npmmirror.com"
 DRY_RUN=false
+WAIT=false
 PKG_ARG=""
 
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=true ;;
+    --wait) WAIT=true ;;
     *) PKG_ARG="$arg" ;;
   esac
 done
@@ -70,7 +73,7 @@ echo "$PACK_OUT" | grep -qE "node_modules|\.pnpm" \
 echo "✅ 打包清单正常"
 
 if $DRY_RUN; then
-  echo "🏜️ dry-run 结束，未发布。完整流程: 发布 → 等官方索引 → 同步镜像"
+  echo "🏜️ dry-run 结束，未发布。完整流程: 发布 → 后台等官方索引 + 同步镜像"
   exit 0
 fi
 
@@ -79,30 +82,51 @@ echo "🚀 发布 $PKG@$VERSION → $OFFICIAL"
 PUB_OUT=$(npm publish --registry="$OFFICIAL" 2>&1) || { echo "$PUB_OUT"; exit 1; }
 echo "$PUB_OUT" | tail -2
 
-# ── 5. 等官方源异步索引（新包可能先出现 0.0.0-stage 空壳占位）──────
-# 注意：发布成功 ≠ 立刻可安装；latest 翻正为真实版本前别让任何人按名安装。
-SEEN=""
-for i in $(seq 1 40); do
-  sleep 15
-  SEEN=$(npm view "$PKG" version --registry="$OFFICIAL" 2>/dev/null || true)
-  if [ "$SEEN" = "$VERSION" ]; then echo "✅ 官方源已索引 latest=$SEEN"; break; fi
-  [ "$SEEN" = "0.0.0-stage" ] && echo "⏳ 第 $i 次: 出现 stage 空壳占位（首次发布正常现象），继续等待…"
-done
-[ "$SEEN" = "$VERSION" ] || { echo "❌ 10 分钟内官方源未索引出 ${VERSION}（当前: ${SEEN}），稍后手动检查 npm view $PKG"; exit 1; }
+# ── 5. 校验官方索引 + 触发镜像同步（默认后台异步，--wait 才前台等）──
+# 发布成功 ≠ 立刻可安装；新包可能先出现 0.0.0-stage 空壳占位。校验逻辑抽成
+# 函数，前台/后台共用，避免并发批量发布时逐个卡在等待窗口里。
+VERIFY_LOG="$HOME/.dsh/logs/npm-publish-verify.log"
+mkdir -p "$(dirname "$VERIFY_LOG")" 2>/dev/null || true
 
-# ── 6. 触发 npmmirror 同步并验证（镜像只读，发布后需主动拉取）──────
-curl -sf -X PUT "https://registry-direct.npmmirror.com/$PKG_ENC/sync?sync_upstream=true" >/dev/null \
-  || echo "⚠️ 触发同步接口失败（不阻塞，镜像也会自动同步）"
-for i in $(seq 1 18); do
-  sleep 10
-  MV=$(curl -sf "https://registry.npmmirror.com/$PKG_ENC" 2>/dev/null \
-       | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dist-tags.latest||'')}catch{console.log('')}})")
-  if [ "$MV" = "$VERSION" ]; then echo "✅ 镜像已同步 latest=${MV}，国内可按名安装"; break; fi
-  echo "⏳ 第 $i 次: 镜像 latest=${MV:-未同步}，继续等待…"
-done
-[ "$MV" = "$VERSION" ] || echo "⚠️ 镜像暂未翻正，可稍后手动触发: curl -X PUT https://registry-direct.npmmirror.com/$PKG_ENC/sync?sync_upstream=true"
+verify_publish() {
+  local seen="" mv="" i
+  for i in $(seq 1 40); do
+    sleep 15
+    seen=$(npm view "$PKG" version --registry="$OFFICIAL" 2>/dev/null || true)
+    if [ "$seen" = "$VERSION" ]; then echo "✅ 官方源已索引 latest=$seen"; break; fi
+    [ "$seen" = "0.0.0-stage" ] && echo "⏳ 第 $i 次: 出现 stage 空壳占位（首次发布正常现象），继续等待…"
+  done
+  if [ "$seen" != "$VERSION" ]; then
+    echo "❌ 10 分钟内官方源未索引出 ${VERSION}（当前: ${seen}），稍后手动检查 npm view $PKG"
+    return 1
+  fi
+  curl -sf -X PUT "https://registry-direct.npmmirror.com/$PKG_ENC/sync?sync_upstream=true" >/dev/null \
+    || echo "⚠️ 触发同步接口失败（不阻塞，镜像也会自动同步）"
+  for i in $(seq 1 18); do
+    sleep 10
+    mv=$(curl -sf "$MIRROR/$PKG_ENC" 2>/dev/null \
+         | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dist-tags.latest||'')}catch{console.log('')}})")
+    if [ "$mv" = "$VERSION" ]; then echo "✅ 镜像已同步 latest=$mv，国内可按名安装"; return 0; fi
+    echo "⏳ 第 $i 次: 镜像 latest=${mv:-未同步}，继续等待…"
+  done
+  echo "⚠️ 镜像暂未翻正，可稍后手动触发: curl -X PUT https://registry-direct.npmmirror.com/$PKG_ENC/sync?sync_upstream=true"
+  return 0
+}
+
+if $WAIT; then
+  verify_publish || exit 1
+else
+  (
+    echo "===== $(date '+%F %T') verify $PKG@$VERSION ====="
+    verify_publish
+    echo
+  ) >> "$VERIFY_LOG" 2>&1 < /dev/null &
+  disown 2>/dev/null || true
+  echo "🔍 索引与镜像校验已转后台（日志: $VERIFY_LOG）"
+  echo "   需要可安装确认时执行: npm view $PKG version --registry=$OFFICIAL"
+fi
 
 echo
 echo "🎉 完成: $PKG@$VERSION"
 echo "   官方: $OFFICIAL/$PKG"
-echo "   安装: DSH 添加插件 → 输入 $PKG → 安装源官方源立即可用，大陆镜像源同步后可用"
+echo "   安装: DSH 添加插件 → 输入 $PKG → 官方源索引后可用，大陆镜像源稍后同步"
