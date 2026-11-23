@@ -347,13 +347,17 @@ export function sanitizeHtml(html, maxLength = 20000) {
     const style = {
       table: 'border-collapse:collapse;', tr: '', td: 'padding:2px 6px;vertical-align:top;',
       div: 'margin:4px 0;', p: 'margin:4px 0;', span: '', font: '', b: '', strong: '', i: '', em: '', u: '',
-      a: 'color:#0a7cff;text-decoration:none;pointer-events:none;',
+      a: 'color:#0a7cff;text-decoration:underline;',
       h1: 'font-size:16px;font-weight:600;margin:6px 0;', h2: 'font-size:15px;font-weight:600;margin:6px 0;',
       h3: 'font-size:14px;font-weight:600;margin:6px 0;', h4: 'font-size:13px;font-weight:600;margin:6px 0;',
       h5: 'font-size:13px;font-weight:600;margin:4px 0;', h6: 'font-size:13px;font-weight:600;margin:4px 0;',
       ul: 'margin:4px 0;padding-left:18px;', ol: 'margin:4px 0;padding-left:18px;', li: 'margin:2px 0;',
     }[tag] ?? ''
-    const attrOut = link ? ` data-href="${link.replace(/"/g, '&quot;')}"` : ''
+    // 链接保留真实 href(桌面端由 shell.openExternal 打开,浏览器端 target=_blank 开新标签),
+    // 不再用 data-href 存放——那会让链接永远点不动
+    const attrOut = link
+      ? ` href="${link.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer"`
+      : ''
     return `<${tag}${attrOut} style="${style}">`
   })
   out = out.trim()

@@ -460,6 +460,10 @@ async function dispatch(store, cfg, body) {
       await store.pollOnce(cfg)
       return { ok: true, notifications: store.takeNotifications(sinceSeq) }
     }
+    case 'repairHtml': {
+      const result = await store.repairHtml({ host: cfg.imapHost, port: cfg.imapPort, folders: cfg.folders })
+      return { ok: true, ...result }
+    }
     default:
       throw new Error(`unknown action: ${action || '(empty)'}`)
   }
@@ -497,6 +501,13 @@ export default {
         }, cfg.pollInterval * 1000)
         // 首轮只记水位,避免把存量邮件全推成弹窗
         holder.store.pollOnce({ ...imapOpts, baseline: true }).catch(() => {})
+        // 一次性修复存量历史邮件被旧版 sanitizeHtml 丢弃的链接(按 UID 回服务器重拉)
+        child.effect(() => {
+          const t = setTimeout(() => {
+            holder.store.repairHtml(imapOpts).catch(() => {})
+          }, 5000)
+          return () => clearTimeout(t)
+        }, 'dsh-skillpie-mail: legacy html repair')
         return () => clearInterval(timer)
       }, 'dsh-skillpie-mail: poll timer')
     })

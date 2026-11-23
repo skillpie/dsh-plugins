@@ -5,7 +5,7 @@
  * payload: { mailboxes: [{ email, password, note }], lastUid: { [email]: n } }
  * 密码只在宿主侧保存,任何 API 都不会原样返回。
  */
-import { fetchNewMail, sanitizeHtml } from './imap.js'
+import { fetchNewMail, parseMail, sanitizeHtml, ImapClient } from './imap.js'
 
 export const RECORD_ID = 'dsh-skillpie-mail/mailboxes'
 export const MAX_NOTIFICATIONS = 20
@@ -138,6 +138,62 @@ export class MailStore {
     const { history, readIds } = await this.#read()
     const list = email ? history.filter((m) => m.email === email) : history
     return list.map((m) => ({ ...m, read: Boolean(readIds[m.id]) }))
+  }
+
+  /**
+   * 修复存量历史邮件的正文链接。
+   * 0.1.7 以前的 sanitizeHtml 会把 <a> 的 href 丢弃(pointer-events:none + 无 href),
+   * 历史里存的 html 永久失去链接目标;这里按 (邮箱, 文件夹, UID) 回服务器重拉原文,
+   * 用新版 sanitizeHtml 重新净化后原地覆盖。服务器已删的信保持原样。
+   */
+  async repairHtml(options = {}) {
+    const { host, port, folders } = options
+    const state = await this.#read()
+    const need = (state.history ?? []).filter((m) => m.html && /<a[\s>]/i.test(m.html) && !/href\s*=/i.test(m.html))
+    if (!need.length) return { repaired: 0 }
+    const byBox = new Map()
+    for (const m of need) {
+      if (!byBox.has(m.email)) byBox.set(m.email, [])
+      byBox.get(m.email).push(m)
+    }
+    let repaired = 0
+    for (const box of state.mailboxes) {
+      const targets = byBox.get(box.email)
+      if (!targets?.length) continue
+      try {
+        const client = new ImapClient({ host, port, user: box.email, password: box.password })
+        await client.connect()
+        try {
+          const byFolder = new Map()
+          for (const m of targets) {
+            if (!byFolder.has(m.folder)) byFolder.set(m.folder, [])
+            byFolder.get(m.folder).push(m)
+          }
+          for (const [folder, mails] of byFolder) {
+            if (!folders.includes(folder)) continue // 只修当前配置的文件夹
+            await client.select(folder)
+            for (const m of mails) {
+              const raws = await client.fetchRaw([m.uid])
+              if (!raws.length) continue
+              const parsed = parseMail(raws[0].raw)
+              const html = sanitizeHtml(parsed.html || '', 8000)
+              if (html && /<a[\s>]/i.test(html) && /href\s*=/i.test(html)) {
+                m.html = html
+                m.text = (parsed.text || '').slice(0, 2000)
+                repaired++
+              }
+            }
+          }
+        } finally {
+          await client.logout().catch(() => {})
+        }
+      } catch (error) {
+        // 单个邮箱失败不影响其它邮箱
+        if (options.onBoxError) options.onBoxError(box.email, error)
+      }
+    }
+    if (repaired) await this.#write(state)
+    return { repaired }
   }
 
   /** 删除单封历史邮件(按 id)。返回是否删除。 */

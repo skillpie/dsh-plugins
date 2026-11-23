@@ -5,7 +5,7 @@
       "package": "dsh-tokenbank",
       "title": "TokenBank免费模型",
       "description": "一键注册 TokenBank 领免费 API Key($5 体验金),免费 GLM 模型直接进模型列表;自带余额查询与密钥托管。",
-      "version": "0.1.90",
+      "version": "0.1.91",
       "tags": [
         "免费模型",
         "API Key"
@@ -78,7 +78,7 @@
       "package": "dsh-skillpie-mail",
       "title": "SkillPie邮箱",
       "description": "管理 @skillpie.cn 邮箱:快速注册/添加/移除,后台 IMAP 轮询,新邮件全局弹窗提醒。",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "tags": [
         "邮箱"
       ],

@@ -204,6 +204,32 @@ window.__ModuleLoader__.load({
       return p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes())
     }
 
+    // 正文链接修复:旧版 sanitizeHtml 把 href 挪进 data-href 并加了 pointer-events:none,
+    // 链接看得见却点不动。这里把存量旧格式还原成真实可点链接;新格式(已带 href)原样通过。
+    function mailLinkHtml(html) {
+      var out = String(html || '').replace(/pointer-events\s*:\s*none;?/gi, '')
+      out = out.replace(/<a\s([^>]*)>/gi, function (m, attrs) {
+        if (/(^|\s)href\s*=/i.test(attrs)) return m
+        var dh = /(?:^|\s)data-href\s*=\s*"([^"]*)"/i.exec(attrs)
+        if (!dh || !/^https?:/i.test(dh[1])) return m
+        var rest = attrs.replace(/(?:^|\s)data-href\s*=\s*"[^"]*"/i, '')
+        return '<a href="' + dh[1] + '" target="_blank" rel="noopener noreferrer"' + rest + '>'
+      })
+      return out
+    }
+
+    // 正文容器统一点击委托:桌面端 window.open 由主进程 shell.openExternal 接到系统浏览器,
+    // 浏览器端开新标签;preventDefault 兜住全局拦截,也不让正文内跳转污染 GUI 路由
+    function openMailLink(event) {
+      var node = event.target
+      var a = node && typeof node.closest === 'function' ? node.closest('a') : null
+      if (!a) return
+      var url = a.getAttribute('href') || a.getAttribute('data-href') || ''
+      if (!/^https?:/i.test(url)) return
+      event.preventDefault()
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+
     function RegisterDialog(props) {
       var t = props.t
       var usernameState = React.useState('')
@@ -537,7 +563,8 @@ window.__ModuleLoader__.load({
                     ? h('div', {
                         key: 'html',
                         style: { fontSize: 12, color: '#3a3a3c', background: '#f5f5f7', borderRadius: 8, padding: '8px 10px', flex: 1, minHeight: 0, overflowY: 'auto' },
-                        dangerouslySetInnerHTML: { __html: opened.html },
+                        onClick: openMailLink,
+                        dangerouslySetInnerHTML: { __html: mailLinkHtml(opened.html) },
                       })
                     : h('div', {
                         key: 'body',
@@ -726,7 +753,8 @@ window.__ModuleLoader__.load({
                         background: '#f5f5f7', borderRadius: 8, padding: '10px 12px',
                         maxHeight: 320, overflowY: 'auto',
                       },
-                      dangerouslySetInnerHTML: { __html: opened.html },
+                      onClick: openMailLink,
+                      dangerouslySetInnerHTML: { __html: mailLinkHtml(opened.html) },
                     })
                   : h('div', {
                       key: 'body',
@@ -914,7 +942,8 @@ window.__ModuleLoader__.load({
                           fontSize: 13, color: '#3a3a3c', wordBreak: 'break-all', lineHeight: 1.6,
                           background: '#f5f5f7', borderRadius: 8, padding: '10px 12px', maxHeight: 260, overflowY: 'auto',
                         },
-                        dangerouslySetInnerHTML: { __html: mail.html },
+                        onClick: openMailLink,
+                        dangerouslySetInnerHTML: { __html: mailLinkHtml(mail.html) },
                       })
                     : mail.text
                       ? h('div', {

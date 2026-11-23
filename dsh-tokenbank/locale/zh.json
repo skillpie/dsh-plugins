@@ -12,6 +12,7 @@
   "freeModelsEntry": "TokenBank 免费模型",
   "addFreeModels": "获取免费模型",
   "modelLinked": "已接入 {n} 个模型,点输入框上方的模型选择器即可切换使用",
+  "modelListUpdated": "模型列表已更新:当前 {n} 个可用模型",
   "composerEntry": "TokenBank 账户",
   "officialSite": "TokenBank 官网",
   "reload": "刷新",

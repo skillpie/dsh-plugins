@@ -31,6 +31,7 @@ window.__ModuleLoader__.load({
       getModels: '获取模型',
       freeModelsTip: '免费使用主流收费模型，点击后自动获取，模型列表 TokenBank 中的模型任意使用。',
       modelLinked: '已接入 {n} 个模型,点输入框上方的模型选择器即可切换使用',
+      modelListUpdated: '模型列表已更新:当前 {n} 个可用模型',
       reload: '刷新',
       recharge: '充值',
       rechargeTip: '全网最低价：￥10 ≈ 3846万 TOKEN，比官方与中转站省 10%~25%；支付宝直付秒到账，余额永不过期。',
@@ -221,6 +222,7 @@ window.__ModuleLoader__.load({
       freeModelsTip: 'Use paid-tier models for free — one click links them, and every TokenBank model in the list is available.',
       rechargeTip: 'Best price anywhere: $1 for ¥6.50 — 10%~25% cheaper than official APIs and relays. Pay with Alipay, credited instantly, credit never expires.',
       modelLinked: '{n} models linked — open the model picker above the input to switch to them',
+      modelListUpdated: 'Model list updated — {n} models available now',
       reload: 'Reload',
       recharge: 'Recharge',
       depositManage: 'Manage keys',
@@ -520,24 +522,14 @@ window.__ModuleLoader__.load({
     function BalancePill() {
       var snap = useTbStore()
       var st = React.useState(null)
-      // 登录跃迁(false→true)自动同步一次免费模型;初始挂载已登录不触发
-      var prevLogin = React.useRef(null)
       React.useEffect(function () {
         var stopped = false
         api('status').then(function (data) {
           if (stopped) return
           st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl })
-          var now = Boolean(data.loggedIn)
-          if (prevLogin.current === false && now) autoSyncModels()
-          prevLogin.current = now
         }).catch(function () {})
         return function () { stopped = true }
       }, [])
-      React.useEffect(function () {
-        var now = Boolean(snap.loggedIn)
-        if (prevLogin.current === false && now) { prevLogin.current = now; autoSyncModels() }
-        else if (prevLogin.current !== null) prevLogin.current = now
-      }, [snap.loggedIn])
       React.useEffect(function () {
         var stopped = false
         if (!snap.loggedIn) return
@@ -606,24 +598,14 @@ window.__ModuleLoader__.load({
         })
       }
       var st = React.useState(null)
-      // 登录跃迁(false→true)自动同步一次免费模型;初始挂载已登录不触发
-      var prevLogin = React.useRef(null)
       React.useEffect(function () {
         var stopped = false
         api('status').then(function (data) {
           if (stopped) return
           st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl })
-          var now = Boolean(data.loggedIn)
-          if (prevLogin.current === false && now) autoSyncModels()
-          prevLogin.current = now
         }).catch(function () {})
         return function () { stopped = true }
       }, [])
-      React.useEffect(function () {
-        var now = Boolean(snap.loggedIn)
-        if (prevLogin.current === false && now) { prevLogin.current = now; autoSyncModels() }
-        else if (prevLogin.current !== null) prevLogin.current = now
-      }, [snap.loggedIn])
       // 登录态变化(弹窗登录/退出)时刷新余额展示
       React.useEffect(function () {
         var stopped = false
@@ -1940,24 +1922,7 @@ window.__ModuleLoader__.load({
         var timer = setInterval(pull, 60000)
         return function () { stopped = true; clearInterval(timer) }
       }, [snap.authOpen])
-      // 登录态下每 30 分钟拉一次网关模型目录并刷新进模型列表(仅保留有可用凭证的模型);
-      // 退出登录(snap.loggedIn 变 false)即清定时器,不再同步。
-      React.useEffect(function () {
-        if (!snap.loggedIn) return
-        var syncModels = async function () {
-          try {
-            var d = await api('status')
-            if (!d || !d.loggedIn || !runtimeCtx) return
-            var models = await api('gateway-models', { accessKey: d.accessKey })
-            var list = (models && models.models) || []
-            if (!list.length) return
-            await addProviderToModels(runtimeCtx, d.baseURL || d.portalUrl || 'https://bank.skillpie.cn', { accessKey: d.accessKey, list: list, protocol: models.protocol })
-          } catch (e) { /* 静默:后台同步失败不打扰用户 */ }
-        }
-        syncModels()
-        var t = window.setInterval(syncModels, 30 * 60 * 1000)
-        return function () { window.clearInterval(t) }
-      }, [snap.loggedIn])
+      // 模型目录不再后台轮询:点击宿主模型选择器时按需同步(见 apply 里的 onModelTriggerClick)
       if (!snap.authOpen || !runtimeCtx) return null
       var close = function () { tbStore.set({ authOpen: false, startRecharge: false }) }
       var data = st[0]
@@ -2156,12 +2121,12 @@ window.__ModuleLoader__.load({
                   try {
                     var me = await api('status').catch(function () { return null })
                     if (me) tbStore.set({ loggedIn: Boolean(me.loggedIn), portalUrl: me.portalUrl })
-                    if (!runtimeCtx.remote || !runtimeCtx.remote.settings) return
-                    var fresh = await api('status')
-                    if (fresh && fresh.accessKey) {
-                      var models = await api('gateway-models', { accessKey: fresh.accessKey })
-                      var list = Array.isArray(models) ? models : (models.models || models.list || [])
-                      await addProviderToModels(runtimeCtx, fresh.baseURL || fresh.portalUrl, { accessKey: fresh.accessKey, list: list, protocol: models.protocol, key: fresh.accessKey })
+                    // 登录后仅此一处同步模型(原先 BalancePill/ComposerEntry 的登录跃迁同步已合并到这里);
+                    // 成功后记录已同步,点击选择器的节流窗口从此刻起算
+                    var res = await syncModelsFromGateway()
+                    if (res) {
+                      modelSyncState.lastAt = Date.now(); modelSyncState.lastCount = res.count
+                      tbStore.set({ notify: { kind: 'success', title: pageT('modelLinked').replace('{n}', String(res.count)), detail: '' } })
                     }
                   } catch { /* 面板里会提示模型接入状态 */ }
                 },
@@ -2439,24 +2404,42 @@ window.__ModuleLoader__.load({
 
 
     /**
+     * 读 llm-pi-ai 命名空间的当前视图。settings.describe().namespaces 运行时是
+     * **数组**(每项 { ns, value, revision, … };官方 ui-settings-models 用 Map 按 ns 取),
+     * 之前按字符串下标取恒为 undefined → revision 一直是 undefined(等于无条件写)。
+     */
+    async function readModelNamespaceView(ctx) {
+      const describe = await ctx.remote.settings.describe()
+      const list = Array.isArray(describe?.namespaces) ? describe.namespaces : []
+      const view = list.find(function (v) { return v && v.ns === MODEL_NS })
+      return view && typeof view.revision === 'number' ? view : null
+    }
+
+    /** 只比较我们自己写入的字段(value 是「解析后」的值,可能带 schema 默认字段,不能整体 JSON 比)。 */
+    function sameProviderProfile(a, b) {
+      if (!a || !b) return false
+      return a.displayName === b.displayName
+        && a.apiKeyEnv === b.apiKeyEnv
+        && a.api === b.api
+        && a.baseURL === b.baseURL
+        && JSON.stringify(a.models || []) === JSON.stringify(b.models || [])
+    }
+
+    /**
      * Mirror CustomProviderCard: store the credential reference, then set
-     * providers.tokenbank fenced on the revision we just read. Returns
-     * { ok, conflict? } — the caller renders the outcome.
+     * providers.tokenbank fenced on the revision we just read. 与已存 profile
+     * 完全一致时跳过 settings 写入(避免每次点击选择器都 bump revision 并触发
+     * 一次宿主模型目录刷新)。Returns { ok, changed, count, conflict? }.
      */
     async function addProviderToModels(ctx, baseURL, models) {
       if (!models.accessKey) throw new Error('credentials.set: empty access key (gateway-models response lost the key field?)')
       // typed gateway 契约:credentials/set 就是两个位置参数 (ref, value)
       // (packages/api/remotes/lib/client.js zod: parameter_0=ref, parameter_1=value)
+      // 每次都写:credentials 读路径不回传明文,无法 diff;一次写只触发一次目录刷新,代价可接受,
+      // 且能自愈被用户在设置页删掉的引用。
       const stored = await ctx.remote.credentials.set(KEY_REF, models.accessKey)
       if (stored && stored.ok === false) throw new Error(stored.error?.message || 'failed to store key')
 
-      const read = async () => {
-        const describe = await ctx.remote.settings.describe()
-        const view = describe?.namespaces?.[MODEL_NS] ?? null
-        return view && typeof view.revision === 'number' ? view : null
-      }
-      const existing = await read()
-      const revision = existing ? existing.revision : undefined
       const entries = (models.list || []).map(function (item) {
         if (typeof item === 'string') return { id: item }
         const entry = { id: item.id }
@@ -2478,36 +2461,75 @@ window.__ModuleLoader__.load({
         baseURL,
         models: entries,
       }
+      const existing = await readModelNamespaceView(ctx)
+      const current = existing ? existing.value?.providers?.[MODEL_ROUTE] : undefined
+      if (sameProviderProfile(current, profile)) return { ok: true, changed: false, count: entries.length }
       const response = await ctx.remote.settings.mutate(MODEL_NS,
-        [{ op: 'set', path: ['providers', MODEL_ROUTE], value: profile }], revision)
+        [{ op: 'set', path: ['providers', MODEL_ROUTE], value: profile }], existing ? existing.revision : undefined)
       if (response && response.ok === false) {
         if (response.error?.code === 'settings/conflict') return { ok: false, conflict: true }
         throw new Error(response.error?.message || 'settings write refused')
       }
-      return { ok: true }
+      return { ok: true, changed: true, count: entries.length }
     }
 
-    /** 登录后自动同步一次免费模型(写 provider,失败静默,不打扰用户)。 */
-    async function autoSyncModels() {
+    /**
+     * 拉一次网关模型目录并写入 provider(status → gateway-models → addProviderToModels)。
+     * 未登录(status 无 accessKey)返回 null。返回 { count, changed, conflict }。
+     * 登录流程、手动「获取模型」、点击选择器三条路径共用。
+     */
+    async function syncModelsFromGateway() {
+      if (!runtimeCtx || !runtimeCtx.remote || !runtimeCtx.remote.settings) return null
+      const fresh = await api('status')
+      if (!fresh || !fresh.accessKey) return null
+      const models = await api('gateway-models', { accessKey: fresh.accessKey })
+      const list = Array.isArray(models) ? models : (models?.models || models?.list || [])
+      const res = await addProviderToModels(runtimeCtx, fresh.baseURL || fresh.portalUrl || 'https://bank.skillpie.cn',
+        { accessKey: fresh.accessKey, list: list, protocol: models && models.protocol })
+      return { count: list.length, changed: Boolean(res && res.changed), conflict: Boolean(res && res.conflict) }
+    }
+
+    /* ── 点击宿主模型选择器 → 节流同步一次 ─────────────────────────────────
+     * 宿主 ModelDirectoryResolver 订阅 settings/document-updated 等事件后会
+     * catalog.refresh(),菜单打开期间列表会原地补齐,所以点击时拉最新即可取代
+     * 后台 30 分钟轮询。节流 5 分钟,避免反复开关选择器时每次都打网关。 */
+    var MODEL_TRIGGER_RE = /选择模型|Select model|加载模型|Loading models/
+    var MODEL_SYNC_MIN_INTERVAL_MS = 5 * 60 * 1000
+    var modelSyncState = { lastAt: 0, lastCount: null, inflight: false }
+
+    function onModelTriggerClick(ev) {
       try {
-        if (!runtimeCtx || !runtimeCtx.remote || !runtimeCtx.remote.settings) return
-        var fresh = await api('status')
-        if (!fresh || !fresh.accessKey) return
-        var models = await api('gateway-models', { accessKey: fresh.accessKey })
-        var list = Array.isArray(models) ? models : (models.models || models.list || [])
-        await addProviderToModels(runtimeCtx, fresh.baseURL || fresh.portalUrl, { accessKey: fresh.accessKey, list: list, protocol: models.protocol, key: fresh.accessKey })
-        tbStore.set({ notify: { kind: 'success', title: pageT('modelLinked').replace('{n}', String(list.length)), detail: '' } })
-      } catch (e) {
-        console.warn('[dsh-tokenbank] auto sync models failed:', String(e && e.message || e))
-      }
+        var target = ev && ev.target
+        var el = target && typeof target.closest === 'function' ? target.closest('button[aria-haspopup="menu"]') : null
+        if (!el || !MODEL_TRIGGER_RE.test(el.getAttribute('aria-label') || '')) return
+        // 未登录态点击:一个请求都不发(本地登录态由各组件挂载/登录流程写入 tbStore)
+        var snap = tbStore.get()
+        if (!snap || !snap.loggedIn) return
+        var now = Date.now()
+        if (modelSyncState.inflight || (modelSyncState.lastAt && now - modelSyncState.lastAt < MODEL_SYNC_MIN_INTERVAL_MS)) return
+        modelSyncState.inflight = true
+        syncModelsFromGateway().then(function (res) {
+          modelSyncState.inflight = false
+          if (!res) return // 未登录:不记时间,登录后首次点击照常同步
+          modelSyncState.lastAt = Date.now()
+          var prev = modelSyncState.lastCount
+          modelSyncState.lastCount = res.count
+          // 静默刷新;仅模型数量变化时提示(首次由登录流程提示,这里 prev 为 null 不弹)
+          if (prev != null && prev !== res.count) {
+            tbStore.set({ notify: { kind: 'success', title: pageT('modelListUpdated').replace('{n}', String(res.count)), detail: '' } })
+          }
+        }).catch(function (e) {
+          modelSyncState.inflight = false
+          console.warn('[dsh-tokenbank] click sync models failed:', String(e && e.message || e))
+        })
+      } catch (e) { /* document 监听器内异常不能冒泡到宿主 */ }
     }
 
     /** 退出登录:从模型列表移除 TokenBank provider(尽力而为,失败不阻塞登出)。 */
     async function removeProviderFromModels(ctx) {
       try {
-        const describe = await ctx.remote.settings.describe()
-        const view = describe?.namespaces?.[MODEL_NS] ?? null
-        const revision = view && typeof view.revision === 'number' ? view.revision : undefined
+        const existing = await readModelNamespaceView(ctx)
+        const revision = existing ? existing.revision : undefined
         const response = await ctx.remote.settings.mutate(MODEL_NS,
           [{ op: 'unset', path: ['providers', MODEL_ROUTE] }], revision)
         if (response && response.ok === false) {
@@ -2905,6 +2927,18 @@ window.__ModuleLoader__.load({
 
         /* ── 模块②③④:选择器入口 + 弹层 + 设置页托管/状态 ── */
         runtimeCtx = ctx
+
+        // 点击宿主模型选择器(捕获阶段,先于 React 的 show())→ 节流同步一次最新模型目录;
+        // 宿主订阅 settings/document-updated 后会原地刷新已打开的菜单。dispose 时移除监听。
+        if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+          document.addEventListener('click', onModelTriggerClick, true)
+          ctx.effect(function () {
+            return function () {
+              modelSyncState.inflight = false
+              document.removeEventListener('click', onModelTriggerClick, true)
+            }
+          }, 'dsh-tokenbank: model picker click sync')
+        }
 
         // 输入框工具行、模型选择器左侧的紧凑入口按钮(弹账户/注册窗)
         ctx.slots.inject('conversation.composer.dock', function () {

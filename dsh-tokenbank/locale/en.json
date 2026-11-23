@@ -12,6 +12,7 @@
   "freeModelsEntry": "TokenBank free models",
   "addFreeModels": "Get free models",
   "modelLinked": "{n} models linked — open the model picker above the input to switch to them",
+  "modelListUpdated": "Model list updated — {n} models available now",
   "composerEntry": "TokenBank account",
   "officialSite": "TokenBank website",
   "reload": "Reload",

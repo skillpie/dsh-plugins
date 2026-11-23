@@ -6,8 +6,10 @@
  * 失败应静默、整体仍 ok) / 密码不外泄 / 非法 JSON 与未知 action。
  */
 import http from 'node:http'
+import fs from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import { MailStore, RECORD_ID, dispatch, ROUTE } from '../lib/index.js'
+import { sanitizeHtml } from '../lib/imap.js'
 
 // ── 桩 credentials ───────────────────────────────────────────────────
 const records = new Map()
@@ -144,6 +146,43 @@ async function main() {
   assert.equal(record.kind, 'grant')
   assert.ok(Array.isArray(record.payload.mailboxes))
   assert.ok(!RECORD_ID.slice(0, RECORD_ID.indexOf('/')).includes('/'), 'scope 不得含 /')
+
+  // 10. 正文链接:sanitizeHtml 保留真实 href(target=_blank + rel),不再产出 data-href / pointer-events:none
+  const link = sanitizeHtml('<a href="https://console.example.com/x?a=1">前往控制台</a><a onclick="evil()" href="https://ok.example.com">开发者社区</a>')
+  assert.ok(link.includes('href="https://console.example.com/x?a=1"'), '真实 href 必须保留: ' + link)
+  assert.ok(link.includes('target="_blank" rel="noopener noreferrer"'), '链接必须带 target=_blank 与 rel: ' + link)
+  assert.ok(link.includes('href="https://ok.example.com"'), '带 onclick 的链接也应保留 href: ' + link)
+  assert.equal(link.includes('pointer-events'), false, '不得再出现 pointer-events:none')
+  assert.equal(link.includes('data-href'), false, '不得再产出 data-href')
+  assert.equal(link.includes('onclick'), false, '事件属性必须剥掉')
+  // 协议门禁:javascript: 链接不产出任何 href
+  const evilLink = sanitizeHtml('<a href="javascript:alert(1)">点我</a>')
+  assert.equal(evilLink.includes('javascript:'), false, 'javascript: 协议必须被剥掉')
+  assert.equal(/href=/i.test(evilLink), false, '非 http(s) 链接不得保留 href')
+  // script/style 整块移除
+  assert.equal(sanitizeHtml('<script>alert(1)</script><p>hi</p>').includes('alert'), false)
+
+  // 11. 存量旧格式升级:client.js 的 mailLinkHtml 必须把 data-href 旧邮件还原成可点链接
+  //     (函数内嵌在浏览器 factory 里,node 侧从源码提取求值,防止两端行为漂移)
+  const clientSrc = await fs.readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
+  const fnStart = clientSrc.indexOf('function mailLinkHtml')
+  const fnEnd = clientSrc.indexOf('function openMailLink')
+  assert.ok(fnStart > 0 && fnEnd > fnStart, 'client.js 缺少 mailLinkHtml/openMailLink')
+  const legacyIn = sanitizeHtml('<a href="https://old.example.com/join">加入社群</a>')
+    .replace('href="https://old.example.com/join" target="_blank" rel="noopener noreferrer"', 'data-href="https://old.example.com/join"')
+    .replace('text-decoration:underline;', 'text-decoration:none;pointer-events:none;')
+  const mailLinkHtml = new Function('return (' + clientSrc.slice(fnStart, fnEnd).trim() + '\n)')()
+  const upgraded = mailLinkHtml(legacyIn)
+  assert.ok(upgraded.includes('href="https://old.example.com/join"'), '旧 data-href 必须还原为真实 href: ' + upgraded)
+  assert.ok(upgraded.includes('target="_blank" rel="noopener noreferrer"'), '升级后必须可开新标签: ' + upgraded)
+  assert.equal(upgraded.includes('pointer-events'), false, '升级后不得残留 pointer-events:none')
+  assert.equal(upgraded.includes('data-href'), false, '升级后不得残留 data-href')
+  // 新格式输入原样通过(有 href 就不再改写)
+  const freshIn = sanitizeHtml('<a href="https://new.example.com">新邮件</a>')
+  assert.equal(mailLinkHtml(freshIn), freshIn, '新格式应原样通过')
+  // 非法/空输入安全
+  assert.equal(mailLinkHtml(''), '')
+  assert.equal(mailLinkHtml(null), '')
 
   console.log('dsh-skillpie-mail smoke: all assertions passed')
 }
