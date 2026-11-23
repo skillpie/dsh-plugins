@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugins-plugin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "精选插件:官方插件页「精选推荐」板块的全量嵌入代码库。其他插件执行 `sh integrate.sh --plugin=xxx` 即把完整功能(展示端 UI + 数据端)嵌入 xxx,无需单独安装本包;数据来自仓库集中维护的 plugins.json(jsdelivr 分发)。",
   "type": "module",
   "license": "MIT",

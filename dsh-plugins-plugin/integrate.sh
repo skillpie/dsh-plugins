@@ -145,10 +145,16 @@ node - "$PKG" <<'NODE'
 const fs = require('fs')
 const [pkgPath] = process.argv.slice(2)
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-if (pkg.dependencies && pkg.dependencies['dsh-plugins-plugin'] !== undefined) {
-  delete pkg.dependencies['dsh-plugins-plugin']
+let depRemoved = false
+for (const key of ['dependencies', 'devDependencies']) {
+  if (pkg[key] && pkg[key]['dsh-plugins-plugin'] !== undefined) {
+    delete pkg[key]['dsh-plugins-plugin']
+    depRemoved = true
+  }
+}
+if (depRemoved) {
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
-  console.log('→ 已从 dependencies 移除 dsh-plugins-plugin(host 半已内联,零运行时依赖)')
+  console.log('→ 已移除 dsh-plugins-plugin 依赖声明(host/client 半已内联,零运行时依赖)')
 }
 NODE
 if [ -e "$CAND/node_modules/dsh-plugins-plugin" ]; then
@@ -226,6 +232,8 @@ if (src.includes(BEGIN)) {
     const m = src.match(APP_RE2)
     if (!m) throw new Error('未找到 apply(ctx) 入口')
     const at = src.match(APP_RE2).index + m[1].length + m[2].length
+    const applyLine = src.slice(src.lastIndexOf('\n', at) + 1).split('\n')[0]
+    if (!/\{\s*$/.test(applyLine)) throw new Error('apply(ctx) 是单行函数体,请先展开为多行 apply(ctx) {\n  ...\n} 再重跑本脚本')
     const nl = src.indexOf('\n', at)
     const nextLine = src.slice(nl + 1)
     const indent = (nextLine.match(/^[ \t]*/) || [''])[0] || '  '
@@ -283,8 +291,11 @@ for (let i = 0; i < lines.length; i++) {
   if (done) break
   const m = lines[i].match(APP_RE)
   if (!m) continue
+  // 单行 apply(ctx) {} 没有正文行可插,静默插到外面会变成顶层代码(运行时 ctx 未定义)
+  if (!/\{\s*$/.test(lines[i])) throw new Error('apply(ctx) 是单行函数体,请先展开为多行 apply(ctx) {\n  ...\n} 再重跑本脚本')
   let j = i + 1
   while (j < lines.length && lines[j].trim() === '') j++
+  if (j >= lines.length) throw new Error('apply(ctx) 位于文件末尾且无函数体,请先展开为多行再重跑本脚本')
   const indent = (lines[j].match(/^[ \t]*/) || [''])[0] || '  '
   lines.splice(j, 0, indent + CALL)
   done = true
@@ -499,6 +510,7 @@ if (src.indexOf(BEGIN) !== -1) {
   }
   const lineStart = src.lastIndexOf('\n', at) + 1
   const lineIndent = (src.slice(lineStart, at).match(/^[ \t]*/) || [''])[0]
+  if (src.slice(lineStart, at).trim() !== '') throw new Error('client.js 的 factory(require) 是单行函数体,请先展开为多行 factory(require) {\n  ...\n}\n} ) 再重跑本脚本')
   const banner = [
     '// ' + '='.repeat(70),
     '// 精选插件(内联模块,由 dsh-featured 的 integrate.sh 自动插入,请勿手改)',
@@ -530,6 +542,9 @@ if (src.indexOf(CALL_LINE) !== -1) {
     console.error('✗ 未找到 client.js 的 apply(ctx) 入口或括号配对失败')
     process.exit(1)
   }
+  const openM = APP_RE.exec(src)
+  const open = openM.index + openM[0].length - 1
+  if (!src.slice(open, close).includes('\n')) throw new Error('client.js 的 apply(ctx) 是单行函数体,请先展开为多行 apply(ctx) {\n  ...\n} 再重跑本脚本')
   const lineStart = src.lastIndexOf('\n', close) + 1
   const lineIndent = (src.slice(lineStart, close).match(/^[ \t]*/) || [''])[0]
   src = src.slice(0, lineStart) + lineIndent + '  ' + CALL_LINE + '\n' + src.slice(lineStart)
