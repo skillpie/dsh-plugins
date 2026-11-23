@@ -264,12 +264,14 @@ window.__ModuleLoader__.load({
     // 包名行:npm 包名(左,等宽)+ 数据(右,同行);整行可点开详情弹窗。
     // 不展示作者信息(不依赖 awesome-dsh-plugin 的 author 字段)。
     function FeaturedAuthor(props) {
-      const pkg = props.pkg
+      const e = props.entry
+      const pkg = e.package
       const meta = props.meta
       const onDetail = props.onDetail
-      if (!pkg && !meta) return null
+      if (!pkg && !meta && !e.author) return null
       return h('div', { style: S.authorRow, onClick: onDetail },
-        pkg ? h('span', { style: S.author }, pkg) : null,
+        pkg ? h('span', { style: S.author, title: pkg }, pkg) : null,
+        e.author ? h('span', { style: S.author, title: e.author }, '@' + e.author) : null,
         meta ? h('span', { style: S.meta }, meta) : null)
     }
 
@@ -401,6 +403,8 @@ window.__ModuleLoader__.load({
       const btnLabel = busy ? '…' : t('install')
       const metaParts = []
       if (e.version) metaParts.push(`v${e.version}`)
+      if (typeof e.downloads === 'number' && e.downloads > 0) metaParts.push('↓ ' + fmtCount(e.downloads))
+      if (typeof e.stars === 'number' && e.stars > 0) metaParts.push('★ ' + fmtCount(e.stars))
       const metaText = metaParts.join(' · ')
 
       const chips = (e.tags || []).slice(0, 2)
@@ -418,7 +422,7 @@ window.__ModuleLoader__.load({
                 type: 'button', style: Object.assign({}, S.btn, busy ? S.btnBusy : {}),
                 onClick, disabled: busy,
               }, btnLabel)),
-        h(FeaturedAuthor, { pkg: e.package, meta: metaText, onDetail }),
+        h(FeaturedAuthor, { entry: e, meta: metaText, onDetail }),
         (e.detail || e.description) ? h('p', { style: S.desc, onClick: onDetail }, e.detail || e.description) : null,
         h(ReadmeShots, { entry: e, onOpen: onShots }),
         h('div', { style: S.foot },
@@ -690,8 +694,6 @@ window.__ModuleLoader__.load({
       const query = queryPair[0], setQuery = queryPair[1]
       const catPair = React.useState('')
       const activeCat = catPair[0], setActiveCat = catPair[1]
-      const tagPair = React.useState('')
-      const activeTag = tagPair[0], setActiveTag = tagPair[1]
       const viewerPair = React.useState(null)
       const viewer = viewerPair[0], setViewer = viewerPair[1]
 
@@ -734,12 +736,11 @@ window.__ModuleLoader__.load({
         const q = query.trim().toLowerCase()
         return state.entries.filter((e) => {
           if (activeCat && e.categoryId !== activeCat && e.category !== activeCat) return false
-          if (activeTag && !(e.tags || []).includes(activeTag)) return false
           if (!q) return true
           const hay = [e.title, e.package, e.detail, e.description, (e.tags || []).join(' ')].join(' ').toLowerCase()
           return hay.includes(q)
         })
-      }, [state.entries, query, activeCat, activeTag])
+      }, [state.entries, query, activeCat])
 
       const kids = []
 
@@ -773,13 +774,7 @@ window.__ModuleLoader__.load({
               title: c.name,
             }, c.displayName))))
         }
-        if (tags.length) {
-          kids.push(h('div', { key: 'tags', style: S.tabBar },
-            tags.map((tg) => h('button', {
-              key: tg, type: 'button', style: activeTag === tg ? S.tabBtnActive : S.tabBtn,
-              onClick: () => setActiveTag(activeTag === tg ? '' : tg),
-            }, tg))))
-        }
+        // 标签行已移除(标签太多,筛选入口收进搜索与分类)
         if (visible.length) {
           kids.push(h('ul', { key: 'grid', style: S.grid }, visible.map((e) => (
             h(FeaturedCard, { key: e.package, entry: e, t, install, onDetail: () => setDetail(e), onShots: (list, idx) => setViewer({ list, idx }), installed: !!state.installed[e.package] })
