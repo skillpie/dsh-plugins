@@ -76,6 +76,12 @@ globalThis.fetch = async (url, opts) => {
   if (u.includes('/api/plugin-categories')) {
     return new Response(JSON.stringify(CATEGORIES), { status: 200, headers: { 'content-type': 'application/json' } })
   }
+  if (u.match(/\/api\/plugins\/dsh-a$/)) {
+    return __resp({ plugin: { id: 'p1', name: 'dsh-a', title: '插件 A', version: '1.0.0', readme: '# A 的完整 README', description: 'A 的说明' } })
+  }
+  if (u.match(/\/api\/plugins\/dsh-404$/)) {
+    return new Response(JSON.stringify({ message: '插件不存在' }), { status: 404 })
+  }
   if (u.includes('/api/plugins')) {
     return u.includes('cursor=') ? __resp(PLUGIN_PAGE_2) : __resp(PLUGIN_PAGE_1)
   }
@@ -89,7 +95,7 @@ function __resp(obj) {
 const { ctx } = makeCtx({ webServer })
 apply(ctx)
 
-assert.equal(routes.length, 1, '应注册一条聚合路由')
+assert.equal(routes.length, 2, '应注册聚合+详情两条路由')
 assert.equal(routes[0].path, ROUTE)
 assert.equal(routes[0].kind, 'exact')
 
@@ -136,6 +142,34 @@ const bad = await new Promise((resolve, reject) => {
   req.end('{}')
 })
 assert.equal(bad.status, 405, '非 GET/HEAD 应 405')
+
+/* ── 4. 详情路由:按需代理 + 缓存 ── */
+assert.equal(routes.length, 2, '应注册聚合+详情两条路由')
+const detailRoute = routes.find((r) => r.path === '/dsh-featured/detail')
+assert.ok(detailRoute, '详情路由已注册')
+
+const dServer = http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://x')
+  const route = routes.find((r) => r.path === url.pathname)
+  if (!route) { res.writeHead(404); res.end(); return }
+  await route.handler(req, res)
+})
+await new Promise((resolve) => dServer.listen(0, '127.0.0.1', resolve))
+const dBase = `http://127.0.0.1:${dServer.address().port}`
+
+const d1 = await fetch(dBase + '/dsh-featured/detail?package=dsh-a')
+assert.equal(d1.status, 200)
+const d1Body = await d1.json()
+assert.equal(d1Body.ok, true)
+assert.equal(d1Body.data.entry.readme, '# A 的完整 README', '详情含 readme')
+
+const dMiss = await fetch(dBase + '/dsh-featured/detail?package=dsh-404')
+assert.equal(dMiss.status, 404, '上游 404 透传')
+
+const dNoPkg = await fetch(dBase + '/dsh-featured/detail')
+assert.equal(dNoPkg.status, 400, '缺 package 应 400')
+
+dServer.close()
 
 server.close()
 globalThis.fetch = realFetch

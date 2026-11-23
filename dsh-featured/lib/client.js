@@ -17,6 +17,7 @@ window.__ModuleLoader__.load({
 
     const NS = 'dsh-featured'
     const ROUTE = '/dsh-featured/featured'
+    const DETAIL_ROUTE = '/dsh-featured/detail'
     // 数据统一由宿主半提供:host 从 skillpie 公开接口分页拉取
     // 「插件分类 + 插件列表 + 详情(readme 内嵌)」,client 只读本地路由,永远新鲜。
 
@@ -566,26 +567,34 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         let alive = true
         setState({ status: 'loading', kids: [] })
-        // 优先用 skillpie 数据库内嵌的 readme(列表已随行返回,零额外请求);
-        // 缺失时回退 jsdelivr npm 包 README。
-        if (e.readme && String(e.readme).trim()) {
-          setState({ status: 'ready', kids: renderReadme(String(e.readme).trim(), readmeBase(e)) })
-          return undefined
-        }
-        const base = `https://cdn.jsdelivr.net/npm/${e.package}/`
-        fetchText(base + 'README.md', 10000).then((txt) => {
+        // 优先走宿主半的详情代理(/dsh-featured/detail,skillpie 数据库,10 分钟缓存);
+        // 失败再回退 jsdelivr npm 包 README。
+        fetchJson(DETAIL_ROUTE + '?package=' + encodeURIComponent(e.package), 10000).then((body) => {
           if (!alive) return
-          setState({ status: 'ready', kids: renderReadme(txt, base) })
+          const entry = body && body.ok && body.data && body.data.entry
+          const md = entry && (entry.readme || entry.description)
+          if (md && String(md).trim()) {
+            setState({ status: 'ready', kids: renderReadme(String(md).trim(), readmeBase(e)) })
+            return
+          }
+          throw new Error('no readme')
         }).catch(() => {
           if (!alive) return
-          // jsdelivr npm 主源失败 → GitHub 仓库兜底(README 大小写两种形态)
-          const ghCandidates = e.homepage && /^https?:\/\/github\.com\/([^/]+)\/([^/]+)/i.exec(e.homepage)
-          if (!ghCandidates) { setState({ status: 'error', kids: [] }); return }
-          const ghBase = `https://cdn.jsdelivr.net/gh/${ghCandidates[1]}/${ghCandidates[2]}@main/`
-          fetchText(ghBase + 'README.md', 10000).then((txt2) => {
+          const base = `https://cdn.jsdelivr.net/npm/${e.package}/`
+          fetchText(base + 'README.md', 10000).then((txt) => {
             if (!alive) return
-            setState({ status: 'ready', kids: renderReadme(txt2, ghBase) })
-          }).catch(() => { if (alive) setState({ status: 'error', kids: [] }) })
+            setState({ status: 'ready', kids: renderReadme(txt, base) })
+          }).catch(() => {
+            if (!alive) return
+            // jsdelivr npm 主源失败 → GitHub 仓库兜底(README 大小写两种形态)
+            const ghCandidates = e.homepage && /^https?:\/\/github\.com\/([^/]+)\/([^/]+)/i.exec(e.homepage)
+            if (!ghCandidates) { setState({ status: 'error', kids: [] }); return }
+            const ghBase = `https://cdn.jsdelivr.net/gh/${ghCandidates[1]}/${ghCandidates[2]}@main/`
+            fetchText(ghBase + 'README.md', 10000).then((txt2) => {
+              if (!alive) return
+              setState({ status: 'ready', kids: renderReadme(txt2, ghBase) })
+            }).catch(() => { if (alive) setState({ status: 'error', kids: [] }) })
+          })
         })
         return () => { alive = false }
       }, [e.package])

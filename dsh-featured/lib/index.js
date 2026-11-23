@@ -12,6 +12,7 @@
 //      因此页面上永远只有一个「精选插件」tab(多插件同时集成也只会有内联一份)。
 
 export const ROUTE = '/dsh-featured/featured'
+export const DETAIL_ROUTE = '/dsh-featured/detail'
 export const SERVICE = 'featured-plugins'
 
 export const Config = {
@@ -203,6 +204,54 @@ export function apply(ctx, config) {
         if (typeof dispose === 'function') dispose()
       }
     }, 'dsh-featured: featured route')
+  })
+
+  // ── 详情路由:按需代理 skillpie 详情(含 readme),10 分钟缓存 ──
+  // 列表不含 readme(流量优化),浏览器点开详情时才从这里取一次。
+  const detailCache = new Map() // package -> { at, entry }
+  const DETAIL_TTL_MS = 10 * 60_000
+
+  ctx.inject(['webServer'], (child) => {
+    child.effect(() => {
+      let dispose = null
+      try {
+        dispose = child.webServer.register({
+          kind: 'exact',
+          path: DETAIL_ROUTE,
+          handler: async (req, res) => {
+            try {
+              if (!sameOrigin(req)) { json(res, 403, { ok: false, error: 'cross-origin request rejected' }); return }
+              if (req.method !== 'GET' && req.method !== 'HEAD') { json(res, 405, { ok: false, error: 'method not allowed' }); return }
+              const url = new URL(req.url, 'http://x')
+              const pkg = String(url.searchParams.get('package') || '').trim()
+              if (!pkg) { json(res, 400, { ok: false, error: 'missing package' }); return }
+              const hit = detailCache.get(pkg)
+              if (hit && Date.now() - hit.at < DETAIL_TTL_MS) { json(res, 200, { ok: true, data: { entry: hit.entry } }); return }
+              const r = await fetch(baseUrl + '/api/plugins/' + encodeURIComponent(pkg), {
+                headers: { accept: 'application/json' },
+                signal: AbortSignal.timeout(8000),
+                cache: 'no-store',
+              })
+              if (!r.ok) { json(res, r.status === 404 ? 404 : 502, { ok: false, error: 'upstream ' + r.status }); return }
+              const body = await r.json()
+              const entry = toEntry(body && body.plugin)
+              if (!entry) { json(res, 404, { ok: false, error: 'not found' }); return }
+              detailCache.set(pkg, { at: Date.now(), entry })
+              if (detailCache.size > 200) { // 防膨胀:删最旧
+                const oldest = detailCache.keys().next().value
+                detailCache.delete(oldest)
+              }
+              json(res, 200, { ok: true, data: { entry } })
+            } catch (err) {
+              json(res, 200, { ok: false, error: String(err?.message || err) })
+            }
+          },
+        })
+      } catch { /* 路由已存在 */ }
+      return () => {
+        if (typeof dispose === 'function') dispose()
+      }
+    }, 'dsh-featured: detail route')
   })
 
   // ── 详情路由:透传 skillpie 详情(或由 aggregate 返回的 readme 直接内嵌) ──
