@@ -69,10 +69,5 @@ YAML 语法自检:`node -e "require('js-yaml').load(require('fs').readFileSync('
 ## 提示词(直接转发给接入方 AI)
 
 ```text
-请把我的 DSH 插件接入「精选插件」生态。严格按 https://github.com/skillpie/dsh-plugins/blob/main/dsh-featured/AI-INTEGRATION.md 执行:
-1. 读该文档;
-2. 在我的插件 cordis.patch.yml 里加 dsh.featured.source 声明(我的包名: <npm 包名>,中文名: <名称>,一句话简介: <简介>);
-3. YAML 改完做语法自检;
-4. 提醒我去 skillpie.cn 创作中心申请收录(或告诉我你已经帮我准备好发布信息)。
-不要 install dsh-featured,不要注册 plugins.tab 槽,不要动 dsh-featured 仓库。
+请把我的 DSH 插件接入「精选插件」,严格按 https://github.com/skillpie/dsh-plugins/blob/main/dsh-featured/AI-INTEGRATION.md 执行,完成后告诉我还需要我手动做什么。
 ```
