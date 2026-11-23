@@ -1,6 +1,6 @@
 {
   "name": "dsh-featured",
-  "version": "0.1.9",
+  "version": "0.1.11",
   "description": "精选插件:官方插件页的精选板块。带搜索栏、分类/标签筛选、申请收录入口。数据由 skillpie 后台数据库管理(插件分类 + 插件列表 + 详情 README),经公开分页接口下发;已接入内联欢迎页的插件会自动让位给本插件。",
   "type": "module",
   "license": "MIT",

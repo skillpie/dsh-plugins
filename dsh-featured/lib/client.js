@@ -10,6 +10,7 @@
 //   - 内联版保持原样不动(已发布,有人下载);本插件装上后自动接管。
 window.__ModuleLoader__.load({
   id: 'dsh-featured',
+  __FEATURED_FULL__: true,
   factory(require) {
     const React = require('react')
 
@@ -634,62 +635,18 @@ window.__ModuleLoader__.load({
 
 
     // ── 申请收录弹窗(GitHub PR 引导 + 可复制的 JSON 示例)──
-    function ApplyModal(props) {
-      const t = props.t
-      const onClose = props.onClose
-      React.useEffect(() => {
-        const onKey = (ev) => { if (ev.key === 'Escape') onClose() }
-        window.addEventListener('keydown', onKey)
-        return () => window.removeEventListener('keydown', onKey)
-      }, [onClose])
-      const step = (n, text) => h('li', { key: 's' + n, style: S.mdLi }, text)
-      return h('div', {
-        style: S.overlay,
-        onClick: (ev) => { if (ev.target === ev.currentTarget) onClose() },
-      },
-        h('div', { style: S.panel },
-          h('div', { style: S.panelHead },
-            h('div', { style: S.panelTitleCol },
-              h('p', { style: S.panelTitle }, t('applyTitle')),
-              h('span', { style: S.panelPkg }, 'skillpie/dsh-plugins')),
-            h('button', { type: 'button', style: S.panelClose, onClick: onClose }, '✕')),
-          h('p', { style: S.panelDesc }, t('applyDesc')),
-          h('div', { style: S.panelBody },
-            h('ol', { style: S.mdList },
-              step(1, t('applyStep1')),
-              step(2, t('applyStep2')),
-              step(3, t('applyStep3'))),
-            h('p', { style: S.mdH2 }, t('exampleTitle')),
-            h('pre', { style: S.mdPre }, h('code', { style: S.mdPreCode }, {
-      "package": "dsh-my-plugin",
-      "title": "我的插件",
-      "description": "一句话说明它解决什么问题",
-      "version": "1.2.3",
-      "homepage": "https://github.com/me/dsh-my-plugin",
-      "tags": ["效率"]
-    }))),
-          h('div', { style: Object.assign({}, S.panelMeta, { justifyContent: 'flex-end', gap: 8, paddingTop: 10 }) },
-            h('a', {
-              style: Object.assign({}, S.retryBtn, { textDecoration: 'none', display: 'inline-block' }),
-              href: 'https://github.com/skillpie/dsh-plugins', target: '_blank', rel: 'noreferrer noopener',
-            }, t('applyOpen')),
-            h('button', { type: 'button', style: S.retryBtn, onClick: onClose }, t('applyOk')))))
-    }
-
     // ── tab 入口:搜索栏 + 标签筛选 + 申请收录 ──
     function FeaturedSection(props) {
       const install = props.install
       void props.openPackage
       const t = props.t
 
-      const pair = React.useState({ status: 'loading', entries: [], installed: {}, categories: [] })
+      const pair = React.useState({ status: 'loading', entries: [], installed: {}, categories: [], baseUrl: '' })
       const state = pair[0], setState = pair[1]
       const noncePair = React.useState(0)
       const nonce = noncePair[0], setNonce = noncePair[1]
       const detailPair = React.useState(null)
       const detail = detailPair[0], setDetail = detailPair[1]
-      const applyPair = React.useState(false)
-      const applyOpen = applyPair[0], setApplyOpen = applyPair[1]
       const queryPair = React.useState('')
       const query = queryPair[0], setQuery = queryPair[1]
       const catPair = React.useState('')
@@ -699,7 +656,7 @@ window.__ModuleLoader__.load({
 
       React.useEffect(() => {
         let alive = true
-        setState({ status: 'loading', entries: [], installed: {}, categories: [] })
+        setState({ status: 'loading', entries: [], installed: {}, categories: [], baseUrl: '' })
         fetchJson(ROUTE, 8000).then((body) => {
           if (!alive) return
           const entries = body && body.ok && body.data && Array.isArray(body.data.entries)
@@ -715,9 +672,12 @@ window.__ModuleLoader__.load({
           const categories = body && body.ok && body.data && Array.isArray(body.data.categories)
             ? body.data.categories
             : []
-          setState({ status: entries.length ? 'ready' : 'empty', entries, installed, categories })
+          const baseUrl = body && body.ok && body.data && typeof body.data.baseUrl === 'string'
+            ? body.data.baseUrl
+            : 'https://skillpie.cn'
+          setState({ status: entries.length ? 'ready' : 'empty', entries, installed, categories, baseUrl })
         }).catch(() => {
-          if (alive) setState({ status: 'error', entries: [], installed: {}, categories: [] })
+          if (alive) setState({ status: 'error', entries: [], installed: {}, categories: [], baseUrl: '' })
         })
         return () => { alive = false }
       }, [nonce])
@@ -759,7 +719,10 @@ window.__ModuleLoader__.load({
             onChange: (ev) => setQuery(ev.target.value),
           }),
           h('span', { style: S.count }, t('count')(visible.length)),
-          h('button', { key: 'apply', type: 'button', style: S.applyBtn, onClick: () => setApplyOpen(true) }, t('apply'))))
+          h('button', {
+            key: 'apply', type: 'button', style: S.applyBtn, title: t('applyTitle'),
+            onClick: () => { globalThis.window.open(state.baseUrl + '/profile/plugins', '_blank', 'noopener') },
+          }, t('apply'))))
         // 标签筛选(分类优先,其次标签)
         if (state.categories.length) {
           kids.push(h('div', { key: 'cats', style: S.tabBar },
@@ -786,7 +749,6 @@ window.__ModuleLoader__.load({
 
       return h('div', { style: S.wrap }, kids,
         detail ? h(FeaturedModal, { key: 'detail-' + detail.package, entry: detail, t, onClose: () => setDetail(null) }) : null,
-        applyOpen ? h(ApplyModal, { key: 'apply', t, onClose: () => setApplyOpen(false) }) : null,
         viewer ? h(ShotViewer, { key: 'viewer', list: viewer.list, index: viewer.idx, onClose: () => setViewer(null) }) : null)
     }
 
@@ -812,6 +774,23 @@ window.__ModuleLoader__.load({
         locale: NS,
         priority: 0,
       }, FeaturedSection), 'dsh-featured: featured tab')
+
+      // 内联版(接入插件 client 内嵌)的激活顺序不确定:可能在全量版 apply 之后才注册。
+      // 这里延迟复查几次 window.__DSH_FEATURED_ENTRY__,发现晚到的内联版立即注销,
+      // 保证界面上永远只有一个「精选插件」tab。
+      const disposeInlineLater = (delay) => {
+        const timer = setTimeout(() => {
+          try {
+            const w = typeof globalThis !== 'undefined' ? globalThis.window : undefined
+            const inline = w && w.__DSH_FEATURED_ENTRY__
+            if (inline && typeof inline.dispose === 'function') inline.dispose()
+          } catch { /* 忽略 */ }
+        }, delay)
+        ctx.effect(() => () => clearTimeout(timer))
+      }
+      disposeInlineLater(0)
+      disposeInlineLater(800)
+      disposeInlineLater(2500)
     }
 
     return { name: 'dsh-featured', inject: ['slots', 'locale'], apply }
