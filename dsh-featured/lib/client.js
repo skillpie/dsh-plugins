@@ -690,6 +690,8 @@ window.__ModuleLoader__.load({
       const query = queryPair[0], setQuery = queryPair[1]
       const catPair = React.useState('')
       const activeCat = catPair[0], setActiveCat = catPair[1]
+      const tagPair = React.useState('')
+      const activeTag = tagPair[0], setActiveTag = tagPair[1]
       const viewerPair = React.useState(null)
       const viewer = viewerPair[0], setViewer = viewerPair[1]
 
@@ -732,11 +734,12 @@ window.__ModuleLoader__.load({
         const q = query.trim().toLowerCase()
         return state.entries.filter((e) => {
           if (activeCat && e.categoryId !== activeCat && e.category !== activeCat) return false
+          if (activeTag && !(e.tags || []).includes(activeTag)) return false
           if (!q) return true
           const hay = [e.title, e.package, e.detail, e.description, (e.tags || []).join(' ')].join(' ').toLowerCase()
           return hay.includes(q)
         })
-      }, [state.entries, query, activeCat])
+      }, [state.entries, query, activeCat, activeTag])
 
       const kids = []
 
@@ -773,8 +776,8 @@ window.__ModuleLoader__.load({
         if (tags.length) {
           kids.push(h('div', { key: 'tags', style: S.tabBar },
             tags.map((tg) => h('button', {
-              key: tg, type: 'button', style: activeCat === tg ? S.tabBtnActive : S.tabBtn,
-              onClick: () => setActiveCat(activeCat === tg ? '' : tg),
+              key: tg, type: 'button', style: activeTag === tg ? S.tabBtnActive : S.tabBtn,
+              onClick: () => setActiveTag(activeTag === tg ? '' : tg),
             }, tg))))
         }
         if (visible.length) {
