@@ -2565,6 +2565,11 @@ window.__ModuleLoader__.load({
       var t = pageT
 
       var email = React.useState('')
+      // 注册模式：账号 + 固定域名下拉（与官网注册框一致，后端白名单强制校验）
+      var registerEmailDomains = ['qq.com', '163.com', 'gmail.com', 'outlook.com', '126.com']
+      var emailLocal = React.useState('')
+      var emailDomain = React.useState(registerEmailDomains[0])
+      var fullEmail = mode === 'register' ? (emailLocal[0].trim() + '@' + emailDomain[0]) : email[0]
       var password = React.useState('')
       var displayName = React.useState('')
       var code = React.useState('')
@@ -2594,7 +2599,7 @@ window.__ModuleLoader__.load({
         try {
           if (mode === 'register') {
             await api('register', {
-              email: email[0], code: code[0], password: password[0],
+              email: fullEmail, code: code[0], password: password[0],
               displayName: displayName[0], savePassword: savePassword[0],
             })
           } else {
@@ -2613,12 +2618,12 @@ window.__ModuleLoader__.load({
         } finally {
           busy[1](false)
         }
-      }, [mode, email, password, displayName, code, captchaId, captchaCode, savePassword, onAuthed, refreshCaptcha])
+      }, [mode, email, emailLocal, emailDomain, password, displayName, code, captchaId, captchaCode, savePassword, onAuthed, refreshCaptcha])
 
       return h('div', { style: cardStyle },
         h('div', {
           style: {
-            display: 'flex', width: '100%', padding: 3, borderRadius: 999, gap: 2,
+            display: 'flex', width: '100%', padding: 3, borderRadius: 999, gap: 2, boxSizing: 'border-box',
             background: '#eeeeef',
           },
         },
@@ -2648,7 +2653,15 @@ window.__ModuleLoader__.load({
           }, t('loginTab')),
         ),
         h(Field, { label: t('email') },
-          h('input', { style: inputStyle, type: 'email', value: email[0], onChange: function (e) { email[1](e.target.value) } })),
+          mode === 'register'
+            ? h('div', { style: { display: 'flex', alignItems: 'center', height: 30, padding: '0 10px', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 7, background: 'var(--dsw-alias-bg-base)', color: 'var(--dsw-alias-label-primary)', boxSizing: 'border-box', width: '100%' } },
+                h('input', { style: { flex: '1 1 60%', minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, padding: 0 }, type: 'text', placeholder: '账号', value: emailLocal[0], onChange: function (e) { emailLocal[1](e.target.value) } }),
+                h('span', { style: { alignSelf: 'stretch', width: 1, margin: '0 8px', background: 'var(--dsw-alias-border-l1)' } }),
+                h('select', { style: { flex: '0 0 auto', border: 'none', outline: 'none', background: 'transparent', fontSize: 13, cursor: 'pointer', padding: 0, margin: 0, appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none' }, value: emailDomain[0], onChange: function (e) { emailDomain[1](e.target.value) } },
+                  registerEmailDomains.map(function (domain) {
+                    return h('option', { key: domain, value: domain }, '@' + domain)
+                  })))
+            : h('input', { style: inputStyle, type: 'email', value: email[0], onChange: function (e) { email[1](e.target.value) } })),
         h(Field, { label: t('password') },
           h('input', { style: inputStyle, type: 'password', value: password[0], onChange: function (e) { password[1](e.target.value) } })),
         mode === 'register'
@@ -2661,9 +2674,9 @@ window.__ModuleLoader__.load({
                 onClick: async function () {
                   busy[1](true); error[1]('')
                   try {
-                    await api('send-code', { email: email[0] })
+                    await api('send-code', { email: fullEmail })
                     sent[1](true)
-                    var mailUrl = mailHomeUrl(email[0])
+                    var mailUrl = mailHomeUrl(fullEmail)
                     if (mailUrl) api('open-external', { url: mailUrl }).catch(function () {})
                   } catch (err) { error[1](String(err.message || err)) }
                   busy[1](false)
