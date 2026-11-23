@@ -34,7 +34,7 @@
       "package": "dsh-remote-relay",
       "title": "远程控制",
       "description": "通过 8 位数字码从任何设备远程访问你的 DSH 主机,支持公网中转部署。",
-      "version": "1.2.21",
+      "version": "1.2.22",
       "tags": [
         "远程"
       ],
@@ -82,10 +82,10 @@
       "tags": [
         "邮箱"
       ],
-      "downloads": 875,
+      "downloads": 1256,
       "downloadsWindow": {
-        "start": "2026-10-23",
-        "end": "2026-11-21"
+        "start": "2026-10-24",
+        "end": "2026-11-22"
       },
       "stars": 2,
       "author": "skillpie",
@@ -98,7 +98,7 @@
       "package": "dsh-datasource",
       "title": "数据源",
       "description": "在 DSH 内连接 MySQL/PostgreSQL 等数据库,直接查询与编辑数据。",
-      "version": "1.0.12",
+      "version": "1.0.13",
       "tags": [
         "数据库"
       ],
@@ -120,7 +120,7 @@
       "package": "dsh-gitx",
       "title": "代码版本管理",
       "description": "Git 工作台:changelist、暂存、历史、分支一站式管理。",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "tags": [
         "Git"
       ],
@@ -145,7 +145,7 @@
       "package": "dsh-webkit",
       "title": "网页工具箱",
       "description": "右侧栏浏览器工具箱:元素拾取器 + 自由尺寸视口。",
-      "version": "1.6.3",
+      "version": "1.6.4",
       "tags": [
         "浏览器",
         "调试"
