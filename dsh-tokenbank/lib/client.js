@@ -56,6 +56,7 @@ window.__ModuleLoader__.load({
       balance: '余额',
       totalEarned: '累计收益',
       totalSpent: '累计消费',
+      pendingUnlock: '注册奖励 {amount} 待解锁：充值任意金额或托管有效 Key 后自动到账',
       depositCount: '托管密钥',
       loginTab: '登录',
       registerTab: '注册',
@@ -245,6 +246,7 @@ window.__ModuleLoader__.load({
       balance: 'Balance',
       totalEarned: 'Total earned',
       totalSpent: 'Total spent',
+      pendingUnlock: '{amount} signup bonus locked — any recharge or a valid key deposit unlocks it automatically',
       depositCount: 'Deposited keys',
       loginTab: 'Sign in',
       registerTab: 'Register',
@@ -2059,6 +2061,19 @@ window.__ModuleLoader__.load({
 
                   ),
                 ),
+                // 注册解锁奖励提示：$2 待解锁，点击打开托管面板（充值/托管均可解锁）
+                data.account && Number(data.account.pending_unlock_nano_usd) > 0
+                  ? h('button', {
+                      type: 'button',
+                      style: {
+                        display: 'block', width: '100%', textAlign: 'left', margin: 0,
+                        padding: '7px 9px', borderRadius: 8, fontSize: 12, lineHeight: 1.5,
+                        color: '#b8860b', background: 'rgba(255,193,7,0.12)',
+                        border: 'none', cursor: 'pointer',
+                      },
+                      onClick: function () { tbStore.set({ authOpen: false, depositOpen: true }) },
+                    }, pageT('pendingUnlock').replace('{amount}', '$' + (Number(data.account.pending_unlock_nano_usd) / 1e9).toFixed(2)))
+                  : null,
                 h(InlineRecharge, {
                   onPaid: async function () {
                     var before = data.account && typeof data.account.balance_nano_usd === 'number' ? data.account.balance_nano_usd : null

@@ -191,8 +191,10 @@ const portal = createServer((req, res) => {
 const identityStore = { payload: null }
 const credentialValues = { BIGMODEL_API_KEY: 'sk-configured-bigmodel', DEAD_API_KEY: 'k1' }
 const stubCtx = {
-  async get(name) {
-    assert.equal(name, 'credentials')
+  // cordis 的 get 是同步的:credentials 返回桩服务,其余服务(如 featured-plugins
+  // 注册表)按未提供返回 undefined;调用侧统一 await,同步返回兼容。
+  get(name) {
+    if (name !== 'credentials') return undefined
     return {
       async resolve(ref) {
         const value = credentialValues[ref]
@@ -319,7 +321,10 @@ try {
   }
   const routeCtx = {
     get: stubCtx.get,
-    effect(_fn, _name) { return () => {} },
+    // cordis 的 effect 会同步执行回调:让 provide 真正运行(此处无 provide
+    // 方法而抛错),integrateFeaturedPlugins 才能正确落入「非宿主」分支,
+    // 只登记插件自身的路由。
+    effect(fn, _name) { return fn ? fn() : () => {} },
     inject(services, fn) {
       const child = { effect(fn2) { fn2() } }
       fn(Object.assign(Object.create(null), Object.fromEntries(services.map((s) => [s, s === 'webServer' ? fakeWebServer : {}])), { effect: child.effect }))

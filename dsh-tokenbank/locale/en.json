@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "TokenBank Free Models",
-    "description": "Free models for DSH: register with TokenBank to get a free API key with a $5 credit; free GLM models go straight into your model list. Balance, key deposits (temporary quota to permanent balance), daily check-in and CNY recharge (Alipay) included — no self-hosted relay needed. Tribute to dsh-our-free-model. https://bank.skillpie.cn"
+    "description": "Free models for DSH: register with TokenBank to get a free API key with a $3 credit (unlock $2 more with any recharge or key deposit); free GLM models go straight into your model list. Balance, key deposits (temporary quota to permanent balance), daily check-in and CNY recharge (Alipay) included — no self-hosted relay needed. Tribute to dsh-our-free-model. https://bank.skillpie.cn"
   },
   "probeFailed": "This API key does not work upstream",
   "probeInconclusive": "Upstream probe inconclusive; deposited anyway",

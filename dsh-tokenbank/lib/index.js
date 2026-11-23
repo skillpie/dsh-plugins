@@ -91,6 +91,9 @@ function dshFeaturedHostModule() {
     try {
       registry = ctx.get(SERVICE)
     } catch { /* get 不可用时按未提供处理 */ }
+    // 只接受具备 register 的真注册表:宿主桩可能返回 Promise 或残缺对象
+    // (异步 get、版本差异),按未提供处理退化为自建,不让推荐源登记拖垮激活。
+    if (!registry || typeof registry.register !== 'function') registry = null
     if (!registry) {
       const sources = new Map()
       registry = {
