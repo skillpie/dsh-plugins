@@ -16,9 +16,32 @@ export const DETAIL_ROUTE = '/dsh-featured/detail'
 export const SERVICE = 'featured-plugins'
 
 export const Config = {
-  // skillpie 公开接口的根地址。生产默认 https://skillpie.cn;
-  // 本地联调可在 DSH 的插件配置里覆盖为 http://localhost:3001。
-  baseUrl: (x) => String(typeof x === 'string' ? x : ''),
+  // Standard Schema 形态(DSH 要求):可配置 skillpie 公开接口根地址。
+  '~standard': {
+    version: 1,
+    vendor: 'dsh-featured',
+    validate(input) {
+      if (input === undefined || input === null) return { value: {} }
+      if (typeof input !== 'object' || Array.isArray(input)) return { issues: [{ message: 'expected an object' }] }
+      const issues = []
+      const value = {}
+      const raw = input.baseUrl
+      if (raw !== undefined) {
+        if (typeof raw !== 'string' || !raw.trim()) {
+          issues.push({ message: 'expected a non-empty string', path: ['baseUrl'] })
+        } else {
+          try {
+            const url = new URL(raw.trim())
+            if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('protocol')
+            value.baseUrl = raw.trim().replace(/\/+$/, '')
+          } catch {
+            issues.push({ message: 'expected an absolute http(s) URL', path: ['baseUrl'] })
+          }
+        }
+      }
+      return issues.length ? { issues } : { value }
+    },
+  },
 }
 
 /* ── HTTP helpers ───────────────────────────────────────────────────── */
