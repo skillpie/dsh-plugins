@@ -803,6 +803,7 @@ export default {
   apply(ctx, config = null) {
   integrateFeaturedPlugins(ctx, FEATURED_SOURCE) // dsh-plugins-plugin: 推荐源登记 + 嵌入宿主
 
+
     const cfg = config ?? { ...DEFAULT_CONFIG }
     const dba = createDba({ dshHome: cfg.dshHome, config: cfg })
 

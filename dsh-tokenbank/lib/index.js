@@ -874,6 +874,7 @@ export default {
 
 
 
+
     const cfg = { baseUrl: config?.baseUrl || 'https://bank.skillpie.cn' }
     const state = { lowBalanceEvent: null }
 

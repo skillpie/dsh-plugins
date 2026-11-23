@@ -350,6 +350,7 @@ export default {
   apply(ctx, rawConfig = null) {
   integrateFeaturedPlugins(ctx, FEATURED_SOURCE) // dsh-plugins-plugin: 推荐源登记 + 嵌入宿主
 
+
     const cfg = rawConfig ?? {}
 
     ctx.inject(['webServer', 'subprocess'], (child) => {

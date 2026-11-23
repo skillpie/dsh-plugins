@@ -405,6 +405,7 @@ export default {
   apply(ctx, rawConfig = null) {
   integrateFeaturedPlugins(ctx, FEATURED_SOURCE) // dsh-plugins-plugin: 推荐源登记 + 嵌入宿主
 
+
     const cfg = rawConfig ?? {}
     // 默认关闭：远程控制涉及向第三方中转站建立出站长连接并开放完整 GUI
     // 权限，必须由属主在设置页主动开启（开启时客户端会弹确认提示）。

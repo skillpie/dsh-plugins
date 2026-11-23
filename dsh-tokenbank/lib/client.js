@@ -2825,6 +2825,10 @@ window.__ModuleLoader__.load({
       if (typeof window !== 'undefined') window.__FEATURED_INIT_CALLED__ = true
       if (typeof window !== 'undefined' && window.__DSH_FEATURED_APPLIED__) return
       if (typeof window !== 'undefined') window.__DSH_FEATURED_APPLIED__ = true
+      if (typeof window !== 'undefined' && window.__DSH_FEATURED_FULL__) {
+        // 全量版(dsh-featured 插件)已加载:让位,不注册内联板块,避免双 tab 竞态
+        return
+      }
       try {
         const localeDisposable = ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-plugins-plugin: locale')
         const t = ctx.locale.bind(NS)

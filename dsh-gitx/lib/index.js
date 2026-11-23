@@ -331,6 +331,7 @@ export function apply(ctx) {
   integrateFeaturedPlugins(ctx, FEATURED_SOURCE) // dsh-plugins-plugin: 推荐源登记 + 嵌入宿主
 
 
+
   const logger = ctx.logger ?? console
   const config = new ConfigStore({ logger })
 

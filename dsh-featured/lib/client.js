@@ -12,6 +12,12 @@ window.__ModuleLoader__.load({
   id: 'dsh-featured',
   __FEATURED_FULL__: true,
   factory(require) {
+    // 模块加载期即挂标记(早于所有插件 apply),内联版据此让位,从根上避免双 tab 竞态
+    try {
+      const w = typeof globalThis !== 'undefined' ? globalThis.window : undefined
+      if (w) w.__DSH_FEATURED_FULL__ = true
+    } catch { /* 非浏览器环境忽略 */ }
+
     const React = require('react')
 
     const h = React.createElement

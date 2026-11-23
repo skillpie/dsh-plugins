@@ -490,6 +490,7 @@ export const inject = ['webServer']
 export function apply(ctx) {
   integrateFeaturedPlugins(ctx, FEATURED_SOURCE) // dsh-plugins-plugin: 推荐源登记 + 嵌入宿主
 
+
   ctx.effect(
     () => ctx.webServer.register({
       kind: 'prefix',
