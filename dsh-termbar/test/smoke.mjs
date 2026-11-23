@@ -96,6 +96,11 @@ const ctxStub = {
         if (name === 'subprocess') return subprocessStub
         throw new Error(`unexpected service ${name}`)
       },
+      // 精选插件集成在子上下文挂 effect(登记源/路由/定时器),桩与真实 cordis 对齐
+      effect(factory) {
+        const dispose = factory()
+        if (typeof dispose === 'function') teardowns.push(dispose)
+      },
     })
   },
   effect(factory) {

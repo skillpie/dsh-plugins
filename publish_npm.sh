@@ -65,9 +65,14 @@ else
 fi
 
 # ── 3. 打包清单预检：DSH 插件必须带 patch 文件，绝不带 node_modules ──
+# 仅对声明了 dsh.bundle.patch 的包(可加载插件)强制 patch 文件;
+# 纯工具包(如 dsh-plugins-plugin,只提供 embed 模板与集成脚本,无 dsh 字段)豁免。
+IS_BUNDLE=$(node -p "!!(require('./package.json').dsh && require('./package.json').dsh.bundle && require('./package.json').dsh.bundle.patch)")
 PACK_OUT=$(npm pack --dry-run 2>&1)
-echo "$PACK_OUT" | grep -q "cordis.patch.yml" \
-  || { echo "❌ 打包产物缺 cordis.patch.yml（检查 package.json 的 files 白名单）——DSH 会报 declares no dsh.bundle"; exit 1; }
+if [ "$IS_BUNDLE" = "true" ]; then
+  echo "$PACK_OUT" | grep -q "cordis.patch.yml" \
+    || { echo "❌ 打包产物缺 cordis.patch.yml（检查 package.json 的 files 白名单）——DSH 会报 declares no dsh.bundle"; exit 1; }
+fi
 echo "$PACK_OUT" | grep -qE "node_modules|\.pnpm" \
   && { echo "❌ 打包产物混入 node_modules"; exit 1; } || true
 echo "✅ 打包清单正常"
@@ -105,7 +110,7 @@ verify_publish() {
   for i in $(seq 1 18); do
     sleep 10
     mv=$(curl -sf "$MIRROR/$PKG_ENC" 2>/dev/null \
-         | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).dist-tags.latest||'')}catch{console.log('')}})")
+         | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s)['dist-tags'].latest||'')}catch{console.log('')}})")
     if [ "$mv" = "$VERSION" ]; then echo "✅ 镜像已同步 latest=$mv，国内可按名安装"; return 0; fi
     echo "⏳ 第 $i 次: 镜像 latest=${mv:-未同步}，继续等待…"
   done

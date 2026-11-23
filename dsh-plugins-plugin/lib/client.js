@@ -191,11 +191,14 @@ window.__ModuleLoader__.load({
       mdList: { margin: '0 0 10px', paddingLeft: 20 },
       mdLi: { margin: '0 0 4px' },
       mdImg: { display: 'block', maxWidth: '100%', borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)', margin: '8px 0' },
+      // 徽章类小图:行内渲染,允许同段落多枚横排自然换行
+      mdImgInline: { maxWidth: '100%', verticalAlign: 'middle', margin: '2px 4px 2px 0' },
       mdCode: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, background: 'var(--dsw-alias-bg-layer-1)', borderRadius: 4, padding: '1px 5px' },
       mdPre: { background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 8, padding: 12, overflowX: 'auto', margin: '0 0 10px' },
       mdPreCode: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, whiteSpace: 'pre-wrap', margin: 0 },
+      // mermaid 图容器:浅底描边,横向可滚(图宽超面板时不出格)
+      mmdBox: { background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 8, padding: 12, overflowX: 'auto', margin: '0 0 10px', textAlign: 'center' },
       mdA: { color: 'var(--dsw-alias-link)' },
-      linkIcon: { width: 11, height: 11, marginRight: 3, verticalAlign: '-1px', color: 'var(--dsw-alias-link)' },
       mdQuote: { borderLeft: '3px solid var(--dsw-alias-border-l1)', paddingLeft: 12, margin: '0 0 12px', color: 'var(--dsw-alias-label-secondary)' },
       mdTable: { borderCollapse: 'collapse', width: '100%', margin: '0 0 12px', fontSize: 12.5 },
       mdTd: { border: '1px solid var(--dsw-alias-border-l1)', padding: '6px 10px', textAlign: 'left', verticalAlign: 'top' },
@@ -203,6 +206,12 @@ window.__ModuleLoader__.load({
 
     // GitHub mark(octicon mark-github 16x16 路径)
     const GH_PATH = 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z'
+
+    // 锚点统一形态:蓝色链接,不加前缀图标(用户确认:链接统一去掉小地球)
+    function makeAnchor(href, kids, extraAttrs) {
+      return h('a', Object.assign({ style: S.mdA, href, target: '_blank', rel: 'noreferrer noopener' }, extraAttrs || {}),
+        ...(Array.isArray(kids) ? kids : [kids]))
+    }
 
     // 作者行:GitHub 头像 + 用户名(左)+ 数据(右,同行);整行可点开详情弹窗。
     // 头像加载失败只隐藏头像;author 缺失时保留右侧数据。
@@ -303,10 +312,161 @@ window.__ModuleLoader__.load({
 
     // ── 自建详情弹窗:README 从 npm 包(jsdelivr)读取,轻量 markdown 渲染 ──
     // 相对路径的图片/链接重写到 jsdelivr 包根。
+
+    // ── mermaid 图渲染 ──
+    // mermaid 库单例懒加载(jsdelivr ESM,与本插件其他资源同源),失败可重试;
+    // 渲染链:本地 mermaid 出 SVG → 失败退 mermaid.ink 在线图片 → 图片也失败退源码块。
+    let mermaidMod = null
+    let mermaidLoading = null
+    function loadMermaid() {
+      if (mermaidMod) return Promise.resolve(mermaidMod)
+      if (!mermaidLoading) {
+        mermaidLoading = import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs')
+          .then((m) => {
+            const mm = m.default
+            mm.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' })
+            mermaidMod = mm
+            return mm
+          })
+          .catch((err) => { mermaidLoading = null; throw err })
+      }
+      return mermaidLoading
+    }
+
+    // unicode 安全的 base64url(mermaid.ink 的图源参数)
+    function b64url(text) {
+      return btoa(unescape(encodeURIComponent(text))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    }
+
+    let mermaidSeq = 0
+    function MermaidBlock(props) {
+      const code = props.code
+      const pair = React.useState({ mode: 'loading', html: '', imgUrl: '' })
+      const state = pair[0], setState = pair[1]
+      const imgFailPair = React.useState(false)
+      const imgFail = imgFailPair[0], setImgFail = imgFailPair[1]
+
+      React.useEffect(() => {
+        let alive = true
+        setState({ mode: 'loading', html: '', imgUrl: '' })
+        setImgFail(false)
+        const id = 'dsh-featured-mmd-' + (++mermaidSeq)
+        loadMermaid().then((mm) => mm.render(id, code)).then((res) => {
+          if (alive) setState({ mode: 'ok', html: res && res.svg ? res.svg : '', imgUrl: '' })
+        }).catch(() => {
+          if (!alive) return
+          setState({ mode: 'img', html: '', imgUrl: 'https://mermaid.ink/img/' + b64url(code) })
+        })
+        return () => { alive = false }
+      }, [code])
+
+      if (state.mode === 'ok' && state.html) {
+        return h('div', { style: S.mmdBox, dangerouslySetInnerHTML: { __html: state.html } })
+      }
+      if (state.mode === 'img' && state.imgUrl && !imgFail) {
+        return h('img', {
+          style: S.mdImg, src: state.imgUrl, alt: 'mermaid', loading: 'lazy',
+          onError: () => setImgFail(true),
+        })
+      }
+      if (state.mode === 'loading') return h('p', { style: S.mdNote }, '⏳ mermaid…')
+      // 本地渲染失败且在线图不可用:退回源码块,信息不丢
+      return h('pre', { style: S.mdPre }, h('code', { style: S.mdPreCode }, code))
+    }
+
+    // 无语言标注的围栏块首行像 mermaid 语法也按图渲染(容错常见 README 写法)
+    const MERMAID_SNIFF_RE = /^\s*(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(-v2)?|erDiagram|gantt|pie|mindmap|timeline|journey|gitGraph|requirementDiagram|C4Context)\b/
+
     function mdAbsUrl(url, base) {
       const u = String(url).trim()
       if (/^https?:\/\//i.test(u)) return u
       return base + u.replace(/^\.\//, '')
+    }
+
+    // 徽章类小图判定(shields.io / *.svg / CI 徽章等):按行内元素渲染,不独占一行。
+    const BADGE_URL_RE = /\.svg(?:[?#]|$)|shields\.io|badge|travis|circleci|codecov/i
+
+    // ── README 内嵌 HTML 支持 ──
+    // 用浏览器原生 DOMParser 解析(解析阶段不执行脚本、不加载资源),白名单标签/属性后
+    // 重建 React 节点:脚本类标签整体丢弃,未知标签剥壳只留文字;不透传 class/style,
+    // 杜绝样式冲突;javascript: 等危险协议的链接/图片直接丢弃。不用 dangerouslySetInnerHTML。
+    // 注:<source> 故意不在白名单——宿主 React 对它抛 #137(element type invalid),
+    // 剥壳后其 <img> 子节点照常渲染(深色模式图标退化为浅色图,信息不丢)。
+    const HTML_ALLOWED = {
+      a: ['href', 'title'], img: ['src', 'srcset', 'alt', 'title', 'width', 'height', 'align'],
+      picture: [],
+      p: ['align'], div: ['align'], span: [], center: [], font: ['color', 'size'],
+      strong: [], b: [], em: [], i: [], u: [], s: [], del: [], ins: [], mark: [], small: [], big: [],
+      sub: [], sup: [], abbr: ['title'], time: ['datetime'], kbd: [], code: [], br: [], hr: [],
+      h1: ['align'], h2: ['align'], h3: ['align'], h4: ['align'], h5: ['align'], h6: ['align'],
+      ul: [], ol: ['start', 'type'], li: [],
+      table: [], thead: [], tbody: [], tr: [], th: ['colspan', 'rowspan', 'align'], td: ['colspan', 'rowspan', 'align'],
+      blockquote: [], pre: [], figure: [], figcaption: [], details: ['open'], summary: [],
+    }
+    const HTML_DROP_RE = /^(script|style|iframe|object|embed|form|input|button|textarea|select|link|meta|base|template|svg|math|video|audio|canvas)$/i
+    // 段落文本出现白名单 HTML 标签 → 走 DOM 解析;<https://…> 自动链接因非标签名不会误判
+    const HTML_TAG_RE = /<(p|div|span|a|img|picture|source|br|hr|strong|b|em|i|u|s|del|ins|mark|small|big|sub|sup|abbr|time|kbd|code|ul|ol|li|table|thead|tbody|tr|th|td|h[1-6]|blockquote|pre|figure|figcaption|details|summary|center|font)(\s|\/?>)/i
+    // 行首块级 HTML 标签 → 整块收集后一次解析(避免 table/details 等内部含空行被段落切分截断)
+    const HTML_BLOCK_TAG_RE = /^(p|div|center|table|details|summary|ul|ol|blockquote|pre|figure|picture|h[1-6])$/
+
+    // DOM 树 → React 节点(白名单递归);keyPrefix 保证跨段落 key 唯一
+    function htmlNodes(rootEl, base, keyPrefix) {
+      const seq = { n: 0 }
+      const walk = (parent, isRoot) => {
+        const out = []
+        for (const node of Array.from(parent.childNodes || [])) {
+          if (node.nodeType === 3) { // 文本节点
+            const txt = String(node.nodeValue || '')
+            if (txt && !(isRoot && !txt.trim())) out.push(txt)
+            continue
+          }
+          if (node.nodeType !== 1) continue // 注释等跳过
+          const tag = String(node.tagName || '').toLowerCase()
+          if (HTML_DROP_RE.test(tag)) continue
+          const allowed = HTML_ALLOWED[tag]
+          if (!allowed) { out.push(...walk(node, false)); continue } // 未知标签:剥壳留文字
+          const attrs = {}
+          for (const name of allowed) {
+            const v = node.getAttribute(name)
+            if (v != null && v !== '') attrs[name] = v
+          }
+          const kids = walk(node, false)
+          if (tag === 'a') {
+            const href = attrs.href != null ? mdAbsUrl(attrs.href, base) : null
+            if (href && /^(https?:\/\/|mailto:|#|\/)/i.test(href)) {
+              const linkAttrs = attrs.title ? { title: attrs.title } : null
+              out.push(makeAnchor(href, kids, linkAttrs))
+            } else {
+              out.push(...kids) // 无 href 或危险协议:退化为纯内容
+            }
+            continue
+          }
+          if (tag === 'img') {
+            const src = attrs.src != null ? mdAbsUrl(attrs.src, base) : null
+            if (!src || !/^(https?:\/\/|data:image\/)/i.test(src)) continue
+            const hNum = parseInt(attrs.height, 10)
+            attrs.style = (BADGE_URL_RE.test(src) || (hNum > 0 && hNum <= 40)) ? S.mdImgInline : S.mdImg
+            attrs.src = src
+            attrs.loading = 'lazy'
+            if (!attrs.alt) attrs.alt = ''
+            out.push(h('img', Object.assign(attrs, { key: keyPrefix + (seq.n++) })))
+            continue
+          }
+          out.push(h(tag, Object.assign(attrs, { key: keyPrefix + (seq.n++) }), kids))
+        }
+        return out
+      }
+      return walk(rootEl, true)
+    }
+
+    // HTML 文本 → React 节点数组;DOMParser 不可用或解析为空时返回 null(调用方走 markdown 通道)
+    function renderHtmlBlock(text, base, keyPrefix) {
+      if (typeof DOMParser !== 'function') return null
+      try {
+        const doc = new DOMParser().parseFromString(String(text), 'text/html')
+        const nodes = htmlNodes(doc.body, base, keyPrefix)
+        return nodes.length ? nodes : null
+      } catch { return null }
     }
 
     // 占位符还原:把 s 里 \u0000<idx>\u0000 换回暂存的节点
@@ -327,15 +487,15 @@ window.__ModuleLoader__.load({
       const tokens = []
       const stash = (node) => { tokens.push(node); return '\u0000' + (tokens.length - 1) + '\u0000' }
       const stashText = (t) => { tokens.push(t); return '\u0000' + (tokens.length - 1) + '\u0000' }
-      // 链接统一形态:蓝色 + 前置地球图标(与官方 markdown 链接色一致)
-      const makeLink = (href, kids) => h('a', { style: S.mdA, href, target: '_blank', rel: 'noreferrer noopener' },
-        h('svg', { style: S.linkIcon, viewBox: '0 0 16 16', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.2' },
-          h('circle', { cx: 8, cy: 8, r: 6.3 }),
-          h('path', { d: 'M1.7 8h12.6M8 1.7c2.4 1.9 2.4 10.7 0 12.6M8 1.7c-2.4 1.9-2.4 10.7 0 12.6' })),
-        ...kids)
+      // 链接统一形态复用全局 makeAnchor(蓝色,无前缀图标)
+      const makeLink = (href, kids) => makeAnchor(href, kids)
       let s = String(text)
       s = s.replace(/\*\*([^*]+)\*\*/g, (m0, inner) => stash(h('strong', null, mdInline(inner, base))))
-      s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m0, alt, url) => stash(h('img', { style: S.mdImg, src: mdAbsUrl(url, base), alt: alt || '', loading: 'lazy' })))
+      s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m0, alt, url) => {
+        const abs = mdAbsUrl(url, base)
+        const style = BADGE_URL_RE.test(abs) ? S.mdImgInline : S.mdImg
+        return stash(h('img', { style, src: abs, alt: alt || '', loading: 'lazy' }))
+      })
       s = s.replace(/\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m0, label, url) => stash(makeLink(mdAbsUrl(url, base), restoreInline(label, tokens))))
       s = s.replace(/`([^`]+)`/g, (m0, c) => stash(h('code', { style: S.mdCode }, c)))
       // 裸自动链接:<https://…> 与 http(s)://…(URL 中间允许点/斜杠,仅结尾剔除标点)
@@ -356,20 +516,54 @@ window.__ModuleLoader__.load({
       const out = []
       let key = 0, para = [], i = 0
       const flushPara = () => {
-        if (para.length) {
-          out.push(h('p', { style: S.mdP, key: 'p' + (key++) }, mdInline(para.join(' '), base)))
-          para = []
-        }
+        if (!para.length) return
+        const text = para.join(' ')
+        para = []
+        // 含白名单 HTML 标签的段落:走 DOMParser 安全解析(整段按 HTML 处理,不再二次解析 markdown)
+        const htmlKids = HTML_TAG_RE.test(text) ? renderHtmlBlock(text, base, 'h' + (key++) + '-') : null
+        if (htmlKids) { out.push(...htmlKids); return }
+        out.push(h('p', { style: S.mdP, key: 'p' + (key++) }, mdInline(text, base)))
       }
       while (i < lines.length) {
         const line = lines[i]
+        // 行首块级 HTML 标签(且处于段落边界):按同名标签配对整块收集,一次 DOM 解析。
+        // 空标签(img/br/hr 等自闭合)不在此列,交给段落通道;配不上闭合就收到 EOF。
+        if (!para.length && typeof DOMParser === 'function' && /^\s*</.test(line)) {
+          const bm = line.match(/^\s*<([a-zA-Z][a-zA-Z0-9]*)(?=[\s/>])/)
+          const btag = bm && bm[1].toLowerCase()
+          if (btag && HTML_BLOCK_TAG_RE.test(btag)) {
+            const buf = []
+            let depth = 0
+            while (i < lines.length) {
+              const l2 = lines[i]
+              const openM = l2.match(new RegExp('<' + btag + '(?=[\\s/>])', 'gi'))
+              const closeM = l2.match(new RegExp('</' + btag + '>', 'gi'))
+              depth += ((openM && openM.length) || 0) - ((closeM && closeM.length) || 0)
+              buf.push(l2)
+              i++
+              if (depth <= 0) break
+            }
+            flushPara()
+            const htmlKids = renderHtmlBlock(buf.join('\n'), base, 'hb' + (key++) + '-')
+            if (htmlKids) { out.push(...htmlKids); continue }
+            // DOM 解析失败:退回 markdown 通道逐行消化
+            for (const row of buf) para.push(row)
+            continue
+          }
+        }
         if (/^```/.test(line)) {
           flushPara()
+          const lang = line.replace(/^`{3,}/, '').trim().toLowerCase()
           const buf = []
           i++
           while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++ }
           i++
-          out.push(h('pre', { style: S.mdPre, key: 'c' + (key++) }, h('code', { style: S.mdPreCode }, buf.join('\n'))))
+          const codeText = buf.join('\n')
+          if (lang === 'mermaid' || (!lang && MERMAID_SNIFF_RE.test(codeText))) {
+            out.push(h(MermaidBlock, { code: codeText, key: 'm' + (key++) }))
+          } else {
+            out.push(h('pre', { style: S.mdPre, key: 'c' + (key++) }, h('code', { style: S.mdPreCode }, codeText)))
+          }
           continue
         }
         // 引用块(> 行,支持连续多行合并)

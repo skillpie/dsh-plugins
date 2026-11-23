@@ -168,7 +168,7 @@
       "package": "dsh-termbar",
       "title": "终端栏",
       "description": "在 Web GUI 右上角工具区添加终端开关,点按打开/关闭底部终端面板。",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "tags": [
         "终端"
       ],
@@ -190,7 +190,7 @@
       "package": "dsh-project-report",
       "title": "项目汇报",
       "description": "按 Git 提交历史生成项目日报,支持手动与定时,可提交 Moka 加班。",
-      "version": "0.1.9",
+      "version": "0.1.10",
       "tags": [
         "效率"
       ],
