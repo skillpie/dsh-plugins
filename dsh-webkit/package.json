@@ -1,6 +1,6 @@
 {
   "name": "dsh-webkit",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "type": "module",
   "description": "Web toolbox for the right-Sidebar browser: element picker + free-size viewport.",
   "license": "MIT",
