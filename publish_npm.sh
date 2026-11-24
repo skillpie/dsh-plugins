@@ -48,7 +48,7 @@ WHO=$(npm whoami --registry="$OFFICIAL" 2>/dev/null) \
   || { echo "❌ token 无效或过期，重新生成 Granular Access Token"; exit 1; }
 case "$PKG" in
   @*) SCOPE=${PKG%%/*}; SCOPE_NAME=${SCOPE#@}
-      [ "$WHO" = "$SCOPE_NAME" ] || echo "⚠️ scope $SCOPE 不属于当前账号 $WHO（应是同名用户/组织），发布将失败" ;;
+      [ "$WHO" = "$SCOPE_NAME" ] || echo "⚠️ scope $SCOPE 不属于当前账号 ${WHO}（应是同名用户/组织），发布将失败" ;;
 esac
 echo "✅ 发布身份: $WHO"
 
@@ -111,7 +111,7 @@ verify_publish() {
     sleep 10
     mv=$(curl -sf "$MIRROR/$PKG_ENC" 2>/dev/null \
          | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s)['dist-tags'].latest||'')}catch{console.log('')}})")
-    if [ "$mv" = "$VERSION" ]; then echo "✅ 镜像已同步 latest=$mv，国内可按名安装"; return 0; fi
+    if [ "$mv" = "$VERSION" ]; then echo "✅ 镜像已同步 latest=${mv}，国内可按名安装"; return 0; fi
     echo "⏳ 第 $i 次: 镜像 latest=${mv:-未同步}，继续等待…"
   done
   echo "⚠️ 镜像暂未翻正，可稍后手动触发: curl -X PUT https://registry-direct.npmmirror.com/$PKG_ENC/sync?sync_upstream=true"
