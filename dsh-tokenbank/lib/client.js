@@ -66,6 +66,9 @@ window.__ModuleLoader__.load({
       code: '邮箱验证码',
       sendCode: '发送验证码',
       codeInvalid: '验证码无效或已过期,请重新发送',
+      plusTagBlocked: '暂不支持带 + 别名的邮箱，请使用不含 + 的邮箱注册',
+      baseEmailTaken: '该邮箱（含 + 别名变体）已注册，请直接登录',
+      registerRateLimited: '当前网络注册过于频繁，请更换网络或稍后再试',
       codeSent: '已发送，请查收邮箱',
       captcha: '图形验证码',
       captchaCode: '输入图中字符',
@@ -263,6 +266,9 @@ window.__ModuleLoader__.load({
       code: 'Email code',
       sendCode: 'Send code',
       codeInvalid: 'Code invalid or expired — please resend',
+      plusTagBlocked: 'Plus-addressing (+ aliases) is not supported — use an email without "+"',
+      baseEmailTaken: 'This email (including + alias variants) is already registered — please sign in',
+      registerRateLimited: 'Too many signups from this network — try a different network or later',
       codeSent: 'Sent — check your inbox',
       captcha: 'Captcha',
       captchaCode: 'Type the characters',
@@ -746,6 +752,8 @@ window.__ModuleLoader__.load({
     }
     /** 当前档位提示:用户固定的四组文案。 */
     var RECHARGE_HINTS = { 1000: 38460000, 5000: 192300000, 10000: 384600000, 30000: 1154000000 }
+    /** 首充赠 TOKEN 文案(每档位一次性,与后端 firstRechargeBonusTokens 对齐;¥10 无首充赠)。 */
+    var FIRST_BONUS_LABELS = { 5000: '首充赠4,000万TOKEN', 10000: '首充赠1亿TOKEN', 30000: '首充赠4亿TOKEN' }
     function rechargeHint(fen, creditNano) {
       var tokens = RECHARGE_HINTS[fen]
       var usd = (creditNano ? creditNano / 1e9 : (fen / 100 / 6.5)).toFixed(2)
@@ -774,22 +782,103 @@ window.__ModuleLoader__.load({
         }
         return undefined
       }
-      React.useEffect(function () {
-        var stopped = false
-        Promise.all([api('recharge-config').catch(function () { return null }), api('wordcoin-market').catch(function () { return null })])
+      // 首充营销行:三档统一常驻展示;接口返回该档位 bonus 为 0(已首充)时整行
+      // 加删除线(置灰),并把已领状态写入 localStorage,下次打开即时划线不闪现。
+      var FIRST_BONUS_CLAIMED_KEY = 'dsh-tokenbank/first-bonus-claimed'
+      function firstBonusClaimedFens() {
+        try {
+          var parsed = JSON.parse(localStorage.getItem(FIRST_BONUS_CLAIMED_KEY) || '[]')
+          return Array.isArray(parsed) ? parsed : []
+        } catch (e9) { return [] }
+      }
+      function markFirstBonusClaimed(fen) {
+        var fens = firstBonusClaimedFens()
+        if (fens.indexOf(fen) === -1) {
+          fens.push(fen)
+          try { localStorage.setItem(FIRST_BONUS_CLAIMED_KEY, JSON.stringify(fens)) } catch (e10) {}
+        }
+      }
+      // 标签高光扫过质感:白色斜向高光从左到右周期性扫过(keyframes 需样式表,注入一次)
+      function ensureTagSheenStyle() {
+        if (typeof document === 'undefined' || document.getElementById('tb-tag-sheen-style')) return
+        var el = document.createElement('style')
+        el.id = 'tb-tag-sheen-style'
+        el.textContent = [
+          '@keyframes tbSheen{0%{transform:translateX(-130%) skewX(-20deg)}60%,100%{transform:translateX(240%) skewX(-20deg)}}',
+          '.tb-sheen-tag{position:relative;overflow:hidden}',
+          '.tb-sheen-tag::after{content:"";position:absolute;top:0;left:0;width:45%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent);animation:tbSheen 2.2s ease-in-out infinite}',
+        ].join('')
+        document.head.appendChild(el)
+      }
+      // 该档位首充是否已领:缓存即时判定;接口加载后以后端 bonus=0 为准并回写缓存
+      function isFirstBonusClaimed(fen) {
+        var list = packs && packs[0] || []
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].fen === fen) {
+            if (!(list[i].bonusNano > 0)) {
+              markFirstBonusClaimed(fen)
+              return true
+            }
+            return false
+          }
+        }
+        return firstBonusClaimedFens().indexOf(fen) !== -1
+      }
+      function bonusLine(fen) {
+        var label = FIRST_BONUS_LABELS[fen]
+        if (!label) return null
+        var claimed = isFirstBonusClaimed(fen)
+        ensureTagSheenStyle()
+        var color = claimed ? 'var(--dsw-alias-label-tertiary, #b8bcc2)' : '#ff4f1f'
+        // 「首充赠」黑色弱化,突出后面的赠送数量
+        var leadIdx = label.indexOf('赠')
+        var lead = leadIdx >= 0 ? label.slice(0, leadIdx + 1) : ''
+        var rest = leadIdx >= 0 ? label.slice(leadIdx + 1) : label
+        return h('div', {
+              style: {
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
+                gap: 4, fontSize: 12, lineHeight: '16px',
+              },
+            },
+              h('span', {
+                className: claimed ? undefined : 'tb-sheen-tag',
+                style: {
+                  background: color, color: '#fff', borderRadius: 4,
+                  padding: '1px 5px', fontSize: 11, fontWeight: 700, flexShrink: 0,
+                  lineHeight: '16px',
+                },
+              }, '限时优惠'),
+              claimed
+                ? h('span', { style: { color: color, fontWeight: 600, lineHeight: '16px' } }, label)
+                : [
+                    h('span', { key: 'lead', style: { color: 'var(--dsw-alias-label-primary, #1a1a1a)', fontWeight: 600, lineHeight: '16px' } }, lead),
+                    h('span', { key: 'rest', style: { color: color, fontWeight: 600, lineHeight: '16px' } }, rest),
+                  ],
+            )
+      }
+      var loadPacks = function () {
+        return Promise.all([api('recharge-config').catch(function () { return null }), api('wordcoin-market').catch(function () { return null })])
           .then(function (all) {
-            if (stopped) return
             var config = all[0] && all[0].config
             var market = all[1] && all[1].market
             var price = market && Number(market.price_nano_usd_per_wc) // nanoUSD / 词元
             var list = (config && Array.isArray(config.packages) ? config.packages : null)
             if (!list || !list.length || !price || price <= 0) return
             packs[1](list.map(function (pk) {
-              var nano = Number(pk.credit_nano_usd || 0) + Number(pk.bonus_nano_usd || 0)
-              return { fen: Number(pk.cny_fen), usd: nano / 1e9, tokens: nano / price, creditNano: nano }
+              return {
+                fen: Number(pk.cny_fen),
+                usd: Number(pk.credit_nano_usd || 0) / 1e9,
+                tokens: (Number(pk.credit_nano_usd || 0) + Number(pk.bonus_nano_usd || 0)) / price,
+                // 提示行口径=基础到账 credit(不含首充赠,与「获得 $15.38」文案一致)
+                creditNano: Number(pk.credit_nano_usd || 0),
+                bonusNano: Number(pk.bonus_nano_usd || 0),
+                firstBonusTokens: Number(pk.first_bonus_tokens || 0),
+              }
             }).filter(function (pk) { return pk.fen !== 50000 }))
-          }).catch(function () {})
-        return function () { stopped = true }
+          })
+      }
+      React.useEffect(function () {
+        loadPacks().catch(function () {})
       }, [])
       // 同页跳转支付回来后,续查未完结订单
       React.useEffect(function () {
@@ -805,6 +894,7 @@ window.__ModuleLoader__.load({
             window.clearInterval(timer)
             try { localStorage.removeItem('dsh-tokenbank/pending-order') } catch (e6) {}
             busy[1](false)
+            await loadPacks() // 首充到账后刷新,隐藏对应档位营销行
             props.onPaid()
           } else if (status === 'failed' || status === 'expired' || Date.now() > deadline) {
             window.clearInterval(timer)
@@ -834,7 +924,12 @@ window.__ModuleLoader__.load({
             if (status === 'paid' || status === 'settled' || status === 'success') { paid = true; break }
             if (status === 'failed' || status === 'expired') break
           }
-          if (paid) { busy[1](false); props.onPaid(); return }
+          if (paid) {
+            busy[1](false)
+            await loadPacks() // 首充到账后刷新,隐藏对应档位营销行
+            props.onPaid()
+            return
+          }
           err[1](pageT('rechargePending'))
         } catch (e2) { err[1](String(e2.message || e2)) }
         busy[1](false)
@@ -842,6 +937,8 @@ window.__ModuleLoader__.load({
       return h('div', {
         style: { display: 'flex', flexDirection: 'column', gap: 8, padding: 0 },
       },
+        // 首充营销行:随选中档位单行展示,已领档位置灰
+        bonusLine(picked[0]),
         h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
           (packs[0] || [
             { fen: 1000 }, { fen: 5000 }, { fen: 10000 }, { fen: 30000 },
@@ -2687,7 +2784,12 @@ window.__ModuleLoader__.load({
           await onAuthed()
         } catch (err) {
           var msg = String(err.message || err)
-          if (mode === 'register' && /validation/i.test(msg)) msg = t('codeInvalid')
+          // 注册风控拒绝原因在 msg 尾部（服务端以 "(reason=xxx)" 形式附带），
+          // 优先映射为友好文案，其余 validation 错误才回退为验证码无效。
+          if (/plus_tag_blocked/.test(msg)) msg = t('plusTagBlocked')
+          else if (/base_email_taken/.test(msg)) msg = t('baseEmailTaken')
+          else if (/rate_limited|rate limit/i.test(msg)) msg = t('registerRateLimited')
+          else if (mode === 'register' && /validation/i.test(msg)) msg = t('codeInvalid')
           error[1](msg)
           if (mode === 'login') refreshCaptcha()
         } finally {
