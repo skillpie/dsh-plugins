@@ -5,7 +5,7 @@
       "package": "dsh-tokenbank",
       "title": "TokenBank免费模型",
       "description": "一键注册 TokenBank 领免费 API Key($5 体验金),免费 GLM 模型直接进模型列表;自带余额查询与密钥托管。",
-      "version": "0.1.92",
+      "version": "0.1.94",
       "tags": [
         "免费模型",
         "API Key"
@@ -19,7 +19,7 @@
       "author": "skillpie",
       "homepage": "https://github.com/skillpie/dsh-plugins",
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-23",
+      "enrichedAt": "2026-11-24",
       "category": "model",
       "icon": "https://raw.githubusercontent.com/skillpie/dsh-plugins/main/dsh-tokenbank/assets/icon-180.png",
       "screenshots": [
@@ -49,7 +49,7 @@
         "end": "2026-11-22"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-23",
+      "enrichedAt": "2026-11-24",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-remote-relay/icon.svg"
     },
     {
@@ -71,7 +71,7 @@
         "end": "2026-11-22"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-23",
+      "enrichedAt": "2026-11-24",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-skillpie/icon.svg"
     },
     {
@@ -82,16 +82,16 @@
       "tags": [
         "邮箱"
       ],
-      "downloads": 1256,
+      "downloads": 1626,
       "downloadsWindow": {
-        "start": "2026-10-24",
-        "end": "2026-11-22"
+        "start": "2026-10-25",
+        "end": "2026-11-23"
       },
       "stars": 2,
       "author": "skillpie",
       "homepage": "https://github.com/skillpie/dsh-plugins",
       "enrichSource": "npm-probe",
-      "enrichedAt": "2026-11-23",
+      "enrichedAt": "2026-11-24",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-skillpie-mail/icon.svg"
     },
     {
@@ -113,7 +113,7 @@
         "end": "2026-11-22"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-23",
+      "enrichedAt": "2026-11-24",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-datasource/icon.svg"
     },
     {
@@ -138,7 +138,7 @@
         "end": "2026-11-22"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-23",
+      "enrichedAt": "2026-11-24",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-gitx@0.2.2/icon.svg"
     },
     {
@@ -162,7 +162,7 @@
         "end": "2026-11-22"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-23"
+      "enrichedAt": "2026-11-24"
     },
     {
       "package": "dsh-termbar",
@@ -183,7 +183,7 @@
         "end": "2026-11-22"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-23",
+      "enrichedAt": "2026-11-24",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-termbar/icon.svg"
     },
     {
@@ -205,7 +205,7 @@
         "end": "2026-11-22"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-23",
+      "enrichedAt": "2026-11-24",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-project-report/icon.svg"
     },
     {
@@ -229,8 +229,8 @@
         "end": "2026-11-22"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-23"
+      "enrichedAt": "2026-11-24"
     }
   ],
-  "updated": "2026-11-23"
+  "updated": "2026-11-24"
 }
