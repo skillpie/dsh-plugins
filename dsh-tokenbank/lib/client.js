@@ -81,16 +81,23 @@ window.__ModuleLoader__.load({
       depositKeys: 'Key（每行一个）',
       depositSubmit: '托管',
       depositTitle: '托管凭证',
-      depositIntro: '把你的 API Key 凭证托管到 TokenBank，临时额度自动转移为永久额度保留使用。适用于：',
-      depositIntro1: '1. 周重置快到期还没用完，重置后白白浪费，不如卖给平台换取永久余额（类似银行存款业务）',
-      depositIntro2: '2. 跨模型厂商调用，转换为 TokenBank 余额后，更换 TokenBank 提供的模型厂商继续使用',
-      depositIntro3: '3. 托管的 API Key 优先被平台调用，被调用后获得托管利息存进余额（类似银行贷款业务）',
-      depositIntro4: '4. 自己使用时如果 TokenBank 余额不足会取出自己的 API Key 继续使用',
+      depositIntro: '把你的 API Key 凭证托管到 TokenBank，临时额度自动转移为永久额度保留使用。',
+      depositIntro1: '1. 周重置快到期但还没用完太浪费了，不如托管到平台换取永久余额（类似银行存款业务）',
+      depositIntro2: '2. 余额充足时优先调用托管到平台的 API Key，加速平台Token池与余额的周转率（类似银行取款业务）',
+      depositIntro3: '3. 转换为余额后，更换 TokenBank 自动提供的模型列表使用',
+      depositIntro4: '4. TokenBank 余额不足时会取出自己的 API Key 继续使用',
       depositIntro5: '5. TokenBank 会自动路由，解决用量不足需要频繁切换模型的问题',
       depositGroup: '托管分组',
       depositRejected: 'Key 探活失败：无效凭证，或所属厂商不接受托管',
       depositEmpty: '还没有托管任何 Key',
       depositRemove: '撤销',
+      depositStatBalance: '账户余额',
+      depositStatEarned: '托管收益',
+      depositStatKeys: '托管凭证',
+      depositStatEarnedHint: '托管的 Key 被消耗，按 消耗金额×(1+托管利率) 返还到账户余额（含利息）',
+      depositStatEarnedHintRate: '托管的 Key 被消耗，按 消耗金额×{rate} 返还到账户余额（含利息）',
+      depositStatKeysHint: '个人托管数 / 平台托管总数',
+      depositSubmitNow: '立即托管',
       recharge: '充值',
       rechargeAmount: '充值套餐',
       rechargeCreate: '下单并去支付宝付款',
@@ -272,16 +279,23 @@ window.__ModuleLoader__.load({
       depositKeys: 'Keys (one per line)',
       depositSubmit: 'Deposit',
       depositTitle: 'Deposit Credential',
-      depositIntro: 'Deposit your API key to TokenBank — remaining temporary quota converts to permanent credit. Use cases:',
-      depositIntro1: '1. Weekly-reset quota about to expire? Sell it to the platform for permanent balance (like a bank deposit)',
-      depositIntro2: '2. Cross-provider calls: convert to TokenBank balance and switch among TokenBank model providers',
-      depositIntro3: '3. Deposited keys are called by the platform first and earn interest into your balance (like a bank loan)',
+      depositIntro: 'Deposit your API key to TokenBank — remaining temporary quota converts to permanent credit.',
+      depositIntro1: '1. Weekly-reset quota about to expire and still unused? Escrow it to the platform for permanent balance (like a bank deposit)',
+      depositIntro2: '2. When balance is sufficient, escrowed API keys are called first, speeding up the platform token-pool and balance turnover (like a bank withdrawal)',
+      depositIntro3: '3. Once converted to balance, switch among the model list TokenBank provides automatically',
       depositIntro4: '4. If your TokenBank balance runs out, your own key is withdrawn so you can keep going',
       depositIntro5: '5. TokenBank routes automatically — no more frequent model switching due to quota limits',
       depositGroup: 'Group',
       depositRejected: 'Key failed the live probe: invalid credential, or its provider does not accept deposits',
       depositEmpty: 'No deposited keys yet',
       depositRemove: 'Remove',
+      depositStatBalance: 'Account balance',
+      depositStatEarned: 'Escrow earnings',
+      depositStatKeys: 'Hosted keys',
+      depositStatEarnedHint: 'When your escrowed keys are consumed: amount×(1+escrow rate) is credited to your balance (interest included)',
+      depositStatEarnedHintRate: 'When your escrowed keys are consumed: amount×{rate} is credited to your balance (interest included)',
+      depositStatKeysHint: 'Yours / platform total',
+      depositSubmitNow: 'Deposit now',
       recharge: 'Recharge',
       rechargeAmount: 'Package',
       rechargeCreate: 'Order & pay with Alipay',
@@ -1127,6 +1141,17 @@ window.__ModuleLoader__.load({
       })
     }
 
+    /** 数量缩写:≥1亿→N亿(不足10保留1位小数),≥1万→N万,其余千分位(口径与门户总览页一致)。 */
+    function tbCountText(n) {
+      n = Number(n) || 0
+      if (n >= 1e8) {
+        var yi = n / 1e8
+        return (yi >= 10 ? Math.round(yi) : Math.round(yi * 10) / 10) + '亿'
+      }
+      if (n >= 1e4) return Math.round(n / 1e4) + '万'
+      return n.toLocaleString('en-US')
+    }
+
     /** 全局托管弹窗:用户粘贴 API Key 托管(设置页「一键托管」不受影响)。 */
     function DepositOverlay() {
       var snap = useTbStore()
@@ -1135,12 +1160,37 @@ window.__ModuleLoader__.load({
       var keys = React.useState('')
       var busy = React.useState(false)
       var err = React.useState('')
+      var stats = React.useState(null) // 顶部三卡片 {balanceNano, earnedNano, depositCount, platformCount, tokenText}
       React.useEffect(function () {
         if (!snap.depositOpen) return
         keys[1](''); err[1](''); busy[1](false)
         fetchGroupOptions().then(function (list) {
           options[1](list)
           if (list.length) groupId[1](String(list[0].id))
+        }).catch(function () {})
+        // 三卡片数据源:status(余额/托管收益/个人+平台托管数)+ wordcoin-market(≈Token 换算价)
+        api('status').then(function (s) {
+          if (!s || !s.loggedIn) return
+          var acc = s.account || {}
+          var next = {
+            balanceNano: Number(acc.balance_nano_usd) || 0,
+            earnedNano: Number(acc.total_earned_nano_usd) || 0,
+            depositCount: Number(s.depositCount) || 0,
+            platformCount: Number(s.platformCredentialCount) || 0,
+            rateMicros: Number(s.depositRateMicros) || 0,
+            tokenText: '',
+          }
+          stats[1](next)
+          api('wordcoin-market').then(function (m) {
+            var market = m && m.market
+            if (!market) return
+            // 门户口径:优先公式均价,退回现价;$/MT ÷1e3 → nanoUSD/token
+            var nanoPerToken = Number(market.price_formula_avg_nano_usd) > 0
+              ? Number(market.price_formula_avg_nano_usd)
+              : Number(market.price_nano_usd_per_wc) / 1e3
+            if (!(nanoPerToken > 0)) return
+            stats[1](Object.assign({}, next, { tokenText: tbCountText(Math.round(next.balanceNano / nanoPerToken)) }))
+          }).catch(function () {})
         }).catch(function () {})
       }, [snap.depositOpen])
       if (!snap.depositOpen || !runtimeCtx) return null
@@ -1166,12 +1216,29 @@ window.__ModuleLoader__.load({
         borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)',
         background: 'var(--dsw-alias-bg-layer-1, #f7f7f8)', color: 'inherit',
       }
+      // 顶部三卡片(照门户总览页,无按钮):账户余额 / 托管收益 / 托管凭证
+      var statCard = function (label, value, hint) {
+        return h('div', {
+          key: label, style: {
+            minWidth: 0, border: '1px solid var(--dsw-alias-border-l1)',
+            borderRadius: 10, background: 'var(--dsw-alias-bg-layer-1)', padding: '10px 12px',
+          },
+        },
+          h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, label),
+          h('div', { style: { fontSize: 16, fontWeight: 700, marginTop: 4, lineHeight: 1.3, whiteSpace: 'nowrap' } }, value),
+          hint ? h('div', { style: { fontSize: 11, lineHeight: 1.5, color: 'var(--dsw-alias-label-secondary, #888)', marginTop: 4 } }, hint) : null)
+      }
+      var st = stats[0]
+      // (1+托管利率)乘数:deposit_rate_micros 按门户口径 −1e6 为利率百分点(1050590→5.059%→×1.05059)
+      var earnedHint = st && st.rateMicros > 1e6
+        ? pageT('depositStatEarnedHintRate').replace('{rate}', (st.rateMicros / 1e6).toFixed(5).replace(/\.?0+$/, ''))
+        : pageT('depositStatEarnedHint')
       return h('div', { style: { position: 'fixed', inset: 0, zIndex: 2100 } },
         h('div', { style: { position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(0,0,0,0.35)' }, onClick: close }),
         h('div', {
           style: {
             position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-            width: 500, maxWidth: 'calc(100vw - 24px)', maxHeight: '80vh', overflow: 'auto',
+            width: 640, maxWidth: 'calc(100vw - 24px)', maxHeight: '80vh', overflow: 'auto',
             background: 'var(--dsw-menu-surface-fill)', backdropFilter: 'var(--dsw-menu-backdrop-filter)',
             WebkitBackdropFilter: 'var(--dsw-menu-backdrop-filter)',
             color: 'var(--dsw-alias-label-primary)',
@@ -1183,32 +1250,40 @@ window.__ModuleLoader__.load({
           h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
             h('span', { style: { fontWeight: 700, fontSize: 14 } }, pageT('depositTitle')),
             h('button', { type: 'button', style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, lineHeight: 1, color: 'var(--dsw-alias-label-secondary, #888)', padding: 2 }, onClick: close }, '✕')),
-          h('div', { style: { fontSize: 12, lineHeight: 1.7, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 10 } },
-            h('div', null, pageT('depositIntro')),
-            h('div', null, pageT('depositIntro1')),
-            h('div', null, pageT('depositIntro2')),
-            h('div', null, pageT('depositIntro3')),
-            h('div', null, pageT('depositIntro4')),
-            h('div', { style: { marginBottom: 6 } }, pageT('depositIntro5')),
-            h('a', { href: (snap.portalUrl || 'https://bank.skillpie.cn') + '/', target: '_blank', rel: 'noreferrer', style: { color: '#ff4f1f', textDecoration: 'none', fontWeight: 600 } }, pageT('learnMore'))),
-          h('div', { style: { display: 'flex', gap: 8 } },
+          st ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 } },
+            statCard(pageT('depositStatBalance'), '$' + (st.balanceNano / 1e9).toFixed(6),
+              st.tokenText ? '≈ ' + st.tokenText + ' Token' : ''),
+            statCard(pageT('depositStatEarned'), '$' + (st.earnedNano / 1e9).toFixed(6), earnedHint),
+            statCard(pageT('depositStatKeys'), st.depositCount + ' / ' + st.platformCount, pageT('depositStatKeysHint')),
+          ) : null,
+          // 表单行与三卡片同网格:select 占第 1 列(与账户余额卡等宽),input 占 2–3 列
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 } },
             h('select', {
               value: groupId[0], onChange: function (e) { groupId[1](e.target.value) },
               'aria-label': pageT('depositGroup'),
-              style: Object.assign({}, inputStyle, { width: 170, flex: 'none', paddingRight: 4 }),
+              style: Object.assign({}, inputStyle, { gridColumn: '1 / 2', minWidth: 0, paddingRight: 4 }),
             },
               options[0].map(function (o, i) { return h('option', { value: String(o.id), key: o.label + '#' + i }, o.label) })),
             h('input', {
               type: 'text', placeholder: pageT('depositPlaceholder'),
               value: keys[0], onChange: function (e) { keys[1](e.target.value) },
-              style: Object.assign({}, inputStyle, { flex: 1, minWidth: 0, fontFamily: 'monospace' }),
+              style: Object.assign({}, inputStyle, { gridColumn: '2 / 4', minWidth: 0, fontFamily: 'monospace' }),
             })),
           err[0] ? h('div', { style: { fontSize: 12, color: '#d54941', marginTop: 6 } }, err[0]) : null,
           h('button', {
             type: 'button', disabled: busy[0],
             style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', width: '100%', marginTop: 10 }),
             onClick: submit,
-          }, busy[0] ? '…' : pageT('depositSubmit')),
+          }, busy[0] ? '…' : pageT('depositSubmitNow')),
+          h('div', { style: { fontSize: 12, lineHeight: 1.7, color: 'var(--dsw-alias-label-secondary, #888)', marginTop: 10 } },
+            h('div', null, pageT('depositIntro')),
+            h('div', null, pageT('depositIntro1')),
+            h('div', null, pageT('depositIntro2')),
+            h('div', null, pageT('depositIntro3')),
+            h('div', null, pageT('depositIntro4')),
+            h('div', { style: { marginBottom: 6 } }, pageT('depositIntro5')),
+            h('div', { style: { textAlign: 'right' } },
+              h('a', { href: (snap.portalUrl || 'https://bank.skillpie.cn') + '/', target: '_blank', rel: 'noreferrer', style: { color: '#ff4f1f', textDecoration: 'none', fontWeight: 600 } }, pageT('learnMore')))),
         ),
       )
     }
@@ -3033,6 +3108,8 @@ window.__ModuleLoader__.load({
           }, DepositHint)
         })
         if (typeof window.__DSH_FEATURED_INIT__ === 'function') window.__DSH_FEATURED_INIT__(ctx) // 精选插件
+        // 调试句柄:无头验证/排障用,直接驱动全局状态(弹窗等)
+        if (typeof window !== 'undefined') window.__TB__ = { openDeposit: function () { tbStore.set({ depositOpen: true }) }, store: tbStore }
       },
     }
   },

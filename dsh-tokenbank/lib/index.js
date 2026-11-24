@@ -423,6 +423,8 @@ async function dispatch(ctx, state, cfg, body) {
           accessKey,
           depositCount: data.deposit_count, activeKeyCount: data.active_key_count,
           depositRateMicros: data.deposit_rate_micros,
+          // 平台托管总数(门户总览页「托管凭证 x / y」的分母)
+          platformCredentialCount: data.platform_credential_count,
         }
       } catch (error) {
         if (error instanceof PortalError && (error.status === 401 || error.status === 403)) {
