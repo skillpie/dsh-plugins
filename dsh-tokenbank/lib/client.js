@@ -43,7 +43,7 @@ window.__ModuleLoader__.load({
       checkinOk: '签到成功',
       checkinStreak: '已连签 {n} 天',
       checkinGain: '+0.10',
-      rechargePay: '去支付',
+      rechargePay: '立即获得TOKEN',
       rechargeDone: '充值成功,余额已到账',
       gainSuffix: '签到奖励',
       rechargePending: '尚未检测到支付结果,如已完成支付请稍后重试或刷新',
@@ -104,7 +104,7 @@ window.__ModuleLoader__.load({
       recharge: '充值',
       rechargeAmount: '充值套餐',
       rechargeCreate: '下单并去支付宝付款',
-      rechargeWaiting: '等待支付中…（已打开支付宝收银台）',
+      rechargeWaiting: '支付宝支付中…',
       rechargePaid: '支付成功，余额已到账',
       payBlocked: '浏览器拦截了新窗口，点这里打开付款页',
       addModel: '添加到模型列表',
@@ -442,15 +442,16 @@ window.__ModuleLoader__.load({
       return '$' + value.toFixed(value >= 100 ? 2 : 3)
     }
 
-    /** TokenBank 品牌图标:照官方 favicon.svg(web/public/favicon.svg)1:1 重绘。 */
+    /** TokenBank 品牌图标:照官方 favicon.svg(web/public/favicon.svg)重绘;入口用大圆角实底(app 图标风)。 */
     function TokenBankLogo(props) {
       var size = props && props.size ? props.size : 16
+      var round = props && props.round
       return h('svg', {
         viewBox: '0 0 64 64', width: size, height: size, 'aria-hidden': true,
         style: { display: 'block', flex: 'none' },
       },
-        h('rect', { width: 64, height: 64, rx: 16, fill: '#ff4f1f' }),
-        h('g', { fill: '#f5f5f2' },
+        h('rect', { width: 64, height: 64, rx: round ? 21 : 16, fill: '#ff4f1f' }),
+        h('g', { fill: '#f5f5f2', transform: round ? 'translate(0,-3.5)' : undefined },
           h('path', { d: 'M13.3 25.8L32 16.4L50.7 25.8V29.3H13.3Z' }),
           h('rect', { x: 13.3, y: 32.9, width: 12.9, height: 18.2, rx: 2.2 }),
           h('rect', { x: 37.8, y: 32.9, width: 12.9, height: 18.2, rx: 2.2 }),
@@ -540,8 +541,8 @@ window.__ModuleLoader__.load({
       return snap[0]
     }
 
-    /** 底部状态栏余额 pill(conversation.composer.dock,登录态显示)。 */
-    function BalancePill() {
+    /** 输入框工具行、模型选择器左侧的紧凑入口按钮(登录态:LOGO+余额;未登录:FREE 标签)。 */
+    function ComposerEntry() {
       var snap = useTbStore()
       var st = React.useState(null)
       React.useEffect(function () {
@@ -552,10 +553,13 @@ window.__ModuleLoader__.load({
         }).catch(function () {})
         return function () { stopped = true }
       }, [])
+      // 登录态变化(弹窗登录/退出)时刷新余额展示
       React.useEffect(function () {
         var stopped = false
         if (!snap.loggedIn) return
-        api('status').then(function (data) { if (!stopped) st[1](data) }).catch(function () {})
+        api('status').then(function (data) {
+          if (!stopped) st[1](data)
+        }).catch(function () {})
         return function () { stopped = true }
       }, [snap.loggedIn, snap.authOpen])
       var flash = React.useState(false)
@@ -577,89 +581,34 @@ window.__ModuleLoader__.load({
         flash[1](false)
         var rect = e && e.currentTarget && e.currentTarget.getBoundingClientRect()
         tbStore.set({
-          authOpen: true, authMode: 'login',
+          authOpen: true, authMode: snap.loggedIn ? 'login' : 'register',
           anchor: rect ? { right: rect.right, top: rect.top } : null,
         })
       }
-      if (!snap.loggedIn) return null
       var data = st[0]
+      var loggedIn = snap.loggedIn
       var bal = data && data.account && typeof data.account.balance_nano_usd === 'number'
-        ? '$ ' + (data.account.balance_nano_usd / 1e9).toFixed(2) : null
-      return h('button', {
-        type: 'button', id: 'tb-balance-pill', title: pageT('composerEntry'),
-        className: (flash[0] ? 'tb-balance-flash ' : '') + (snap.authOpen ? 'tb-balance-open' : ''),
-        onClick: onClick,
-        style: {
-          boxSizing: 'border-box', borderRadius: 6, maxWidth: '100%',
-          color: 'var(--dsw-alias-label-tertiary, #a0a3a8)', font: 'inherit',
-          fontVariantNumeric: 'tabular-nums', lineHeight: 'inherit', whiteSpace: 'nowrap',
-          background: 'transparent', border: 'none',
-          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px',
-          fontSize: 14, cursor: 'pointer',
-        },
-      },
-        bal || '—',
-      )
-    }
-
-    /** 输入框工具行、模型选择器左侧的紧凑入口按钮。 */
-    function ComposerEntry() {
-      var snap = useTbStore()
-      React.useEffect(function () {
-        var stopped = false
-        api('status').then(function (data) {
-          if (!stopped) tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl })
-        }).catch(function () {})
-        return function () { stopped = true }
-      }, [])
-      var onClick = function (e) {
-        var rect = e && e.currentTarget && e.currentTarget.getBoundingClientRect()
-        tbStore.set({
-          authOpen: true, authMode: 'register',
-          anchor: rect ? { right: rect.right, top: rect.top } : null,
-        })
-      }
-      var st = React.useState(null)
-      React.useEffect(function () {
-        var stopped = false
-        api('status').then(function (data) {
-          if (stopped) return
-          st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl })
-        }).catch(function () {})
-        return function () { stopped = true }
-      }, [])
-      // 登录态变化(弹窗登录/退出)时刷新余额展示
-      React.useEffect(function () {
-        var stopped = false
-        if (!snap.loggedIn) return
-        api('status').then(function (data) {
-          if (!stopped) st[1](data)
-        }).catch(function () {})
-        return function () { stopped = true }
-      }, [snap.loggedIn, snap.authOpen])
-      var data = st[0]
-      // 登录态入口整个不渲染(余额在底部状态栏 pill),否则会残留一个空胶囊
-      if (snap.loggedIn) return null
+        ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : null
       return h('button', {
         type: 'button',
         id: 'tb-entry-btn',
-        className: snap.authOpen ? 'tb-entry-open' : '',
+        className: (flash[0] ? 'tb-balance-flash ' : '') + (snap.authOpen ? 'tb-entry-open' : ''),
         title: pageT('composerEntry'), 'aria-label': pageT('composerEntry'),
         onClick: onClick,
-        style: snap.loggedIn
-          ? {
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              height: 29, padding: '0 8px', borderRadius: 7, boxSizing: 'border-box',
-              border: 'none', background: 'transparent',
-              cursor: 'pointer', position: 'relative',
-            }
-          : {
-              display: 'inline-flex', alignItems: 'center', cursor: 'pointer', position: 'relative',
-              border: 'none', background: 'transparent', padding: 0, boxSizing: 'border-box',
-            },
+        style: {
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+          height: 29, padding: '0 8px', borderRadius: 7, boxSizing: 'border-box',
+          border: 'none', background: 'transparent',
+          cursor: 'pointer', position: 'relative',
+          marginRight: -6, // standardControls 容器 gap 12px,减半为 6px
+          color: 'var(--dsw-alias-label-tertiary, #a0a3a8)', font: 'inherit',
+          fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', fontSize: 13,
+        },
       },
-        snap.loggedIn
-          ? null
+        loggedIn
+          ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } },
+              h(TokenBankLogo, { size: 16, round: true }),
+              bal ? h('span', { className: 'tb-entry-bal' }, bal) : null)
           : h('span', { className: 'tb-free-tag', style: { fontSize: 11, lineHeight: '20px', padding: '0 8px', borderRadius: 999, color: '#fff', background: '#ff4f1f', fontWeight: 600, letterSpacing: 0.3 } }, pageT('freeToken')),
       )
     }
@@ -847,7 +796,7 @@ window.__ModuleLoader__.load({
                   padding: '1px 5px', fontSize: 11, fontWeight: 700, flexShrink: 0,
                   lineHeight: '16px',
                 },
-              }, '限时优惠'),
+              }, claimed ? '已领取' : '限时特惠'),
               claimed
                 ? h('span', { style: { color: color, fontWeight: 600, lineHeight: '16px' } }, label)
                 : [
@@ -961,10 +910,6 @@ window.__ModuleLoader__.load({
             }, label)
           })),
         err[0] && !busy[0] ? h('div', { style: errorStyle }, err[0]) : null,
-        busy[0] ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
-          h('span', null, pageT('rechargeWaiting')),
-          err[0] ? h('span', { style: { color: '#d54941' } }, err[0]) : null,
-        ) : null,
         h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', textAlign: 'center' } },
           rechargeHint(picked[0], pickedCredit(picked[0]))),
         h('div', {
@@ -1005,7 +950,30 @@ window.__ModuleLoader__.load({
         h('button', {
           type: 'button', style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center' }),
           disabled: busy[0], onClick: pay,
-        }, busy[0] ? pageT('rechargeWaiting') : pageT('rechargePay')),
+        }, busy[0] ? pageT('rechargeWaiting') : (function () {
+          // 按钮文案带出可获得的词元总量:基础词元用 RECHARGE_HINTS 锚点(固定口径,与提示行/价格对比一致;
+          // 接口折算的 pk.tokens 随行情价波动不可靠),叠加首充赠,如「立即获得3.8亿TOKEN」「立即获得16亿TOKEN」
+          var base = RECHARGE_HINTS[picked[0]]
+          if (base == null) {
+            var list0 = packs && packs[0] || []
+            for (var j = 0; j < list0.length; j++) {
+              if (list0[j].fen === picked[0] && list0[j].tokens > 0) { base = list0[j].tokens; break }
+            }
+          }
+          if (base != null) {
+            var fb = 0
+            var list = packs && packs[0] || []
+            for (var i = 0; i < list.length; i++) {
+              if (list[i].fen === picked[0]) {
+                // bonusNano=0 表示该档首充已领(营销行置灰口径一致),不再叠加首充赠
+                fb = list[i].bonusNano > 0 ? (Number(list[i].firstBonusTokens) || 0) : 0
+                break
+              }
+            }
+            return '立即获得' + humanTokens(base + fb) + 'TOKEN'
+          }
+          return pageT('rechargePay')
+        })()),
         busy[0] ? h('button', {
           type: 'button', style: Object.assign({}, buttonStyle, { justifyContent: 'center' }),
           onClick: function () {
@@ -1577,6 +1545,7 @@ window.__ModuleLoader__.load({
       return h('div', { style: { position: 'fixed', inset: 0, zIndex: 2210 } },
         h('div', { style: { position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(0,0,0,0.35)' }, onClick: props.onClose }),
         h('div', {
+          className: 'tb-trade-sheet',
           style: {
             position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
             width: props.width || 360, maxWidth: 'calc(100vw - 24px)', maxHeight: '78vh', overflow: 'auto',
@@ -1793,7 +1762,8 @@ window.__ModuleLoader__.load({
       return h(TradeSubModal, { title: pageT('tradeRecords'), width: 640, onClose: props.onClose },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
           err[0] ? h('div', { style: errorStyle }, err[0]) : null,
-          h('table', { style: { width: '100%', borderCollapse: 'collapse' } },
+          h('div', { className: 'tb-trade-scroll', style: { overflowX: 'auto', WebkitOverflowScrolling: 'touch' } },
+          h('table', { style: { width: '100%', borderCollapse: 'collapse', minWidth: 560 } },
             h('thead', null, h('tr', null,
               [pageT('colTime'), pageT('colType'), pageT('colAmount'), pageT('colUsd'), pageT('colFee'), pageT('colPrice'), pageT('colPnl')].map(function (label) {
                 return h('th', { key: label, style: Object.assign({}, cellStyle, { textAlign: 'left', color: 'var(--dsw-alias-label-secondary, #888)', fontWeight: 600 }) }, label)
@@ -1818,6 +1788,7 @@ window.__ModuleLoader__.load({
                   pnl != null ? (pnl > 0 ? '+' : pnl < 0 ? '−' : '') + tradeUsd6(Math.abs(pnl)) : '—'),
               )
             }) : h('tr', null, h('td', { style: Object.assign({}, cellStyle, { textAlign: 'center' }), colSpan: 7 }, '—'))),
+          ),
           ),
           h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 } },
             h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, page[0] + ' / ' + pages),
@@ -1939,6 +1910,7 @@ window.__ModuleLoader__.load({
       return h('div', { style: { position: 'fixed', inset: 0, zIndex: 2200 } },
         h('div', { style: { position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(0,0,0,0.35)' }, onClick: close }),
         h('div', {
+          className: 'tb-trade-sheet',
           style: {
             position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
             width: 860, maxWidth: 'calc(100vw - 24px)', maxHeight: '88vh', overflow: 'auto',
@@ -1958,7 +1930,7 @@ window.__ModuleLoader__.load({
             : !tradingOpen ? h('div', { style: { marginBottom: 10, padding: '8px 12px', borderRadius: 8, fontSize: 12, background: 'rgba(178,106,0,0.08)', color: '#b26a00' } }, pageT('tradingCalibrating'))
             : null,
           // 价格卡 + 持仓卡
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+          h('div', { className: 'tb-trade-cols', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
             h('div', { style: tradeCard },
               h('div', { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, pageT('priceNow')),
               h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } },
@@ -1975,7 +1947,7 @@ window.__ModuleLoader__.load({
             ),
             h('div', { style: tradeCard },
               h('div', { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, pageT('position')),
-              h('div', { style: { display: 'flex', gap: 16 } },
+              h('div', { className: 'tb-trade-actions', style: { display: 'flex', gap: 16 } },
                 h('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', gap: 8 } },
                   h('div', { style: { fontSize: 26, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } },
                     tradeMt(balanceWc), h('span', { style: { fontSize: 13, fontWeight: 400, marginLeft: 4, color: 'var(--dsw-alias-label-secondary, #888)' } }, TRADE_UNIT)),
@@ -1983,7 +1955,7 @@ window.__ModuleLoader__.load({
                   h('div', { style: { fontSize: 13, color: pnlColor, fontWeight: 600 } },
                     pageT('pnl') + ' ' + (pnlUsd < 0 ? '-' : '+') + tradeUsd6(Math.abs(pnlUsd)),
                     pnlPct != null ? ' (' + (pnlPct < 0 ? '-' : '+') + tradeFmt(Math.abs(pnlPct), 2) + '%)' : ''),
-                  h('div', { style: { display: 'flex', gap: 8 } },
+                  h('div', { className: 'tb-trade-actions', style: { display: 'flex', gap: 8 } },
                     h('button', {
                       type: 'button', disabled: !tradingEnabled,
                       style: Object.assign({}, primaryButtonStyle, { height: 30, padding: '0 18px', whiteSpace: 'nowrap', flex: 'none', opacity: tradingEnabled ? 1 : 0.5 }),
@@ -1998,7 +1970,7 @@ window.__ModuleLoader__.load({
                       type: 'button', style: Object.assign({}, buttonStyle, { height: 30, padding: '0 14px', whiteSpace: 'nowrap', flex: 'none' }),
                       onClick: function () { tbStore.set({ tradeView: 'ledger' }) },
                     }, pageT('tradeRecords')))),
-                h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 160 } },
+                h('div', { className: 'tb-trade-stats', style: { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 160 } },
                   statRow(pageT('avgBuyPrice'), avgBuy != null ? tradeFmt(avgBuy, 2) + ' $/' + TRADE_UNIT : '—'),
                   // 累计买卖直接用后端汇总的美元腿（同一笔买入/卖出实付实收，含手续费）
                   statRow(pageT('totalBought'), tradeUsd(account ? Number(account.total_bought_nano_usd) || 0 : 0)),
@@ -3108,14 +3080,14 @@ window.__ModuleLoader__.load({
         document.head.appendChild(wmCss)
         // 余额 pill 登录闪烁 5s 提示可点击
         var flashCss = document.createElement('style')
-        flashCss.textContent = '.tb-balance-flash{color:#ff7a3d!important;box-shadow:inset 0 0 0 1px #ff7a3d}#tb-balance-pill{border-radius:var(--dsw-radius-sm, 8px)}#tb-balance-pill:hover,#tb-balance-pill.tb-balance-open{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.08))!important;color:var(--dsw-alias-label-secondary, #888)!important}'
+        flashCss.textContent = '.tb-balance-flash{color:#ff7a3d!important;box-shadow:inset 0 0 0 1px #ff7a3d}#tb-entry-btn{border-radius:var(--dsw-radius-sm, 8px)}#tb-entry-btn:hover,#tb-entry-btn.tb-balance-open{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.08))!important;color:var(--dsw-alias-label-secondary, #888)!important}'
         document.head.appendChild(flashCss)
         ctx.effect(function () {
           return function () { if (flashCss.parentNode) flashCss.parentNode.removeChild(flashCss) }
         }, 'dsh-tokenbank: balance flash style')
         // 入口按钮 hover 形态:灰底 + 箭头反转(与模型选择器 hover 一致)
         var entryCss = document.createElement('style')
-        entryCss.textContent = '@keyframes tb-balance-gain{0%{opacity:0;transform:translateY(4px)}25%{opacity:1;transform:translateY(0)}75%{opacity:1}100%{opacity:0;transform:translateY(-6px)}}' + '#tb-entry-btn:not(:has(.tb-free-tag)):hover{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.05))!important;margin:1px 0;height:27px!important}.tb-entry-open .tb-entry-chevron{transition:transform .15s ease;transform:rotate(180deg)}'
+        entryCss.textContent = '@keyframes tb-balance-gain{0%{opacity:0;transform:translateY(4px)}25%{opacity:1;transform:translateY(0)}75%{opacity:1}100%{opacity:0;transform:translateY(-6px)}}' + '.tb-entry-open .tb-entry-chevron{transition:transform .15s ease;transform:rotate(180deg)}' + '@media (max-width:600px){.tb-entry-bal{display:none!important}}' + '@media (max-width:640px){.tb-trade-cols{grid-template-columns:1fr!important}.tb-trade-actions{flex-wrap:wrap}.tb-trade-stats{min-width:0!important}.tb-trade-sheet{max-width:calc(100vw - 16px)!important;padding:14px!important}.tb-trade-scroll{margin:0 -14px;padding:0 14px}}'
         document.head.appendChild(entryCss)
         ctx.effect(function () {
           return function () { if (entryCss.parentNode) entryCss.parentNode.removeChild(entryCss) }
@@ -3145,14 +3117,7 @@ window.__ModuleLoader__.load({
           }, 'dsh-tokenbank: model picker click sync')
         }
 
-        // 输入框工具行、模型选择器左侧的紧凑入口按钮(弹账户/注册窗)
-        ctx.slots.inject('conversation.composer.dock', function () {
-          return ctx.slots.register({
-            name: 'conversation.composer.dock',
-            id: 'dsh-tokenbank-balance',
-            order: 5,
-          }, BalancePill)
-        })
+        // 输入框工具行、模型选择器左侧的紧凑入口按钮(弹账户/注册窗;登录态展示 LOGO+余额)
         ctx.slots.inject('conversation.input.right', function () {
           return ctx.slots.register({
             name: 'conversation.input.right',

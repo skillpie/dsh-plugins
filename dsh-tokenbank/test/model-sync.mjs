@@ -83,8 +83,8 @@ assert.deepEqual(calls, [], '非模型选择器的 menu 按钮不应触发同步
 fire('选择模型，当前 GLM-4')
 await drain()
 assert.deepEqual(calls, [], '未登录态点击模型选择器不应发出任何请求')
-// 模拟 BalancePill 挂载:status → tbStore.loggedIn = true
-components['dsh-tokenbank-balance']()
+// 模拟 ComposerEntry 挂载:status → tbStore.loggedIn = true
+components['dsh-tokenbank-entry']()
 await drain()
 assert.deepEqual(calls, ['status'], '挂载只应查一次 status')
 calls.length = 0
