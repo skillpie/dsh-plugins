@@ -34,7 +34,7 @@
       "package": "dsh-remote-relay",
       "title": "远程控制",
       "description": "通过 8 位数字码从任何设备远程访问你的 DSH 主机,支持公网中转部署。",
-      "version": "1.2.22",
+      "version": "1.2.23",
       "tags": [
         "远程"
       ],
@@ -49,7 +49,7 @@
         "end": "2026-11-23"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-24",
+      "enrichedAt": "2026-11-25",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-remote-relay/icon.svg"
     },
     {
@@ -98,7 +98,7 @@
       "package": "dsh-datasource",
       "title": "数据源",
       "description": "在 DSH 内连接 MySQL/PostgreSQL 等数据库,直接查询与编辑数据。",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "tags": [
         "数据库"
       ],
@@ -113,7 +113,7 @@
         "end": "2026-11-23"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-24",
+      "enrichedAt": "2026-11-25",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-datasource/icon.svg"
     },
     {
@@ -232,5 +232,5 @@
       "enrichedAt": "2026-11-24"
     }
   ],
-  "updated": "2026-11-24"
+  "updated": "2026-11-25"
 }

@@ -297,7 +297,11 @@ const FEATURED_SOURCE = {
  *
  * Identity (code / hostId / token) persists as a credential record
  * `dsh-remote-relay/identity` (GrantRecord payload); an explicit `code` in the
- * row config pins it instead.
+ * row config pins it instead. The runtime on/off switch persists in the same
+ * record (`enabled`): after a DSH restart the link auto-resumes when it was
+ * left on. The code only ever changes through the regenerate owner action —
+ * a failed or unavailable credentials read keeps the session on a temporary
+ * identity and never overwrites the stored record.
  *
  * Owner panel: same-origin JSON API at /dsh-remote-relay/api behind the web GUI's
  * own session auth (status / regenerate / toggles), consumed by the client
@@ -409,7 +413,10 @@ export default {
     const cfg = rawConfig ?? {}
     // 默认关闭：远程控制涉及向第三方中转站建立出站长连接并开放完整 GUI
     // 权限，必须由属主在设置页主动开启（开启时客户端会弹确认提示）。
-    const enabled = cfg.enabled ?? false
+    // cfg.enabled === true 是部署层「强制开启」的钉子；除此之外，实际开关
+    // 以凭据记录里持久化的运行时状态为准（见 boot 第 1 步），DSH 重启后
+    // 自动恢复上次的开启/关闭状态，且不改写远程码。
+    const configEnabled = cfg.enabled === true
     const direct = cfg.direct ?? false
     const relayUrl = cfg.relayUrl ?? DEFAULT_RELAY_URL
     const relayFaceEnabled = cfg.relay?.enabled === true
@@ -477,35 +484,69 @@ export default {
       logLine('boot', `启动失败: ${error?.message ?? error}`)
     })
 
-    async function boot() {
-      // 1. Adopt the stored identity unless the row config pins one.
-      const credentials = typeof ctx.get === 'function' ? ctx.get('credentials') : undefined
-      let stored = undefined
-      if (credentials) {
+    // 等待 credentials 服务就绪并读取身份记录（最多 ~5s，200ms 间隔）。
+    // 「记录不存在」（readRecord → undefined）与「读取失败」（抛错）是两回事：
+    //   · undefined → 首次运行，允许生成并落库；
+    //   · 抛错 / 服务未就绪 → 只给本轮会话临时身份，绝不写库——否则一次
+    //     瞬时故障就会把新随机码覆盖到已存储记录上（重启后远程码变更的根因）。
+    async function readStoredIdentity() {
+      const deadline = Date.now() + 5_000
+      let lastError
+      while (true) {
+        let credentials
         try {
-          const record = await credentials.readRecord(CREDENTIAL_KEY)
-          if (record?.kind === 'grant' && record.payload && typeof record.payload === 'object') {
-            stored = record.payload
-          }
-        } catch (error) {
-          logLine('identity', `凭据读取失败: ${error?.message ?? error}`)
-        }
-        if (stored && !cfg.code) {
-          if (isValidCode(stored.code)) identity.code = stored.code
-          if (typeof stored.hostId === 'string' && stored.hostId) identity.hostId = stored.hostId
-          if (typeof stored.token === 'string') identity.token = stored.token
-        }
-        if (!cfg.code || !cfg.hostId) {
-          // Persist the (possibly fresh) identity; no restart involved.
+          credentials = typeof ctx.get === 'function' ? ctx.get('credentials') : undefined
+        } catch { credentials = undefined }
+        if (credentials) {
           try {
-            await saveIdentity(credentials, { code: identity.code, hostId: identity.hostId, token: identity.token })
+            const record = await credentials.readRecord(CREDENTIAL_KEY)
+            const stored = record?.kind === 'grant' && record.payload && typeof record.payload === 'object'
+              ? record.payload
+              : undefined
+            return { credentials, stored, confirmedAbsent: stored === undefined, error: undefined }
           } catch (error) {
-            logLine('identity', `身份持久化失败（重启后会再次生成）: ${error?.message ?? error}`)
+            lastError = error
           }
         }
-      } else {
-        logLine('identity', '凭据服务不可用，身份仅本次会话有效')
+        if (Date.now() >= deadline) {
+          return { credentials: credentials ?? undefined, stored: undefined, confirmedAbsent: false, error: lastError }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200))
       }
+    }
+
+    async function boot() {
+      // 1. Adopt the stored identity and switch state unless the row config
+      //    pins the corresponding field.
+      const { credentials, stored, confirmedAbsent, error } = await readStoredIdentity()
+      let storedEnabled = false
+      if (stored) {
+        if (!cfg.code && isValidCode(stored.code)) identity.code = stored.code
+        if (!cfg.hostId && typeof stored.hostId === 'string' && stored.hostId) identity.hostId = stored.hostId
+        if (!cfg.token && typeof stored.token === 'string') identity.token = stored.token
+        storedEnabled = stored.enabled === true
+      }
+      if (confirmedAbsent && (!cfg.code || !cfg.hostId)) {
+        // Persist the (possibly fresh) identity; no restart involved.
+        // 只有「确认记录不存在」（首次运行）才落库；配置强制开启也一并
+        // 持久化，让重启后能自动恢复。
+        try {
+          await saveIdentity(credentials, {
+            code: identity.code,
+            hostId: identity.hostId,
+            token: identity.token,
+            enabled: configEnabled,
+          })
+        } catch (saveError) {
+          logLine('identity', `身份持久化失败（重启后会再次生成）: ${saveError?.message ?? saveError}`)
+        }
+      }
+      if (!credentials) {
+        logLine('identity', '凭据服务不可用，身份与开关状态仅本次会话有效')
+      } else if (error) {
+        logLine('identity', '凭据读取失败，已保持存储身份不变（本次会话使用临时身份）')
+      }
+      const enabled = configEnabled || storedEnabled
 
       // 2. The web surface carries everything below.
       await whenWebServer()
@@ -522,7 +563,7 @@ export default {
       })
       state.peer = peer
 
-      // 4. Outbound relay link.
+      // 4. Outbound relay link（重启后按持久化状态自动恢复开启）。
       if (enabled) {
         const link = new RelayLink({
           relayUrl,
@@ -537,7 +578,9 @@ export default {
         })
         state.link = link
         link.start()
-        logLine('boot', `dsh-remote-relay 已加载（远程码 ${identity.code}）`)
+        logLine('boot', storedEnabled
+          ? `dsh-remote-relay 已加载（自动恢复上次开启状态，远程码 ${identity.code}）`
+          : `dsh-remote-relay 已加载（远程码 ${identity.code}）`)
       } else {
         logLine('boot', `dsh-remote-relay 已加载（远程码 ${identity.code}，远程访问已关闭）`)
       }
@@ -685,6 +728,13 @@ export default {
           }
           // 运行时开启也要兜底挂文件下载路由（boot 时默认关、可能没挂）。
           if (next && services.webServer) ensureFileRoute(services.webServer)
+          // 开关状态持久化到身份记录：DSH 重启后按此自动恢复开启/关闭。
+          const creds = typeof ctx.get === 'function' ? ctx.get('credentials') : undefined
+          if (creds) {
+            saveIdentity(creds, { enabled: next }).catch((error) => {
+              logLine('owner', `开关状态持久化失败（重启后可能不恢复）: ${error?.message ?? error}`)
+            })
+          }
           logLine('owner', `属主${next ? '开启' : '关闭'}远程控制`)
           return { ok: true, enabled: next }
         }

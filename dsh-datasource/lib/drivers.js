@@ -455,12 +455,21 @@ async function openPostgres(connection) {
     max: 2,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 8_000,
+    // 每个新连接设置语句超时上限(pg 没有按查询设置超时的选项)。用池的
+    // onConnect 钩子而不是 'connect' 事件:事件在连接刚建立、首条业务查询
+    // 即将下发时同步触发,fire-and-forget 的 SET 会与该查询在同一连接上并发,
+    // 触发 pg 的 "already executing a query" 弃用告警;onConnect 会被池 await,
+    // SET 完成后才放行首条查询。SET 失败静默降级,不让连接因此被判定失败。
+    onConnect: (client) => {
+      return client.query(`SET statement_timeout = ${QUERY_TIMEOUT_MS}`).catch(() => {})
+    },
   })
-  // Every pooled connection gets a statement ceiling; pg has no per-query
-  // timeout option, so this is set at connect time and re-applied whenever
-  // the pool opens a fresh socket.
-  pool.on('connect', (client) => {
-    client.query(`SET statement_timeout = ${QUERY_TIMEOUT_MS}`).catch(() => {})
+  // 池内空闲连接意外死亡(断网、Wi-Fi 切换、远端重启)时,pg-pool 会摘除并关闭
+  // 该连接,随后在池上 emit('error');若无人监听,该事件按 Node 语义以
+  // uncaughtException 抛出,直接带崩宿主进程(断网即 DSH 退出)。这里只记录
+  // 日志:出错连接已被 pg-pool 自动清理,下一条查询会自动建立新连接。
+  pool.on('error', (error) => {
+    console.error('dsh-datasource: postgres pool error —', error?.message ?? error)
   })
 
   const splitTable = (table) => {
