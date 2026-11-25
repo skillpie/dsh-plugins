@@ -19,7 +19,7 @@
       "author": "skillpie",
       "homepage": "https://github.com/skillpie/dsh-plugins",
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-24",
+      "enrichedAt": "2026-11-25",
       "category": "model",
       "icon": "https://raw.githubusercontent.com/skillpie/dsh-plugins/main/dsh-tokenbank/assets/icon-180.png",
       "screenshots": [
@@ -71,7 +71,7 @@
         "end": "2026-11-23"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-24",
+      "enrichedAt": "2026-11-25",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-skillpie/icon.svg"
     },
     {
@@ -82,16 +82,16 @@
       "tags": [
         "邮箱"
       ],
-      "downloads": 1626,
+      "downloads": 1710,
       "downloadsWindow": {
-        "start": "2026-10-25",
-        "end": "2026-11-23"
+        "start": "2026-10-26",
+        "end": "2026-11-24"
       },
-      "stars": 2,
+      "stars": 4,
       "author": "skillpie",
       "homepage": "https://github.com/skillpie/dsh-plugins",
       "enrichSource": "npm-probe",
-      "enrichedAt": "2026-11-24",
+      "enrichedAt": "2026-11-25",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-skillpie-mail/icon.svg"
     },
     {
@@ -138,7 +138,7 @@
         "end": "2026-11-23"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-24",
+      "enrichedAt": "2026-11-25",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-gitx@0.2.2/icon.svg"
     },
     {
@@ -162,7 +162,7 @@
         "end": "2026-11-23"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-24"
+      "enrichedAt": "2026-11-25"
     },
     {
       "package": "dsh-termbar",
@@ -183,7 +183,7 @@
         "end": "2026-11-23"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-24",
+      "enrichedAt": "2026-11-25",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-termbar/icon.svg"
     },
     {
@@ -205,7 +205,7 @@
         "end": "2026-11-23"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-24",
+      "enrichedAt": "2026-11-25",
       "icon": "https://cdn.jsdelivr.net/npm/dsh-project-report/icon.svg"
     },
     {
@@ -229,7 +229,7 @@
         "end": "2026-11-23"
       },
       "enrichSource": "awesome-dsh-plugin",
-      "enrichedAt": "2026-11-24"
+      "enrichedAt": "2026-11-25"
     }
   ],
   "updated": "2026-11-25"
