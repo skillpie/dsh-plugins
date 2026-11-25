@@ -47,6 +47,8 @@ window.__ModuleLoader__.load({
       rechargeDone: '充值成功,余额已到账',
       gainSuffix: '签到奖励',
       rechargePending: '尚未检测到支付结果,如已完成支付请稍后重试或刷新',
+      orderTooManyPending: '待支付订单过多，请先完成支付或等订单过期后再试',
+      orderCreateTooFrequent: '下单太频繁，请稍等一分钟再试',
       rechargeWaiting: '等待支付中…',
       rechargeOpenPay: '打开支付页',
       rechargeCancel: '取消',
@@ -247,6 +249,8 @@ window.__ModuleLoader__.load({
       rechargePay: 'Pay',
       rechargeDone: 'Recharge successful',
       rechargePending: 'No payment detected yet; if you already paid, retry or refresh later',
+      orderTooManyPending: 'Too many unpaid orders — complete or wait for them to expire before starting another',
+      orderCreateTooFrequent: 'Orders are being created too frequently — wait a minute and try again',
       rechargeWaiting: 'Waiting for payment…',
       rechargeOpenPay: 'Open payment page',
       rechargeCancel: 'Cancel',
@@ -880,7 +884,14 @@ window.__ModuleLoader__.load({
             return
           }
           err[1](pageT('rechargePending'))
-        } catch (e2) { err[1](String(e2.message || e2)) }
+        } catch (e2) {
+          // 下单限频拒绝原因在 msg 尾部（服务端以 "(reason=xxx)" 形式附带，见 index.js:931），
+          // 映射为友好文案，未识别回退服务端原文。
+          var msg2 = String(e2.message || e2)
+          if (/too_many_pending_orders/.test(msg2)) msg2 = pageT('orderTooManyPending')
+          else if (/order_create_too_frequent/.test(msg2)) msg2 = pageT('orderCreateTooFrequent')
+          err[1](msg2)
+        }
         busy[1](false)
       }
       return h('div', {

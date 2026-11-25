@@ -21,6 +21,8 @@
   "rechargePay": "去支付",
   "rechargeDone": "充值成功,余额已到账",
   "rechargePending": "尚未检测到支付结果,如已完成支付请稍后重试或刷新",
+  "orderTooManyPending": "待支付订单过多，请先完成支付或等订单过期后再试",
+  "orderCreateTooFrequent": "下单太频繁，请稍等一分钟再试",
   "depositManage": "托管",
   "depositGuide": "已打开模型设置,点卡片上的「一键托管」即可把 API Key 托管到 TokenBank",
   "rechargeWaiting": "等待支付中…",
