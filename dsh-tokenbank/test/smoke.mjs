@@ -66,6 +66,11 @@ const portal = createServer((req, res) => {
     respond(0, { groups: [{ id: 'g1', name: 'BigModel' }, { id: 'g2', name: 'Other' }] })
     return
   }
+  if (url.pathname === '/api/portal/promo/summary' && req.method === 'GET') {
+    if (cookie !== validSession) { respond(401100, null); return }
+    respond(0, { ref_code: 'vzau', reward_nano_usd: 2_000_000_000, total_referrals: 3, total_reward_nano_usd: 6_000_000_000 })
+    return
+  }
   if (url.pathname === '/api/portal/deposits' && req.method === 'POST') {
     if (cookie !== validSession) { respond(401100, null); return }
     let body = ''
@@ -242,6 +247,13 @@ try {
   assert.equal(status.loggedIn, true)
   assert.equal(status.account.balance_nano_usd, 5_000_000_000)
   assert.equal(status.accessKey, 'sk-signup-key')
+
+  // promo-summary:「推广赚$」弹窗数据源(tb.promoSummary → /api/portal/promo/summary)
+  const promo = await dispatch({ action: 'promo-summary' })
+  assert.equal(promo.ok, true)
+  assert.equal(promo.summary.ref_code, 'vzau')
+  assert.equal(promo.summary.reward_nano_usd, 2_000_000_000)
+  assert.equal(promo.summary.total_referrals, 3)
 
   // deposits + recharge pay html + gateway models
   const deposited = await dispatch({ action: 'deposits-add', groupId: 'g1', keys: ['k1', 'k2'] })

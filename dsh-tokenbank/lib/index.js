@@ -298,6 +298,7 @@ const FEATURED_SOURCE = {
  *   { action: 'logout' }                       → { ok }
  *   { action: 'me' }                           → { ok, ...portal /me data }
  *   { action: 'groups' }                       → { ok, groups }
+ *   { action: 'promo-summary' }                → { ok, summary }  (推广码/累计人数/累计奖励)
  *   { action: 'portal-models' }                → { ok, models }  (门户模型目录,含分组归属)
  *   { action: 'deposits-list' }                → { ok, deposits }
  *   { action: 'deposits-add', groupId, keys }  → { ok, result }
@@ -494,6 +495,11 @@ async function dispatch(ctx, state, cfg, body) {
     case 'groups': {
       const identity = await requireLive()
       return { ok: true, groups: (await tb.groups(baseUrl, identity.sessionToken))?.groups ?? [] }
+    }
+    case 'promo-summary': {
+      // 推广概览(推广码/累计人数/累计奖励):「推广赚$」弹窗数据源
+      const identity = await requireLive()
+      return { ok: true, summary: await tb.promoSummary(baseUrl, identity.sessionToken) }
     }
     case 'portal-models': {
       // 门户模型目录 [{group_id, group_name, models:[...]}]:托管弹窗的厂商模型选择器数据源

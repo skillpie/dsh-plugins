@@ -242,3 +242,6 @@ export const wordcoinBuy = (baseUrl, sessionToken, lots) =>
 /** POST /wordcoin/sell — 市价卖出,body.amount_nano_wc 为任意词元数量(nanoWC)，手续费按费率从款项扣除。 */
 export const wordcoinSell = (baseUrl, sessionToken, amountNanoWC) =>
   call(baseUrl, '/wordcoin/sell', { method: 'POST', sessionToken, body: { amount_nano_wc: Math.floor(Number(amountNanoWC) || 0) } })
+
+/** GET /promo/summary — 推广概览(推广码/累计人数/累计奖励,PromoSummary)。 */
+export const promoSummary = (baseUrl, sessionToken) => call(baseUrl, '/promo/summary', { sessionToken })

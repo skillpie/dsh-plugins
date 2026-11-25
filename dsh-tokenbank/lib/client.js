@@ -27,6 +27,21 @@ window.__ModuleLoader__.load({
       title: 'TokenBank',
       openPortal: '打开完整门户',
       openSite: '打开官网',
+      promoTag: '分享赚$',
+      promoTitle: '分享赚TOKEN',
+      promoRule1: '1. 每个账号都有专属推广链接，好友通过链接注册即成功推广',
+      promoRule2: '2. 每成功推广 1 位新用户，奖励 $2 直接入账户余额，上不封顶',
+      promoRule3: '3. 推广奖励可用于对话消耗抵扣，与余额同规则使用',
+      promoLinkLabel: '专属推广链接',
+      promoCopy: '复制文案',
+      promoCopied: '已复制',
+      promoCopyFailed: '复制失败，请手动复制',
+      promoLoginHint: '登录 TokenBank 后即可获取你的专属推广链接',
+      promoGoLogin: '去登录',
+      promoViewRecords: '查看推广记录',
+      promoStatReferrals: '累计推广用户',
+      promoStatReward: '累计推广奖励',
+      promoShareText: '我在用 TokenBank，注册就送体验金！AI 接口托管、按量计费超划算～ 用我的链接注册，咱俩都有惊喜 👉 {link}',
       addFreeModels: '获取免费模型',
       getModels: '获取模型',
       freeModelsTip: '免费使用主流收费模型，点击后自动获取，模型列表 TokenBank 中的模型任意使用。',
@@ -230,6 +245,21 @@ window.__ModuleLoader__.load({
       title: 'TokenBank',
       openPortal: 'Open full portal',
       openSite: 'Open website',
+      promoTag: 'Share & Earn',
+      promoTitle: 'Share & Earn TOKEN',
+      promoRule1: '1. Every account gets a referral link — a friend signing up through it counts as your referral',
+      promoRule2: '2. Earn $2 per new user, credited straight to your balance, no cap',
+      promoRule3: '3. Referral rewards work like regular balance for AI usage',
+      promoLinkLabel: 'Your referral link',
+      promoCopy: 'Copy message',
+      promoCopied: 'Copied',
+      promoCopyFailed: 'Copy failed — please copy manually',
+      promoLoginHint: 'Sign in to TokenBank to get your referral link',
+      promoGoLogin: 'Sign in',
+      promoViewRecords: 'View referral records',
+      promoStatReferrals: 'Total referrals',
+      promoStatReward: 'Total rewards',
+      promoShareText: 'I am using TokenBank — sign up and get free credit! Join with my link and we both win 👉 {link}',
       addFreeModels: 'Get free models',
       getModels: 'Get models',
       freeModelsTip: 'Use paid-tier models for free — one click links them, and every TokenBank model in the list is available.',
@@ -452,7 +482,7 @@ window.__ModuleLoader__.load({
       var round = props && props.round
       return h('svg', {
         viewBox: '0 0 64 64', width: size, height: size, 'aria-hidden': true,
-        style: { display: 'block', flex: 'none' },
+        style: Object.assign({ display: 'block', flex: 'none' }, (props && props.style) || {}),
       },
         h('rect', { width: 64, height: 64, rx: round ? 21 : 16, fill: '#ff4f1f' }),
         h('g', { fill: '#f5f5f2', transform: round ? 'translate(0,-3.5)' : undefined },
@@ -524,7 +554,7 @@ window.__ModuleLoader__.load({
 
     var runtimeCtx = null // apply() 注入,overlay 里 addProviderToModels 用
     var tbStore = {
-      state: { authOpen: false, authMode: 'register', lowBalanceSeq: 0 , notify: null, loggedIn: null, tradingOpen: false, tradeView: null},
+      state: { authOpen: false, authMode: 'register', lowBalanceSeq: 0 , notify: null, loggedIn: null, tradingOpen: false, tradeView: null, promoOpen: false},
       listeners: [],
       get: function () { return tbStore.state },
       subscribe: function (fn) {
@@ -1364,6 +1394,105 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /* ── 推广赚$弹窗(材质与 DepositOverlay 一致):推广规则/链接/复制文案 ── */
+
+    function PromoOverlay() {
+      var snap = useTbStore()
+      var summary = React.useState(null) // {ref_code, reward_nano_usd, total_referrals, total_reward_nano_usd}
+      var needLogin = React.useState(false)
+      var err = React.useState('')
+      var copied = React.useState(false)
+      React.useEffect(function () {
+        if (!snap.promoOpen) return
+        summary[1](null); err[1](''); copied[1](false); needLogin[1](false)
+        api('promo-summary').then(function (res) {
+          summary[1](res && res.summary)
+        }).catch(function (e) {
+          // 未登录(requireLive 抛 'not logged in')/其他错误:未登录给登录引导
+          var msg = String((e && e.message) || e)
+          if (/not logged|login|auth|unauthorized|identity/i.test(msg)) needLogin[1](true)
+          else err[1](msg)
+        })
+      }, [snap.promoOpen])
+      if (!snap.promoOpen || !runtimeCtx) return null
+      var close = function () { tbStore.set({ promoOpen: false }) }
+      var portal = (snap.portalUrl || 'https://bank.skillpie.cn').replace(/\/+$/, '')
+      var data = summary[0]
+      var link = data && data.ref_code ? portal + '/i/' + data.ref_code : ''
+      var shareText = link ? pageT('promoShareText').replace('{link}', link) : ''
+      var copy = async function () {
+        try {
+          await navigator.clipboard.writeText(shareText)
+          copied[1](true)
+          setTimeout(function () { copied[1](false) }, 2000)
+        } catch (e) {
+          // 剪贴板不可用时兜底:选中文本让用户手动复制
+          var input = document.getElementById('tb-promo-link-input')
+          if (input && input.select) input.select()
+        }
+      }
+      var ruleStyle = { fontSize: 12, lineHeight: 1.8, color: 'var(--dsw-alias-label-secondary, #888)' }
+      return h('div', { style: { position: 'fixed', inset: 0, zIndex: 2100 } },
+        h('div', { style: { position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(0,0,0,0.35)' }, onClick: close }),
+        h('div', {
+          style: {
+            position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+            width: 420, maxWidth: 'calc(100vw - 24px)', maxHeight: '80vh', overflow: 'auto',
+            background: 'var(--dsw-menu-surface-fill)', backdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            WebkitBackdropFilter: 'var(--dsw-menu-backdrop-filter)',
+            color: 'var(--dsw-alias-label-primary)',
+            borderRadius: 'var(--dsw-radius-md, 10px)', padding: 16,
+            border: '1px solid var(--dsw-alias-border-l1)',
+            boxShadow: 'var(--dsw-elevation-prominent)',
+          },
+          onClick: function (e) { e.stopPropagation() },
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
+            h('span', { style: { fontWeight: 700, fontSize: 14 } }, pageT('promoTitle')),
+            h('button', { type: 'button', style: { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, lineHeight: 1, color: 'var(--dsw-alias-label-secondary, #888)', padding: 2 }, onClick: close }, '✕')),
+          // 推广规则
+          h('div', { style: { marginBottom: 12 } },
+            h('div', { style: ruleStyle }, pageT('promoRule1')),
+            h('div', { style: ruleStyle }, pageT('promoRule2')),
+            h('div', { style: ruleStyle }, pageT('promoRule3'))),
+          err[0] ? h('div', { style: { fontSize: 12, color: '#d54941', marginBottom: 8 } }, err[0]) : null,
+          needLogin[0] ? h('div', { style: { marginBottom: 10 } },
+            h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 8 } }, pageT('promoLoginHint')),
+            h('button', {
+              type: 'button',
+              style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', width: '100%' }),
+              onClick: function () { tbStore.set({ promoOpen: false, authOpen: true, authMode: 'login' }) },
+            }, pageT('promoGoLogin'))) : null,
+          // 推广链接 + 复制文案(未登录/加载中占位)
+          h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 4 } }, pageT('promoLinkLabel')),
+          h('div', { style: { display: 'flex', gap: 8, alignItems: 'stretch' } },
+            h('input', {
+              id: 'tb-promo-link-input', type: 'text', readOnly: true,
+              value: link || '…',
+              style: { flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '7px 9px', fontSize: 12, borderRadius: 8, border: '1px solid var(--dsw-alias-border-l1)', background: 'var(--dsw-alias-bg-layer-1, #f7f7f8)', color: 'inherit', fontFamily: 'monospace' },
+            }),
+            h('button', {
+              type: 'button', disabled: !link,
+              style: Object.assign({}, primaryButtonStyle, { flex: 'none', height: 'auto', minHeight: 30, opacity: link ? 1 : 0.5 }),
+              onClick: copy,
+            }, copied[0] ? pageT('promoCopied') : pageT('promoCopy'))),
+          // 登录态补充数据 + 门户推广记录入口
+          data && link ? h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
+            h('div', { style: { flex: 1, border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 10, background: 'var(--dsw-alias-bg-layer-1)', padding: '8px 10px' } },
+              h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('promoStatReferrals')),
+              h('div', { style: { fontSize: 15, fontWeight: 700, marginTop: 2 } }, String(data.total_referrals || 0))),
+            h('div', { style: { flex: 1, border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 10, background: 'var(--dsw-alias-bg-layer-1)', padding: '8px 10px' } },
+              h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('promoStatReward')),
+              h('div', { style: { fontSize: 15, fontWeight: 700, marginTop: 2, color: '#ff4f1f' } }, '$' + ((Number(data.total_reward_nano_usd) || 0) / 1e9).toFixed(2))),
+          ) : null,
+          data && link ? h('a', {
+            href: portal + '/promo', target: '_blank', rel: 'noreferrer',
+            style: { display: 'block', textAlign: 'right', marginTop: 10, fontSize: 12, color: '#ff4f1f', textDecoration: 'none', fontWeight: 600 },
+          }, pageT('promoViewRecords')) : null,
+        ),
+      )
+    }
+
     /* ── 百万词元(TM)交易弹窗(参考 token-bank PortalWordCoinView) ────────── */
 
     // $1 面值体系（与官网 PortalWordCoinView 同口径）：1 手 = $1，
@@ -2107,23 +2236,20 @@ window.__ModuleLoader__.load({
           },
           onClick: function (e) { e.stopPropagation() },
         },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 } },
-            h(TokenBankLogo, { size: 16 }),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 } },
+            h(TokenBankLogo, { size: 16, style: { position: 'relative', top: -1 } }),
             h('a', {
               href: portal, target: '_blank', rel: 'noopener noreferrer',
               style: { display: 'inline-flex', alignItems: 'center', cursor: 'pointer', textDecoration: 'none' },
               'aria-label': 'TokenBank',
             }, h('span', { className: 'tb-wordmark', style: { fontFamily: "'Frizon','FrizonLocal',sans-serif", fontSize: 17, fontWeight: 400, letterSpacing: 0.5, lineHeight: 1, color: '#111111', position: 'relative', top: -1, left: -1 } }, 'TOKENBANK')),
-            // 标题右侧紧贴的「打开外部」灰色小按钮:新开 TokenBank 官网
-            h('a', {
-              href: portal, target: '_blank', rel: 'noopener noreferrer',
-              title: pageT('openSite'), 'aria-label': pageT('openSite'),
-              style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 17, height: 17, borderRadius: 5, marginLeft: -4, position: 'relative', top: 1, color: 'var(--dsw-alias-label-secondary, #888)', background: 'transparent', border: 'none', outline: 'none', cursor: 'pointer', textDecoration: 'none' },
-            },
-              h('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' },
-                h('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
-                h('polyline', { points: '15 3 21 3 21 9' }),
-                h('line', { x1: 10, y1: 14, x2: 21, y2: 3 }))),
+            // 标题右侧「推广赚$」小标签:打开推广弹窗(替代原外链按钮)
+            h('button', {
+              type: 'button',
+              title: pageT('promoTitle'), 'aria-label': pageT('promoTitle'),
+              style: { display: 'inline-flex', alignItems: 'center', height: 18, padding: '0 5px', marginLeft: 0, position: 'relative', top: 0, borderRadius: 5, border: 'none', cursor: 'pointer', background: 'rgba(255,79,31,0.10)', color: '#ff4f1f', fontSize: 10, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' },
+              onClick: function () { tbStore.set({ authOpen: false, promoOpen: true }) },
+            }, pageT('promoTag')),
             h('span', { style: { flex: 1 } }),
             data && data.loggedIn ? h('button', {
               type: 'button', title: pageT('logout'), 'aria-label': pageT('logout'),
@@ -3087,7 +3213,7 @@ window.__ModuleLoader__.load({
       // Frizon 子集字体(@font-face);颜色用 currentColor,暗色模式自动反白
       if (typeof document !== 'undefined' && document.head) {
         var wmCss = document.createElement('style')
-        wmCss.textContent = "@font-face{font-family:'FrizonLocal';src:url(data:font/woff;base64," + FRIZON_WOFF + ") format('woff')}body[data-ds-dark-theme] .tb-wordmark{color:#ffffff!important}"
+        wmCss.textContent = "@font-face{font-family:'FrizonLocal';src:url(data:font/woff;base64," + FRIZON_WOFF + ") format('woff')}body[data-ds-dark-theme] .tb-wordmark{color:#ffffff!important}.tb-wordmark{transition:color .15s ease}a:hover .tb-wordmark{color:#2f6bff!important}"
         document.head.appendChild(wmCss)
         // 余额 pill 登录闪烁 5s 提示可点击
         var flashCss = document.createElement('style')
@@ -3162,6 +3288,11 @@ window.__ModuleLoader__.load({
             id: 'dsh-tokenbank-trading',
             locale: NS,
           }, TradingOverlay)
+          ctx.slots.register({
+            name: 'shell.overlay',
+            id: 'dsh-tokenbank-promo',
+            locale: NS,
+          }, PromoOverlay)
           return ctx.slots.register({
             name: 'shell.overlay',
             id: 'dsh-tokenbank-deposit',
