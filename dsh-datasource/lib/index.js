@@ -544,8 +544,10 @@ function buildToolDefinitions(dba) {
           return {
             summary: `连接 \`${id}\` 中共有 ${tables.length} 张表/视图${keyword ? `（按关键词 “${args.keyword.trim()}” 过滤）` : ''}：\n${list.join('\n') || '（空）'}${notesBlock}`,
             tables,
-            notes: schema.notes || undefined,
-            keyword: keyword || undefined,
+            // 工具输出必须是 lossless JSON:undefined 字段会让整个快照被拒
+            // ("value is not lossless JSON"),只能按需展开,不能留 undefined。
+            ...(schema.notes ? { notes: schema.notes } : {}),
+            ...(keyword ? { keyword } : {}),
           }
         }
         const lines = schema.columns.map((column) => {
@@ -560,7 +562,7 @@ function buildToolDefinitions(dba) {
           columns: schema.columns,
           primaryKey: schema.primaryKey,
           rowCount: schema.rowCount,
-          notes: schema.notes || undefined,
+          notes: schema.notes || '',
         }
       },
     },
@@ -652,7 +654,9 @@ function buildToolDefinitions(dba) {
           changes: affected,
           lastInsertRowid: result.lastInsertRowid == null ? '' : String(result.lastInsertRowid),
           elapsedMs: result.elapsedMs ?? 0,
-          results: result.results,
+          // 单语句时 service 层返回 results: undefined;undefined 字段会令
+          // 整个工具输出被 lossless JSON 快照拒绝,必须按需展开。
+          ...(Array.isArray(result.results) ? { results: result.results } : {}),
         }
       },
     },

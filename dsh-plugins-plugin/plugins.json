@@ -98,7 +98,7 @@
       "package": "dsh-datasource",
       "title": "数据源",
       "description": "在 DSH 内连接 MySQL/PostgreSQL 等数据库,直接查询与编辑数据。",
-      "version": "1.0.14",
+      "version": "1.0.15",
       "tags": [
         "数据库"
       ],
