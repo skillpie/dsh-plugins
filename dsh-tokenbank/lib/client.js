@@ -73,7 +73,7 @@ window.__ModuleLoader__.load({
       balance: '余额',
       totalEarned: '累计收益',
       totalSpent: '累计消费',
-      pendingUnlock: '注册奖励 {amount} 待解锁：充值任意金额或托管有效 Key 后自动到账',
+      pendingUnlock: '注册奖励 {amount} 待解锁：充值任意金额，或托管的 Key 首次调用成功后自动到账',
       depositCount: '托管密钥',
       loginTab: '登录',
       registerTab: '注册',
@@ -136,6 +136,8 @@ window.__ModuleLoader__.load({
       authOverlayTitle: 'TokenBank 账号',
       lowBalanceTitle: '检测到余额不足，可能影响继续对话',
       lowBalanceRecharge: '去充值',
+      quotaExhaustedTip: '{period}额度已用尽，将于 {time} 自动恢复，任意充值成为会员可享5倍额度上限',
+      quotaAlertLabel: '额度已用尽',
       dismiss: '知道了',
       settingsDeposit: '一键托管',
       depositToTokenbank: '托管到 TokenBank',
@@ -290,7 +292,7 @@ window.__ModuleLoader__.load({
       balance: 'Balance',
       totalEarned: 'Total earned',
       totalSpent: 'Total spent',
-      pendingUnlock: '{amount} signup bonus locked — any recharge or a valid key deposit unlocks it automatically',
+      pendingUnlock: '{amount} signup bonus locked — unlocks after any recharge, or once a deposited key completes its first successful call',
       depositCount: 'Deposited keys',
       loginTab: 'Sign in',
       registerTab: 'Register',
@@ -354,6 +356,8 @@ window.__ModuleLoader__.load({
       authOverlayTitle: 'TokenBank account',
       lowBalanceTitle: 'Low balance detected — chat may stop working',
       lowBalanceRecharge: 'Recharge',
+      quotaExhaustedTip: '{period} quota exhausted, resets at {time}; any recharge upgrades you to a member with 5x quota',
+      quotaAlertLabel: 'Quota exhausted',
       dismiss: 'Got it',
       settingsDeposit: 'One-click deposit',
       depositToTokenbank: 'Deposit to TokenBank',
@@ -554,7 +558,7 @@ window.__ModuleLoader__.load({
 
     var runtimeCtx = null // apply() 注入,overlay 里 addProviderToModels 用
     var tbStore = {
-      state: { authOpen: false, authMode: 'register', lowBalanceSeq: 0 , notify: null, loggedIn: null, tradingOpen: false, tradeView: null, promoOpen: false},
+      state: { authOpen: false, authMode: 'register', lowBalanceSeq: 0 , notify: null, loggedIn: null, tradingOpen: false, tradeView: null, promoOpen: false, quotaAlert: null, portalNotif: null},
       listeners: [],
       get: function () { return tbStore.state },
       subscribe: function (fn) {
@@ -579,6 +583,26 @@ window.__ModuleLoader__.load({
     function ComposerEntry() {
       var snap = useTbStore()
       var st = React.useState(null)
+      // 拉取配额状态写进全局 store(常驻挂载点;SidebarCard 未挂载不能放那边)
+      var refreshQuotaAlert = React.useCallback(function () {
+        api('key-quotas').then(function (res) {
+          var quotas = (res && res.quotas) || []
+          var hit = null
+          for (var i = 0; i < quotas.length; i++) {
+            if (quotas[i] && quotas[i].status === 'exhausted') { hit = quotas[i]; break }
+          }
+          tbStore.set({ quotaAlert: hit })
+        }).catch(function () {})
+        api('notifications').then(function (res) {
+          tbStore.set({ portalNotif: (res && res.notification) || null })
+        }).catch(function () {})
+      }, [])
+      React.useEffect(function () {
+        if (snap.loggedIn === false) return
+        refreshQuotaAlert()
+        var timer = window.setInterval(refreshQuotaAlert, 60000)
+        return function () { window.clearInterval(timer) }
+      }, [snap.loggedIn, refreshQuotaAlert])
       React.useEffect(function () {
         var stopped = false
         api('status').then(function (data) {
@@ -623,12 +647,41 @@ window.__ModuleLoader__.load({
       var loggedIn = snap.loggedIn
       var bal = data && data.account && typeof data.account.balance_nano_usd === 'number'
         ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : null
+      // 限流告警:hover 区域为整个入口按钮(图标+余额);hover 过即「已读」,
+      // 本次告警窗口内不再呼吸(sessionStorage 按 window_ends_at_ms 记忆)
+      var qSeen = React.useState(function () {
+        try { return window.sessionStorage.getItem('tb-quota-alert-seen') || '' } catch (e) { return '' }
+      })
+      var notif = snap.portalNotif || null
+      var alertKey = notif
+        ? String(notif.id)
+        : (snap.quotaAlert ? String(snap.quotaAlert.window_ends_at_ms || '') : '')
+      // 站内信改为点击交互:有未读站内信时点击弹气泡(再点关闭并置已读),
+      // 没有站内信时点击打开原账户弹窗;不再使用 hover 展示
+      var nOpen = React.useState(false)
+      var handleClick = function (e) {
+        if (!notif) {
+          // 透传事件:账户弹窗定位依赖 e.currentTarget 的按钮矩形(右对齐锚点)
+          onClick(e)
+          return
+        }
+        if (!nOpen[0]) {
+          nOpen[1](true)
+          return
+        }
+        var nid = notif.id
+        try { window.sessionStorage.setItem('tb-quota-alert-seen', alertKey) } catch (e) {}
+        qSeen[1](alertKey)
+        tbStore.set({ portalNotif: null })
+        nOpen[1](false)
+        api('notification-read', { id: nid }).catch(function () {})
+      }
       return h('button', {
         type: 'button',
         id: 'tb-entry-btn',
         className: (flash[0] ? 'tb-balance-flash ' : '') + (snap.authOpen ? 'tb-entry-open' : ''),
         title: pageT('composerEntry'), 'aria-label': pageT('composerEntry'),
-        onClick: onClick,
+        onClick: handleClick,
         style: {
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
           height: 29, padding: '0 8px', borderRadius: 7, boxSizing: 'border-box',
@@ -641,7 +694,9 @@ window.__ModuleLoader__.load({
       },
         loggedIn
           ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } },
-              h(TokenBankLogo, { size: 16, round: true }),
+              (snap.quotaAlert || notif)
+                ? h(QuotaAlertBadge, { notif: notif, size: 16, open: nOpen[0], breathe: alertKey && qSeen[0] !== alertKey })
+                : h(TokenBankLogo, { size: 16, round: true }),
               bal ? h('span', { className: 'tb-entry-bal' }, bal) : null)
           : h('span', { className: 'tb-free-tag', style: { fontSize: 11, lineHeight: '20px', padding: '0 8px', borderRadius: 999, color: '#fff', background: '#ff4f1f', fontWeight: 600, letterSpacing: 0.3 } }, pageT('freeToken')),
       )
@@ -1080,6 +1135,100 @@ window.__ModuleLoader__.load({
     }
 
     /** 侧栏底部长驻块:完整展示 logo/账号/余额/托管充值/获取免费模型,无卡片框。 */
+    /** 周期秒数 → 展示标签:1800→30分钟/30-minute,18000→5小时/5-hour。语言随 ctx.locale(pageT)。 */
+    function quotaPeriodLabel(seconds) {
+      var s = Number(seconds) || 0
+      var isEn = pageT('quotaAlertLabel') === 'Quota exhausted'
+      if (s > 0 && s % 3600 === 0) {
+        var hrs = s / 3600
+        return isEn ? hrs + '-hour' : hrs + '小时'
+      }
+      var mins = Math.max(1, Math.round(s / 60))
+      return isEn ? mins + '-minute' : mins + '分钟'
+    }
+
+    /** 站内信正文渲染:只放行 <a href="...">文本</a> 一种标签为可点击链接,
+     * 其余内容全部按纯文本转义(React 默认转义),不拆行、保持一段文本。 */
+    function renderNotificationBody(body) {
+      var text = String(body || '')
+      var pattern = /<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g
+      var children = []
+      var last = 0
+      var m
+      var key = 0
+      while ((m = pattern.exec(text)) !== null) {
+        if (m.index > last) children.push(text.slice(last, m.index))
+        children.push(h('a', {
+          href: m[1],
+          target: '_blank', rel: 'noreferrer noopener',
+          style: { color: '#ff4f1f', textDecoration: 'none', fontWeight: 600 },
+          onClick: function (event) { event.stopPropagation() },
+        }, m[2]))
+        last = m.index + m[0].length
+        key++
+      }
+      if (last < text.length) children.push(text.slice(last))
+      return children.length ? children : text
+    }
+
+    /** 余额旁配额告警:红色感叹号 + hover 气泡(周期额度用尽与恢复时间)。 */
+    function QuotaAlertBadge(props) {
+      var snap = useTbStore()
+      var hover = React.useState(false)
+      var alert = snap.quotaAlert
+      var notif = props && props.notif
+      if (!alert && !notif) return null
+      // quotaAlert 与 portalNotif 互相独立:只有配额告警在场才组装兜底文案,
+      // 防止 alert 为 null 时抛错把整个入口按钮炸掉
+      var endsText = ''
+      var tip = ''
+      if (alert) {
+        if (alert.window_ends_at_ms) {
+          var d = new Date(Number(alert.window_ends_at_ms))
+          endsText = ('0' + (d.getMonth() + 1)).slice(-2) + '/' + ('0' + d.getDate()).slice(-2) + ' ' +
+            ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2)
+        }
+        tip = pageT('quotaExhaustedTip')
+          .replace('{period}', quotaPeriodLabel(alert.period_seconds))
+          .replace('{time}', endsText)
+      }
+      // 站内信正文:仅放行 <a href="...">文本</a> 渲染成可点击链接,其余原样转义
+      var bubbleChildren = tip
+      if (notif) {
+        bubbleChildren = renderNotificationBody(notif.body)
+      }
+      var size = Number(props && props.size) || 14
+      // 气泡显隐由外层点击状态(props.open)控制,不再跟随 hover
+      var open = Boolean(props && props.open)
+      return h('span', {
+        style: {
+          // 挂到整个入口按钮(button 已 position:relative),气泡 right:0 与按钮右缘对齐
+          position: 'static',
+          display: 'inline-flex', alignItems: 'center',
+        },
+      },
+        // 复用品牌 Logo:限流时呼吸动画,hover 过(已读)或 hover 中归位,不再用感叹号圆点
+        h(TokenBankLogo, {
+          size: size,
+          round: true,
+          'aria-label': pageT('quotaAlertLabel'),
+          style: (props && props.breathe) ? { animation: 'tb-logo-breathe 1.6s ease-in-out infinite' } : null,
+        }),
+        open ? h('div', {
+          style: {
+            position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, zIndex: 2300,
+            width: 235, padding: '8px 10px', borderRadius: 8, fontSize: 12, lineHeight: 1.6,
+            background: 'var(--dsw-menu-surface-fill, #fff)', color: 'var(--dsw-alias-label-primary, #111)',
+            border: '1px solid var(--dsw-alias-border-l1, #ddd)',
+            boxShadow: 'var(--dsw-elevation-prominent, 0 8px 30px rgba(0,0,0,0.18))',
+            whiteSpace: 'pre-line', textAlign: 'center',
+            // 站内信正文含可点击 <a>,气泡必须可交互;纯提示文案无链接也不受影响
+            pointerEvents: 'auto',
+          },
+        }, bubbleChildren) : null,
+      )
+    }
+
     function SidebarCard() {
       var snap = useTbStore()
       var st = React.useState(null)
@@ -1095,13 +1244,23 @@ window.__ModuleLoader__.load({
         } catch (e) {}
       }, [snap.loggedIn])
       var boxRef = React.useRef(null)
+      // 拉一次配额状态,写进全局 store 供余额旁告警图标使用
+      var refreshQuotaAlert = function () {
+        api('key-quotas').then(function (res) {
+          var quotas = (res && res.quotas) || []
+          var hit = quotas.find(function (q) { return q && q.status === 'exhausted' }) || null
+          tbStore.set({ quotaAlert: hit })
+        }).catch(function () {})
+      }
       React.useEffect(function () {
         var stopped = false
         api('status').then(function (data) {
           if (!stopped) { st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl }) }
         }).catch(function () {})
+        if (snap.loggedIn !== false) refreshQuotaAlert()
         var timer = setInterval(function () {
           api('status').then(function (data) { if (!stopped) st[1](data) }).catch(function () {})
+          if (!stopped && tbStore.get().loggedIn !== false) refreshQuotaAlert()
         }, 60000)
         return function () { stopped = true; clearInterval(timer) }
       }, [])
@@ -1111,6 +1270,7 @@ window.__ModuleLoader__.load({
         api('status').then(function (data) {
           if (!stopped) { st[1](data); tbStore.set({ loggedIn: Boolean(data.loggedIn), portalUrl: data.portalUrl }) }
         }).catch(function () {})
+        if (snap.loggedIn) refreshQuotaAlert()
         return function () { stopped = true }
       }, [snap.loggedIn, snap.authOpen])
       var openPanel = function (mode, extra) {
@@ -1172,7 +1332,8 @@ window.__ModuleLoader__.load({
             }, pageT('freeToken')),
           loggedIn ? h('span', { style: { fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } },
             data && data.account && typeof data.account.balance_nano_usd === 'number'
-              ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—') : null),
+              ? '$' + (data.account.balance_nano_usd / 1e9).toFixed(2) : '—') : null,
+          loggedIn ? h(QuotaAlertBadge) : null),
         loggedIn && flash[0]
           ? h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', textAlign: 'center' } }, flash[0].text)
           : null,
@@ -2342,7 +2503,7 @@ window.__ModuleLoader__.load({
 
                   ),
                 ),
-                // 注册解锁奖励提示：$2 待解锁，点击打开托管面板（充值/托管均可解锁）
+                // 注册解锁奖励提示：$2 待解锁，点击打开托管面板（充值，或托管 Key 首次调用成功即可解锁）
                 data.account && Number(data.account.pending_unlock_nano_usd) > 0
                   ? h('button', {
                       type: 'button',
@@ -3217,7 +3378,7 @@ window.__ModuleLoader__.load({
         document.head.appendChild(wmCss)
         // 余额 pill 登录闪烁 5s 提示可点击
         var flashCss = document.createElement('style')
-        flashCss.textContent = '.tb-balance-flash{color:#ff7a3d!important;box-shadow:inset 0 0 0 1px #ff7a3d}#tb-entry-btn{border-radius:var(--dsw-radius-sm, 8px)}#tb-entry-btn:hover,#tb-entry-btn.tb-balance-open{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.08))!important;color:var(--dsw-alias-label-secondary, #888)!important}'
+        flashCss.textContent = '.tb-balance-flash{color:#ff7a3d!important;box-shadow:inset 0 0 0 1px #ff7a3d}#tb-entry-btn{border-radius:var(--dsw-radius-sm, 8px)}#tb-entry-btn:hover,#tb-entry-btn.tb-balance-open{background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.08))!important;color:var(--dsw-alias-label-secondary, #888)!important}@keyframes tb-logo-breathe{0%,100%{opacity:1}50%{opacity:.55}}'
         document.head.appendChild(flashCss)
         ctx.effect(function () {
           return function () { if (flashCss.parentNode) flashCss.parentNode.removeChild(flashCss) }

@@ -148,6 +148,17 @@ export const updateProfile = (baseUrl, sessionToken, displayName) =>
 export const listAccessKeys = (baseUrl, sessionToken) =>
   call(baseUrl, '/access-keys', { sessionToken })
 
+// 站内信:最新一封未读 + 置已读(服务端 notification.go)
+export const listNotifications = (baseUrl, sessionToken) =>
+  call(baseUrl, '/notifications/latest', { sessionToken })
+
+export const markNotificationRead = (baseUrl, sessionToken, id) =>
+  call(baseUrl, `/notifications/${id}/read`, { sessionToken, method: 'POST' })
+
+// 取回当前用户全部 key 的周期配额消费状态(服务端 access_key_quota.go 门户视图)
+export const listKeyQuotas = (baseUrl, sessionToken) =>
+  call(baseUrl, '/access-keys/quotas', { sessionToken })
+
 // 取回某把访问密钥的明文(仅限本人)
 export const revealAccessKey = (baseUrl, sessionToken, id) =>
   call(baseUrl, `/access-keys/${encodeURIComponent(id)}/key`, { sessionToken })

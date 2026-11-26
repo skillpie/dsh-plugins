@@ -487,6 +487,46 @@ async function dispatch(ctx, state, cfg, body) {
       const identity = await requireLive()
       return { ok: true, data: await tb.me(baseUrl, identity.sessionToken) }
     }
+    case 'key-quotas': {
+      const identity = await requireLive()
+      try {
+        const data = await tb.listKeyQuotas(baseUrl, identity.sessionToken)
+        return { ok: true, quotas: data?.quotas ?? [] }
+      } catch (error) {
+        if (error instanceof PortalError && (error.status === 401 || error.status === 403)) {
+          return { ok: true, loggedIn: false, expired: true, quotas: [] }
+        }
+        throw error
+      }
+    }
+    case 'notifications': {
+      const identity = await requireLive()
+      try {
+        const data = await tb.listNotifications(baseUrl, identity.sessionToken)
+        return { ok: true, notification: data?.notification ?? null }
+      } catch (error) {
+        if (error instanceof PortalError && (error.status === 401 || error.status === 403)) {
+          return { ok: true, loggedIn: false, expired: true, notification: null }
+        }
+        throw error
+      }
+    }
+    case 'notification-read': {
+      const identity = await requireLive()
+      const id = Number(body?.id)
+      if (!Number.isFinite(id) || id <= 0) {
+        return { ok: false, error: 'invalid id' }
+      }
+      try {
+        await tb.markNotificationRead(baseUrl, identity.sessionToken, id)
+        return { ok: true, read: true }
+      } catch (error) {
+        if (error instanceof PortalError && (error.status === 401 || error.status === 403)) {
+          return { ok: true, loggedIn: false, expired: true, read: false }
+        }
+        throw error
+      }
+    }
     case 'profile-update': {
       const identity = await requireLive()
       const data = await tb.updateProfile(baseUrl, identity.sessionToken, String(body.displayName ?? '').trim())
