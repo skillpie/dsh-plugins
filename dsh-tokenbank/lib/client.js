@@ -169,7 +169,7 @@ window.__ModuleLoader__.load({
       trade: '交易',
       buy: '买入',
       tradingTitle: '交易 · 百万词元（MT）',
-      tradingIntro: '1 手 = $1 面值，按当前价折算获得词元（MT）；卖出按 MT 数量、以最新快照市价折回美元。',
+      tradingIntro: '按美元金额买入、按当前价折算获得词元（MT）；卖出按 MT 数量、以最新快照市价折回美元。',
       priceNow: '当前价格',
       perMillion: 'MT/$',
       nowPrice: '当前价',
@@ -196,20 +196,20 @@ window.__ModuleLoader__.load({
       ma30m: '30 分钟线',
       ma1h: '小时线',
       ma4h: '4小时线',
-      buyLots: '买入手数（1 手 = $1 面值，按当前价折算词元）',
-      sellLots: '卖出手数（1 手 = 1000 词元）',
+      buyAmount: '买入金额（$，按当前价折算词元）',
+      sellAmount: '卖出数量（MT）',
       quickMax: '最大',
-      maxBuyLots: '每手 $1 面值，本次最多可买 {n} 手',
-      maxSellLots: '最多可卖 {n} 手',
+      maxBuyLots: '本次最多可买入 {n}（余额与单笔上限取小）',
+      maxSellLots: '最多可卖 {n} MT',
       sellEstimate: '毛额 {g} · 手续费 {f} · 预计到账 {n}',
-      lotLabel: '买入手数（1 手 = $1 面值）',
-      lots: '手',
+      lotLabel: '买入金额（$）',
       avgLine: '均价',
       buyPriceLine: '买入',
-      perLotPrice: '每手获得',
-      totalAmount: '总金额（手数 × $1）',
+      totalAmount: '支付金额',
       gainTokens: '获得词元',
-      lotInvalid: '请输入 1 以上的整数手数。',
+      lotInvalid: '请输入有效的买入金额。',
+      buyCap: '超过可买上限 {max}。',
+      buyMin: '单笔买入不低于 {min}。',
       quickAll: '全部',
       sellMin: '单笔卖出不低于 0.001 MT。',
       sellMax: '当前最多可卖 {max} MT。',
@@ -239,7 +239,7 @@ window.__ModuleLoader__.load({
       tradingClosed: '交易未开放',
       tradingCalibrating: '行情校准中，暂不可交易',
       loadFail: '行情加载失败，点此重试',
-      balanceRemainder: '持仓存在不足 1 手的零头，无法整手卖出',
+      balanceRemainder: '持仓不足最低卖出数量，无法卖出',
       editNicknameTitle: '点击修改昵称，回车保存',
       nicknameSaved: '昵称已更新',
     }
@@ -384,7 +384,7 @@ window.__ModuleLoader__.load({
       trade: 'Trade',
       buy: 'Buy',
       tradingTitle: 'Trade · Million-token (MT)',
-      tradingIntro: '1 lot = $1 face, credited as tokens (MT) at the current price; sell any MT amount back to USD at the latest snapshot price.',
+      tradingIntro: 'Buy with a USD amount credited as tokens (MT) at the current price; sell any MT amount back to USD at the latest snapshot price.',
       priceNow: 'Current price',
       perMillion: 'MT / $',
       nowPrice: 'Current price',
@@ -411,20 +411,20 @@ window.__ModuleLoader__.load({
       ma30m: '30-min MA',
       ma1h: '1-h MA',
       ma4h: '4-h MA',
-      buyLots: 'Buy lots (1 lot = $1 face value)',
+      buyAmount: 'Amount to buy ($, converted at the current price)',
       sellLots: 'Sell MT amount',
       quickMax: 'Max',
-      maxBuyLots: '$1 face per lot; up to {n} lots per order',
-      maxSellLots: 'Up to {n} lots',
+      maxBuyLots: 'Up to {n} per order (balance and per-order cap, whichever is lower)',
+      maxSellLots: 'Up to {n} MT',
       sellEstimate: 'Gross {g} · fee {f} · net ≈ {n}',
-      lotLabel: 'Lots to buy (1 lot = $1 face)',
-      lots: 'lots',
+      lotLabel: 'Amount to buy ($)',
       avgLine: 'Avg',
       buyPriceLine: 'Avg buy',
-      perLotPrice: 'Per-lot tokens',
-      totalAmount: 'Total (lots × $1)',
+      totalAmount: 'Amount to pay',
       gainTokens: 'You get',
-      lotInvalid: 'Enter a whole number of lots ≥ 1.',
+      lotInvalid: 'Enter a valid buy amount.',
+      buyCap: 'Exceeds the {max} buy limit.',
+      buyMin: 'Each buy must be at least {min}.',
       quickAll: 'All',
       sellMin: 'Each sell must be at least 0.001 MT.',
       sellMax: 'You can sell up to {max} MT.',
@@ -454,7 +454,7 @@ window.__ModuleLoader__.load({
       tradingClosed: 'Trading unavailable',
       tradingCalibrating: 'Calibrating — trading paused',
       loadFail: 'Failed to load market data — click to retry',
-      balanceRemainder: 'Position has a remainder under 1 lot that cannot be sold in whole lots',
+      balanceRemainder: 'Position is below the minimum sellable amount',
       editNicknameTitle: 'Click to edit nickname, Enter to save',
       nicknameSaved: 'Nickname updated',
     }
@@ -1656,9 +1656,8 @@ window.__ModuleLoader__.load({
 
     /* ── 百万词元(TM)交易弹窗(参考 token-bank PortalWordCoinView) ────────── */
 
-    // $1 面值体系（与官网 PortalWordCoinView 同口径）：1 手 = $1，
-    // 买入手数 × 当前价 = 获得 MT；卖出按 MT 数量、扣后端实收费率。
-    var TRADE_NANO_USD_PER_LOT = 1e9   // 1 手 = $1 面值
+    // 美元金额体系（与官网 PortalWordCoinView 同口径）：买入按 $ 金额，
+    // 金额 × 当前价 = 获得 MT；卖出按 MT 数量、扣后端实收费率。
     var TRADE_SELL_FEE_MICROS = 20000  // 卖出手续费兜底估算（2%），实际以后端 fee_micros 为准
     var TRADE_UNIT = 'MT'              // 展示单位（百万词元）
     var MIN_SELL_NANO_WC = 1e6         // 后端 MinSellNanoWC
@@ -1905,27 +1904,38 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 买入:$1 面值手数市价买入,金额 = 手数 × $1,获得词元 = 手数 × 当前价(MT)。 */
+    /** 买入:按美元金额市价买入,获得词元 = 金额 × 当前价(MT)。支持 25%/50%/75%/最大 快捷。 */
     function TradeBuyPanel(props) {
       var market = props.market, account = props.account
-      var lots = React.useState('1')
+      var amountText = React.useState('')
       var busy = React.useState(false)
       var err = React.useState('')
       var quote = market ? Number(market.quote_micros) || 0 : 0
       var price = tradePx(quote) // 内部词元价值空间
-      var perLotMt = quote > 0 ? quote * 1000 : 0 // 每手获得 nanoWC = quote×1000
       var usdBalance = Number(props.usdBalance) || 0
       var maxBuy = account && account.limits && Number(account.limits.max_buy_nano_usd) || Infinity
-      var capUsd = Math.min(isFinite(maxBuy) ? maxBuy : Infinity, usdBalance > 0 ? usdBalance : Infinity)
-      var maxLots = isFinite(capUsd) ? Math.floor(capUsd / TRADE_NANO_USD_PER_LOT) : 0
-      var lotsInt = Math.floor(Number(lots[0]) || 0)
-      var costUsd = lotsInt > 0 ? lotsInt * TRADE_NANO_USD_PER_LOT : null
-      var gainMt = lotsInt > 0 && perLotMt > 0 ? lotsInt * perLotMt : null
+      var MIN_BUY = 1e7 // $0.01，与后端 MinBuyNanoUSD 一致
+      var budget = Math.min(isFinite(maxBuy) ? maxBuy : Infinity, usdBalance > 0 ? usdBalance : Infinity)
+      if (!isFinite(budget)) budget = 0
+      var amountNano = Math.round((Number(amountText[0]) || 0) * 1e9)
+      var gainMt = amountNano > 0 && quote > 0 ? Math.floor((amountNano * quote * 1000) / 1e9) : null
+      var buyErr = ''
+      if (amountText[0].trim() !== '') {
+        if (!(amountNano > 0)) buyErr = pageT('lotInvalid')
+        else if (amountNano > budget) buyErr = pageT('buyCap').replace('{max}', tradeUsd(budget))
+        else if (amountNano < MIN_BUY) buyErr = pageT('buyMin').replace('{min}', tradeUsd(MIN_BUY))
+      }
+      var setPct = function (pct) {
+        var step = 1e7 // 取整到分
+        var b = Math.floor(budget / step) * step
+        var v = Math.floor((b * pct) / 100 / step) * step
+        if (v >= MIN_BUY) amountText[1]((v / 1e9).toFixed(2))
+      }
       var submit = async function () {
-        if (!(lotsInt >= 1)) { err[1](pageT('lotInvalid')); return }
+        if (!(amountNano >= MIN_BUY) || buyErr !== '') { err[1](buyErr || pageT('lotInvalid')); return }
         busy[1](true); err[1]('')
         try {
-          await api('wordcoin-buy', { lots: lotsInt })
+          await api('wordcoin-buy', { amount_nano_usd: amountNano })
           busy[1](false)
           tbStore.set({ notify: { kind: 'success', title: pageT('buyDone'), detail: '' } })
           props.onDone()
@@ -1937,36 +1947,34 @@ window.__ModuleLoader__.load({
       return h(TradeSubModal, { title: pageT('trade') + ' · ' + pageT('buySubmit'), onClose: props.onClose },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
           h('div', { style: { fontSize: 13 } }, price != null ? pageT('nowPrice') + ' ' + fmtMtPerUsd(price) + ' ' + TRADE_PRICE_UNIT : '—'),
-          maxLots > 0 ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('maxBuyLots').replace('{n}', tradeFmt(maxLots))) : null,
+          budget >= MIN_BUY ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('maxBuyLots').replace('{n}', tradeUsd(budget))) : null,
           h('div', { style: { fontSize: 13, fontWeight: 600 } }, pageT('lotLabel')),
           h('input', {
-            type: 'number', min: 1, step: 1, value: lots[0],
-            onChange: function (e) { lots[1](e.target.value) },
+            type: 'number', min: 0.01, step: 0.01, value: amountText[0],
+            onChange: function (e) { amountText[1](e.target.value) },
             style: inputStyle,
           }),
           h('div', { style: { display: 'flex', gap: 6 } },
-            [1, 5, 10].map(function (n) {
+            [25, 50, 75].map(function (n) {
               return h('button', {
                 key: n, type: 'button', style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26 }),
-                onClick: function () { lots[1](String(n)) },
-              }, String(n))
+                onClick: function () { setPct(n) },
+              }, n + '%')
             }),
             h('button', {
-              type: 'button', disabled: !(maxLots >= 1),
-              style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26, opacity: maxLots >= 1 ? 1 : 0.5 }),
-              onClick: function () { lots[1](String(Math.max(1, maxLots))) },
+              type: 'button', disabled: !(budget >= MIN_BUY),
+              style: Object.assign({}, buttonStyle, { flex: 1, justifyContent: 'center', fontSize: 12, height: 26, opacity: budget >= MIN_BUY ? 1 : 0.5 }),
+              onClick: function () { setPct(100) },
             }, pageT('quickMax')),
           ),
-          costUsd != null ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
+          amountNano > 0 ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
             h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-              h('span', null, pageT('perLotPrice')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, perLotMt > 0 ? tradeFmt(perLotMt / (tradeWcPerMt * 1e9), 2) + ' ' + TRADE_UNIT : '—')),
-            h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-              h('span', null, pageT('totalAmount')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeUsd(costUsd))),
+              h('span', null, pageT('totalAmount')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeUsd(amountNano))),
             h('div', { style: { display: 'flex', justifyContent: 'space-between', color: 'var(--dsw-alias-label-primary, #333)', fontWeight: 700 } },
-              h('span', null, pageT('gainTokens')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, gainMt != null ? tradeMt(gainMt) + ' ' + TRADE_UNIT + ' (' + tradeFmt(lotsInt) + ' ' + pageT('lots') + ')' : '—'))) : null,
-          err[0] ? h('div', { style: errorStyle }, err[0]) : null,
+              h('span', null, pageT('gainTokens')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, gainMt != null ? tradeMt(gainMt) + ' ' + TRADE_UNIT : '—'))) : null,
+          (buyErr !== '' || err[0]) ? h('div', { style: errorStyle }, buyErr !== '' ? buyErr : err[0]) : null,
           h('button', {
-            type: 'button', disabled: busy[0] || !(lotsInt >= 1),
+            type: 'button', disabled: busy[0] || !(amountNano >= MIN_BUY) || buyErr !== '',
             style: Object.assign({}, primaryButtonStyle, { justifyContent: 'center', width: '100%' }),
             onClick: submit,
           }, busy[0] ? '…' : pageT('buySubmit')),
