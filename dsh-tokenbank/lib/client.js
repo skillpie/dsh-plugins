@@ -1989,10 +1989,11 @@ window.__ModuleLoader__.load({
         ? Number(account.limits.sell_fee_micros) : TRADE_SELL_FEE_MICROS
       var balanceWc = account ? Number(account.balance_nano_wc) || 0 : 0
       var amount = Math.round((Number(String(amountText[0]).trim()) || 0) * tradeWcPerMt * 1e9)
-      // 提示按 2 位小数展示，容差 0.01 MT；成交时钳到真实余额。
+      // 提示按 2 位小数展示，容差 0.01 MT(= 0.01 × wcPerMt × 1e9 nanoWC)；成交时钳到真实余额。
+      // 余额 17.3755 MT 展示为 17.38，用户照着输入不能被判超卖。
       var over = amount - balanceWc
       var sellError = amount > 0 && amount < MIN_SELL_NANO_WC ? pageT('sellMin')
-        : over > 1e7 ? pageT('sellMax').replace('{max}', tradeMt(balanceWc))
+        : over > 0.01 * tradeWcPerMt * 1e9 ? pageT('sellMax').replace('{max}', tradeMt(balanceWc))
         : ''
       var sellAmount = Math.min(amount, balanceWc)
       var gross = sellAmount > 0 && price > 0 ? Math.floor(sellAmount * price / 1e9) : 0
