@@ -1,6 +1,6 @@
 {
   "name": "dsh-webkit",
-  "version": "1.6.4",
+  "version": "1.6.6",
   "type": "module",
   "description": "Web toolbox for the right-Sidebar browser: element picker + free-size viewport.",
   "license": "MIT",
@@ -33,6 +33,7 @@
   },
   "files": [
     "index.js",
+    "integrate-market.js",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",

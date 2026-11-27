@@ -1,6 +1,6 @@
 {
   "name": "dsh-datasource",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Connect to databases in DeepSeek Harness (DSH), then query and edit data right in the conversation.",
   "type": "module",
   "license": "MIT",
