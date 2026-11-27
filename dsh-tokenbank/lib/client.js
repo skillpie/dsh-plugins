@@ -191,7 +191,7 @@ window.__ModuleLoader__.load({
       sell: '卖出',
       tradeRecords: '交易记录',
       marketTitle: '实时行情',
-      priceFormula: '价格公示：当前价 ≈ MT/$（1 美元能换到的百万词元数），数值越大 = 词元越便宜；走势图纵轴上小下大，红涨绿跌按词元价值方向。当前价按近一天全部计价请求的加权均价计算（半衰期 24 小时，越近的用量权重越高，单账户样本占比不超过 5%）；Token成本 = 计价请求费用 ÷ Token 总量，每分钟刷新行情，只随新用量变化。',
+      priceFormula: '价格公示：当前价 ≈ MT/$（1 美元能换到的百万词元数，数值越大 = 词元越便宜）。价格随平台近期用量每分钟更新；买入按当前价获得词元，卖出按最新价折回美元。',
       k5min: '5 分钟蜡烛',
       ma30m: '30 分钟线',
       ma1h: '小时线',
@@ -406,7 +406,7 @@ window.__ModuleLoader__.load({
       sell: 'Sell',
       tradeRecords: 'Records',
       marketTitle: 'Live market',
-      priceFormula: 'Price board: current ≈ MT / $ (million tokens per US dollar); higher = tokens cheaper; the chart y-axis runs small-on-top so red still means tokens gaining value. Current derives from the exponentially weighted average token cost of the last day (24-hour half-life, newer usage weighs more, any single account capped at 5% of the sample); token cost = priced request fees ÷ total tokens. Refreshes every minute, moves only with new usage.',
+      priceFormula: 'Price board: current ≈ MT / $ (million tokens per US dollar); higher = tokens cheaper. Price updates every minute with recent platform usage; buys fill at the current price, sells convert back at the latest price.',
       k5min: '5-min candles',
       ma30m: '30-min MA',
       ma1h: '1-h MA',
@@ -1820,7 +1820,7 @@ window.__ModuleLoader__.load({
       if (cur != null && cur > 0) {
         var cy = y(cur)
         parts.push(h('line', { key: 'curl', x1: padL, x2: W - padR + 4, y1: cy, y2: cy, stroke: '#ff4f1f', 'stroke-width': 1.2, 'stroke-dasharray': '5 4' }))
-        parts.push(h('text', { key: 'curt', x: W - padR + 8, y: cy + 4, 'font-size': 12, fill: '#ff4f1f' }, tradeFmt(cur, 2)))
+        parts.push(h('text', { key: 'curt', x: W - padR + 8, y: cy + 4, 'font-size': 12, fill: '#ff4f1f' }, fmtMtPerUsd(cur)))
       }
       // 买入价线(蓝)
       if (avgBuy != null && avgBuy > 0) {
