@@ -171,7 +171,7 @@ window.__ModuleLoader__.load({
       tradingTitle: '交易 · 百万词元（MT）',
       tradingIntro: '1 手 = $1 面值，按当前价折算获得词元（MT）；卖出按 MT 数量、以最新快照市价折回美元。',
       priceNow: '当前价格',
-      perMillion: 'MT/千美元',
+      perMillion: 'MT/$',
       nowPrice: '当前价',
       sellLabel: '卖出数量（MT）',
       sellAmountHint: '当前持仓 {max} MT；按卖出时市价折回美元',
@@ -191,7 +191,7 @@ window.__ModuleLoader__.load({
       sell: '卖出',
       tradeRecords: '交易记录',
       marketTitle: '实时行情',
-      priceFormula: '价格公示：当前价 ≈ 美元/百万词元（MT/千美元 = 1,000 美元能换到的百万词元数），数值越大 = 词元越值钱。当前价按近一天全部计价请求的加权均价计算（半衰期 24 小时，越近的用量权重越高，单账户样本占比不超过 5%）；Token成本 = 计价请求费用 ÷ Token 总量，每分钟刷新行情，只随新用量变化。',
+      priceFormula: '价格公示：当前价 ≈ MT/$（1 美元能换到的百万词元数），数值越大 = 词元越便宜；走势图纵轴上小下大，红涨绿跌按词元价值方向。当前价按近一天全部计价请求的加权均价计算（半衰期 24 小时，越近的用量权重越高，单账户样本占比不超过 5%）；Token成本 = 计价请求费用 ÷ Token 总量，每分钟刷新行情，只随新用量变化。',
       k5min: '5 分钟蜡烛',
       ma30m: '30 分钟线',
       ma1h: '小时线',
@@ -220,8 +220,8 @@ window.__ModuleLoader__.load({
       buyFail: '买入失败',
       sellFail: '卖出失败',
       sellNoSnapshot: '暂无价格快照，暂不能卖出。',
-      sellBandBelow: '当前市价 {quote} MT/千美元 已低于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
-      sellBandAbove: '当前市价 {quote} MT/千美元 已高于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
+      sellBandBelow: '当前市价 {quote} MT/$ 已低于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
+      sellBandAbove: '当前市价 {quote} MT/$ 已高于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
       platformPremiumBreaker: '平台当日卖出溢价额度已达上限，卖出已暂停，请稍后再试。',
       proceedsTooSmall: '卖出金额过小，折算后净额为零。',
       insufficientUsd: '账户余额不足。',
@@ -230,7 +230,7 @@ window.__ModuleLoader__.load({
       colType: '类型',
       colAmount: '交易词元',
       colUsd: '交易金额',
-      colPrice: '单价（MT/千美元）',
+      colPrice: '单价（MT/$）',
       colPnl: '盈亏',
       typeBuy: '买入',
       typeSell: '卖出',
@@ -386,7 +386,7 @@ window.__ModuleLoader__.load({
       tradingTitle: 'Trade · Million-token (MT)',
       tradingIntro: '1 lot = $1 face, credited as tokens (MT) at the current price; sell any MT amount back to USD at the latest snapshot price.',
       priceNow: 'Current price',
-      perMillion: 'MT / $1K',
+      perMillion: 'MT / $',
       nowPrice: 'Current price',
       sellLabel: 'Amount to sell (MT)',
       sellAmountHint: 'Holdings {max} MT; converts to USD at the sell-time price',
@@ -406,7 +406,7 @@ window.__ModuleLoader__.load({
       sell: 'Sell',
       tradeRecords: 'Records',
       marketTitle: 'Live market',
-      priceFormula: 'Price board: current ≈ USD per million tokens (MT / $1K); higher = tokens worth more. Current derives from the exponentially weighted average token cost of the last day (24-hour half-life, newer usage weighs more, any single account capped at 5% of the sample); token cost = priced request fees ÷ total tokens. Refreshes every minute, moves only with new usage.',
+      priceFormula: 'Price board: current ≈ MT / $ (million tokens per US dollar); higher = tokens cheaper; the chart y-axis runs small-on-top so red still means tokens gaining value. Current derives from the exponentially weighted average token cost of the last day (24-hour half-life, newer usage weighs more, any single account capped at 5% of the sample); token cost = priced request fees ÷ total tokens. Refreshes every minute, moves only with new usage.',
       k5min: '5-min candles',
       ma30m: '30-min MA',
       ma1h: '1-h MA',
@@ -435,8 +435,8 @@ window.__ModuleLoader__.load({
       buyFail: 'Buy failed',
       sellFail: 'Sell failed',
       sellNoSnapshot: 'No price snapshot yet; selling is unavailable.',
-      sellBandBelow: 'The market price ({quote} MT / $1K) is below the sell price band ({band}); selling is paused until the band is adjusted.',
-      sellBandAbove: 'The market price ({quote} MT / $1K) is above the sell price band ({band}); selling is paused until the band is adjusted.',
+      sellBandBelow: 'The market price ({quote} MT / $) is below the sell price band ({band}); selling is paused until the band is adjusted.',
+      sellBandAbove: 'The market price ({quote} MT / $) is above the sell price band ({band}); selling is paused until the band is adjusted.',
       platformPremiumBreaker: 'The platform daily sell premium budget is exhausted; selling is paused, please retry later.',
       proceedsTooSmall: 'The amount is too small: net proceeds round to zero.',
       insufficientUsd: 'Insufficient balance.',
@@ -445,7 +445,7 @@ window.__ModuleLoader__.load({
       colType: 'Type',
       colAmount: 'Traded tokens',
       colUsd: 'Trade amount',
-      colPrice: 'Price (MT / $1K)',
+      colPrice: 'Price (MT / $)',
       colPnl: 'PnL',
       typeBuy: 'Buy',
       typeSell: 'Sell',
@@ -1661,7 +1661,12 @@ window.__ModuleLoader__.load({
     var TRADE_NANO_USD_PER_LOT = 1e9   // 1 手 = $1 面值
     var TRADE_SELL_FEE_MICROS = 20000  // 卖出手续费兜底估算（2%），实际以后端 fee_micros 为准
     var TRADE_UNIT = 'MT'              // 展示单位（百万词元）
-    var MIN_SELL_NANO_WC = 1e6         // 后端 MinSellNanoWC（0.001 MT）
+    var MIN_SELL_NANO_WC = 1e6         // 后端 MinSellNanoWC
+    // 展示换算常数:1 MT = tradeWcPerMt 个 WC(后端 /wordcoin/market 的 wc_per_mt,默认 40 =
+    // 开盘校准基准 $0.04/MT ÷ $0.001/WC)。对外统一 MT/$ = quote ÷ (wcPerMt×1e6),数值越大词元越便宜;
+    // MT 数量 = nanoWC ÷ (wcPerMt×1e9)。内部价格空间仍是「词元价值」v = 1e12 ÷ quote(与官网走势图同口径)。
+    var tradeWcPerMt = 40
+    var TRADE_PRICE_UNIT = 'MT/$'
     var TRADE_CHART_CANDLES = 48       // K线固定最近 4 小时 = 48 根 5 分钟蜡烛(240 根 1 分钟桶)
     // 活性抖动:让报价看起来"有人在做市"。锚定最后一根蜡烛收盘价,
     // 每 1~10s 在 ±1.5% 内均匀随机移动,并夹进最近 5 根蜡烛的 hi/lo 区间;
@@ -1670,9 +1675,13 @@ window.__ModuleLoader__.load({
     var TRADE_JITTER_MAX_DELAY_MS = 10000
     var TRADE_JITTER_MAX_BAND = 0.015
     // 定点口径:1 MT = 1e9 nanoWC、1 USD = 1e9 nanoUSD;quote_micros = 词元/美元 ×1e6,
-    // 展示价 $/MT = 1e12 ÷ quote_micros(正值,数值越大=词元越值钱)。
+    // 内部价 v = 1e12 ÷ quote_micros(正值,数值越大=词元越值钱;展示时经 fmtMtPerUsd 换算为 MT/$)。
     function tradeFmt(n, d) { return (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }) }
-    function tradeMt(nanoWc) { return tradeFmt((Number(nanoWc) || 0) / 1e9, 2) }
+    function tradeMt(nanoWc) { return tradeFmt((Number(nanoWc) || 0) / (tradeWcPerMt * 1e9), 2) }
+    /** 词元价值空间 v(1e12÷quote) → MT/$ 数值。 */
+    function tradeMtPerUsd(v) { return v > 0 ? 1e6 / (v * tradeWcPerMt) : 0 }
+    /** 词元价值空间 v → MT/$ 文本(2 位小数)。 */
+    function fmtMtPerUsd(v) { return v != null && v > 0 ? tradeFmt(tradeMtPerUsd(v), 2) : '—' }
     function tradeUsd(nanoUsd, d) { return '$' + tradeFmt((Number(nanoUsd) || 0) / 1e9, d == null ? 2 : d) }
     /** nanoUSD → 6 位小数美元（手续费/盈亏列用，与官网 formatNanoUSD6 一致）。 */
     function tradeUsd6(nanoUsd) {
@@ -1680,12 +1689,12 @@ window.__ModuleLoader__.load({
       var sign = v < 0 ? '-' : ''
       return sign + '$' + tradeFmt(Math.abs(v), 6)
     }
-    /** 报价定点 → $/MT 数值（1e12 ÷ quote_micros），quote<=0 返回 null。 */
+    /** 报价定点 → 内部「词元价值」数值（1e12 ÷ quote_micros），quote<=0 返回 null。 */
     function tradePx(quoteMicros) {
       var q = Number(quoteMicros) || 0
       return q > 0 ? 1e12 / q : null
     }
-    /** nanoUSD/MT 定点 → $/MT 数值（÷1e3）。 */
+    /** nanoUSD/WC 定点 → 内部「词元价值」数值（÷1e3）。 */
     function tradeAvgPx(nanoUsdPerWc) {
       var v = Number(nanoUsdPerWc) || 0
       return v > 0 ? v / 1e3 : null
@@ -1777,7 +1786,7 @@ window.__ModuleLoader__.load({
         var v = lo + (hi - lo) * ti / ticks
         var ty = y(v)
         parts.push(h('line', { key: 'gl' + ti, x1: padL, x2: W - padR, y1: ty, y2: ty, stroke: 'var(--dsw-alias-border-l1, #e5e7eb)', 'stroke-width': 1 }))
-        parts.push(h('text', { key: 'yl' + ti, x: padL - 6, y: ty + 4, 'text-anchor': 'end', 'font-size': 12, fill: 'var(--dsw-alias-label-secondary, #888)' }, tradeFmt(v, 1)))
+        parts.push(h('text', { key: 'yl' + ti, x: padL - 6, y: ty + 4, 'text-anchor': 'end', 'font-size': 12, fill: 'var(--dsw-alias-label-secondary, #888)' }, fmtMtPerUsd(v)))
       }
       // 蜡烛:红涨绿跌
       for (var ci = 0; ci < candles.length; ci++) {
@@ -1818,13 +1827,13 @@ window.__ModuleLoader__.load({
       if (avgBuy != null && avgBuy > 0) {
         var by = y(avgBuy)
         parts.push(h('line', { key: 'buyline', x1: padL, x2: W - padR, y1: by, y2: by, stroke: '#3b82f6', 'stroke-width': 1, 'stroke-dasharray': '6 4' }))
-        parts.push(h('text', { key: 'buylinet', x: padL + 4, y: by + 14, 'font-size': 11, fill: '#3b82f6' }, pageT('buyPriceLine') + ' ' + tradeFmt(avgBuy, 2)))
+        parts.push(h('text', { key: 'buylinet', x: padL + 4, y: by + 14, 'font-size': 11, fill: '#3b82f6' }, pageT('buyPriceLine') + ' ' + fmtMtPerUsd(avgBuy)))
       }
       // 均价中线(灰)
       if (avg > 0) {
         var ay = y(avg)
         parts.push(h('line', { key: 'avgl', x1: padL, x2: W - padR, y1: ay, y2: ay, stroke: 'var(--dsw-alias-label-secondary, #9ca3af)', 'stroke-width': 1, 'stroke-dasharray': '2 3' }))
-        parts.push(h('text', { key: 'avgt', x: padL + 4, y: ay - 4, 'font-size': 11, fill: 'var(--dsw-alias-label-secondary, #9ca3af)' }, pageT('avgLine') + ' ' + tradeFmt(avg, 2)))
+        parts.push(h('text', { key: 'avgt', x: padL + 4, y: ay - 4, 'font-size': 11, fill: 'var(--dsw-alias-label-secondary, #9ca3af)' }, pageT('avgLine') + ' ' + fmtMtPerUsd(avg)))
       }
       // x 轴整点刻度(每小时一根,参考官网;刻度自轴线向上突出)
       var seenHours = {}
@@ -1874,13 +1883,13 @@ window.__ModuleLoader__.load({
       var quoteMicros = Number(data.quote_micros) || 0
       var minQ = Number(data.min_quote_micros) || 0
       var maxQ = Number(data.max_quote_micros) || 0
-      var fmtPx = function (q) { return q > 0 ? tradeFmt(1e12 / q, 2) : '—' }
+      var fmtPx = function (q) { return q > 0 ? tradeFmt(q / (tradeWcPerMt * 1e6), 2) : '—' }
       switch (reason) {
         case 'price_band_breaker': {
-          // micros 侧 [minQ, maxQ] 在 $/MT 侧是 [1e12/maxQ, 1e12/minQ]。
-          var band = fmtPx(maxQ) + '–' + fmtPx(minQ) + ' MT/千美元'
+          // micros 侧 [minQ, maxQ] 在 MT/$ 侧是 [minQ/(wcPerMt×1e6), maxQ/(wcPerMt×1e6)]。
+          var band = fmtPx(minQ) + '–' + fmtPx(maxQ) + ' ' + TRADE_PRICE_UNIT
           var quote = fmtPx(quoteMicros)
-          // quote 高于上界 ⇒ 词元比允许的最便宜还便宜 ⇒ $/MT 跌破下沿。
+          // quote 高于上界 ⇒ 词元比允许的最便宜还便宜 ⇒ MT/$ 冲破上沿。
           if (quoteMicros > maxQ) return pageT('sellBandBelow').replace('{quote}', quote).replace('{band}', band)
           if (quoteMicros < minQ) return pageT('sellBandAbove').replace('{quote}', quote).replace('{band}', band)
           return String(e && e.message || e)
@@ -1903,7 +1912,7 @@ window.__ModuleLoader__.load({
       var busy = React.useState(false)
       var err = React.useState('')
       var quote = market ? Number(market.quote_micros) || 0 : 0
-      var price = tradePx(quote) // $/MT
+      var price = tradePx(quote) // 内部词元价值空间
       var perLotMt = quote > 0 ? quote * 1000 : 0 // 每手获得 nanoWC = quote×1000
       var usdBalance = Number(props.usdBalance) || 0
       var maxBuy = account && account.limits && Number(account.limits.max_buy_nano_usd) || Infinity
@@ -1927,7 +1936,7 @@ window.__ModuleLoader__.load({
       }
       return h(TradeSubModal, { title: pageT('trade') + ' · ' + pageT('buySubmit'), onClose: props.onClose },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          h('div', { style: { fontSize: 13 } }, price != null ? pageT('nowPrice') + ' ' + tradeFmt(price, 2) + ' $/' + TRADE_UNIT : '—'),
+          h('div', { style: { fontSize: 13 } }, price != null ? pageT('nowPrice') + ' ' + fmtMtPerUsd(price) + ' ' + TRADE_PRICE_UNIT : '—'),
           maxLots > 0 ? h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('maxBuyLots').replace('{n}', tradeFmt(maxLots))) : null,
           h('div', { style: { fontSize: 13, fontWeight: 600 } }, pageT('lotLabel')),
           h('input', {
@@ -1950,7 +1959,7 @@ window.__ModuleLoader__.load({
           ),
           costUsd != null ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
             h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-              h('span', null, pageT('perLotPrice')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, perLotMt > 0 ? tradeFmt(perLotMt / 1e9, 2) + ' ' + TRADE_UNIT : '—')),
+              h('span', null, pageT('perLotPrice')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, perLotMt > 0 ? tradeFmt(perLotMt / (tradeWcPerMt * 1e9), 2) + ' ' + TRADE_UNIT : '—')),
             h('div', { style: { display: 'flex', justifyContent: 'space-between' } },
               h('span', null, pageT('totalAmount')), h('span', { style: { fontVariantNumeric: 'tabular-nums' } }, tradeUsd(costUsd))),
             h('div', { style: { display: 'flex', justifyContent: 'space-between', color: 'var(--dsw-alias-label-primary, #333)', fontWeight: 700 } },
@@ -1979,7 +1988,7 @@ window.__ModuleLoader__.load({
       var feeMicros = account && account.limits && Number(account.limits.sell_fee_micros) > 0
         ? Number(account.limits.sell_fee_micros) : TRADE_SELL_FEE_MICROS
       var balanceWc = account ? Number(account.balance_nano_wc) || 0 : 0
-      var amount = Math.round((Number(String(amountText[0]).trim()) || 0) * 1e9)
+      var amount = Math.round((Number(String(amountText[0]).trim()) || 0) * tradeWcPerMt * 1e9)
       // 提示按 2 位小数展示，容差 0.01 MT；成交时钳到真实余额。
       var over = amount - balanceWc
       var sellError = amount > 0 && amount < MIN_SELL_NANO_WC ? pageT('sellMin')
@@ -2004,12 +2013,12 @@ window.__ModuleLoader__.load({
         }
       }
       var fill = function (percent) {
-        var v = percent >= 100 ? balanceWc / 1e9 : balanceWc / 1e9 * percent / 100
+        var v = percent >= 100 ? balanceWc / (tradeWcPerMt * 1e9) : balanceWc / (tradeWcPerMt * 1e9) * percent / 100
         amountText[1](v.toFixed(2))
       }
       return h(TradeSubModal, { title: pageT('trade') + ' · ' + pageT('sellSubmit'), onClose: props.onClose },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          h('div', { style: { fontSize: 13 } }, priceText != null ? pageT('nowPrice') + ' ' + tradeFmt(priceText, 2) + ' $/' + TRADE_UNIT : '—'),
+          h('div', { style: { fontSize: 13 } }, priceText != null ? pageT('nowPrice') + ' ' + fmtMtPerUsd(priceText) + ' ' + TRADE_PRICE_UNIT : '—'),
           h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } },
             pageT('sellAmountHint').replace('{max}', tradeMt(balanceWc))),
           h('div', { style: { fontSize: 13, fontWeight: 600 } }, pageT('sellLabel')),
@@ -2084,7 +2093,7 @@ window.__ModuleLoader__.load({
                   (buy ? '+' : '−') + tradeMt(Math.abs(amount)) + ' ' + TRADE_UNIT),
                 h('td', { style: cellStyle }, en.usd_leg_nano_usd ? tradeUsd6(Math.abs(Number(en.usd_leg_nano_usd))) : '—'),
                 h('td', { style: cellStyle }, fee > 0 ? tradeUsd6(fee) : '—'),
-                h('td', { style: cellStyle }, price != null ? tradeFmt(price, 2) + ' $/' + TRADE_UNIT : '—'),
+                h('td', { style: cellStyle }, price != null ? fmtMtPerUsd(price) + ' ' + TRADE_PRICE_UNIT : '—'),
                 h('td', { style: Object.assign({}, cellStyle, pnl != null ? { color: pnl > 0 ? '#d03050' : pnl < 0 ? '#22a04a' : 'inherit', fontWeight: 600 } : null) },
                   pnl != null ? (pnl > 0 ? '+' : pnl < 0 ? '−' : '') + tradeUsd6(Math.abs(pnl)) : '—'),
               )
@@ -2122,7 +2131,9 @@ window.__ModuleLoader__.load({
             api('wordcoin-account'),
             api('status'),
           ])
-          data[1]({ market: results[0] && results[0].market, account: results[1] && results[1].account, status: results[2] })
+          var mk = results[0] && results[0].market
+          if (mk && Number(mk.wc_per_mt) > 0) tradeWcPerMt = Number(mk.wc_per_mt)
+          data[1]({ market: mk, account: results[1] && results[1].account, status: results[2] })
           loadErr[1](false)
         } catch (e) {
           loadErr[1](true)
@@ -2235,15 +2246,16 @@ window.__ModuleLoader__.load({
             h('div', { style: tradeCard },
               h('div', { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, pageT('priceNow')),
               h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } },
-                h('span', { style: { fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? tradeFmt(curPrice, 2) : '—'),
-                h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, '$/' + TRADE_UNIT)),
+                h('span', { style: { fontSize: 30, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? fmtMtPerUsd(curPrice) : '—'),
+                h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, TRADE_PRICE_UNIT)),
               h('div', { style: { fontSize: 13, marginTop: 4, color: chg == null ? 'var(--dsw-alias-label-secondary, #888)' : (up ? '#d03050' : '#22a04a'), fontWeight: 600 } },
                 chg != null ? pageT('vsOpen') + ' ' + (up ? '+' : '') + tradeFmt(chg, 2) + '%' : '—'),
               h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 12 } },
-                [ [pageT('todayOpen'), openPrice], [pageT('todayHigh'), hiPrice], [pageT('todayLow'), loPrice] ].map(function (pair) {
+                // MT/$ 口径:数值越大词元越便宜,「高」= 词元价值空间的最小值(loPrice),与纵轴上小下大一致。
+                [ [pageT('todayOpen'), openPrice], [pageT('todayHigh'), loPrice], [pageT('todayLow'), hiPrice] ].map(function (pair) {
                   return h('div', { key: pair[0] },
                     h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary, #888)', marginBottom: 2 } }, pair[0]),
-                    h('div', { style: { fontSize: 13, fontVariantNumeric: 'tabular-nums' } }, pair[1] != null ? tradeFmt(pair[1], 2) + ' $/' + TRADE_UNIT : '—'))
+                    h('div', { style: { fontSize: 13, fontVariantNumeric: 'tabular-nums' } }, pair[1] != null ? fmtMtPerUsd(pair[1]) + ' ' + TRADE_PRICE_UNIT : '—'))
                 })),
             ),
             h('div', { style: tradeCard },
@@ -2272,7 +2284,7 @@ window.__ModuleLoader__.load({
                       onClick: function () { tbStore.set({ tradeView: 'ledger' }) },
                     }, pageT('tradeRecords')))),
                 h('div', { className: 'tb-trade-stats', style: { display: 'flex', flexDirection: 'column', gap: 6, minWidth: 160 } },
-                  statRow(pageT('avgBuyPrice'), avgBuy != null ? tradeFmt(avgBuy, 2) + ' $/' + TRADE_UNIT : '—'),
+                  statRow(pageT('avgBuyPrice'), fmtMtPerUsd(avgBuy) + ' ' + TRADE_PRICE_UNIT),
                   // 累计买卖直接用后端汇总的美元腿（同一笔买入/卖出实付实收，含手续费）
                   statRow(pageT('totalBought'), tradeUsd(account ? Number(account.total_bought_nano_usd) || 0 : 0)),
                   statRow(pageT('totalSold'), tradeUsd(account ? Number(account.total_sold_nano_usd) || 0 : 0)),
@@ -2286,8 +2298,8 @@ window.__ModuleLoader__.load({
             h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', lineHeight: 1.6, marginBottom: 8 } }, pageT('priceFormula')),
             loadErr[0] ? h('button', { type: 'button', style: Object.assign({}, buttonStyle, { height: 26, fontSize: 12 }), onClick: load }, pageT('loadFail')) : null,
             h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, margin: '6px 0 8px' } },
-              h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('marketPriceBreakdown') + ' $/' + TRADE_UNIT),
-              h('span', { style: { fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? tradeFmt(curPrice, 2) : '—'),
+              h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)' } }, pageT('marketPriceBreakdown') + ' ' + TRADE_PRICE_UNIT),
+              h('span', { style: { fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' } }, curPrice != null ? fmtMtPerUsd(curPrice) : '—'),
               h('span', { style: { flex: 1 } }),
               [[pageT('k5min'), '#6b7280'], [pageT('ma30m'), '#3b82f6'], [pageT('ma1h'), '#a855f7']].map(function (item) {
                 return h('span', { key: item[0], style: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--dsw-alias-label-secondary, #888)', marginLeft: 10 } },
