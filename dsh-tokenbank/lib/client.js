@@ -171,7 +171,7 @@ window.__ModuleLoader__.load({
       tradingTitle: '交易 · 百万词元（MT）',
       tradingIntro: '1 手 = $1 面值，按当前价折算获得词元（MT）；卖出按 MT 数量、以最新快照市价折回美元。',
       priceNow: '当前价格',
-      perMillion: '$/MT',
+      perMillion: 'MT/千美元',
       nowPrice: '当前价',
       sellLabel: '卖出数量（MT）',
       sellAmountHint: '当前持仓 {max} MT；按卖出时市价折回美元',
@@ -191,7 +191,7 @@ window.__ModuleLoader__.load({
       sell: '卖出',
       tradeRecords: '交易记录',
       marketTitle: '实时行情',
-      priceFormula: '价格公示：当前价 ≈ 美元/百万词元（$/MT），数值越大 = 词元越值钱。当前价按近一天全部计价请求的加权均价计算（半衰期 24 小时，越近的用量权重越高，单账户样本占比不超过 5%）；Token成本 = 计价请求费用 ÷ Token 总量，每分钟刷新行情，只随新用量变化。',
+      priceFormula: '价格公示：当前价 ≈ 美元/百万词元（MT/千美元 = 1,000 美元能换到的百万词元数），数值越大 = 词元越值钱。当前价按近一天全部计价请求的加权均价计算（半衰期 24 小时，越近的用量权重越高，单账户样本占比不超过 5%）；Token成本 = 计价请求费用 ÷ Token 总量，每分钟刷新行情，只随新用量变化。',
       k5min: '5 分钟蜡烛',
       ma30m: '30 分钟线',
       ma1h: '小时线',
@@ -220,8 +220,8 @@ window.__ModuleLoader__.load({
       buyFail: '买入失败',
       sellFail: '卖出失败',
       sellNoSnapshot: '暂无价格快照，暂不能卖出。',
-      sellBandBelow: '当前市价 {quote} $/MT 已低于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
-      sellBandAbove: '当前市价 {quote} $/MT 已高于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
+      sellBandBelow: '当前市价 {quote} MT/千美元 已低于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
+      sellBandAbove: '当前市价 {quote} MT/千美元 已高于卖出价格带 {band}，卖出暂停中，请联系管理员调整。',
       platformPremiumBreaker: '平台当日卖出溢价额度已达上限，卖出已暂停，请稍后再试。',
       proceedsTooSmall: '卖出金额过小，折算后净额为零。',
       insufficientUsd: '账户余额不足。',
@@ -230,7 +230,7 @@ window.__ModuleLoader__.load({
       colType: '类型',
       colAmount: '交易词元',
       colUsd: '交易金额',
-      colPrice: '单价（$/MT）',
+      colPrice: '单价（MT/千美元）',
       colPnl: '盈亏',
       typeBuy: '买入',
       typeSell: '卖出',
@@ -386,7 +386,7 @@ window.__ModuleLoader__.load({
       tradingTitle: 'Trade · Million-token (MT)',
       tradingIntro: '1 lot = $1 face, credited as tokens (MT) at the current price; sell any MT amount back to USD at the latest snapshot price.',
       priceNow: 'Current price',
-      perMillion: '$/MT',
+      perMillion: 'MT / $1K',
       nowPrice: 'Current price',
       sellLabel: 'Amount to sell (MT)',
       sellAmountHint: 'Holdings {max} MT; converts to USD at the sell-time price',
@@ -406,7 +406,7 @@ window.__ModuleLoader__.load({
       sell: 'Sell',
       tradeRecords: 'Records',
       marketTitle: 'Live market',
-      priceFormula: 'Price board: current ≈ USD per million tokens ($/MT); higher = tokens worth more. Current derives from the exponentially weighted average token cost of the last day (24-hour half-life, newer usage weighs more, any single account capped at 5% of the sample); token cost = priced request fees ÷ total tokens. Refreshes every minute, moves only with new usage.',
+      priceFormula: 'Price board: current ≈ USD per million tokens (MT / $1K); higher = tokens worth more. Current derives from the exponentially weighted average token cost of the last day (24-hour half-life, newer usage weighs more, any single account capped at 5% of the sample); token cost = priced request fees ÷ total tokens. Refreshes every minute, moves only with new usage.',
       k5min: '5-min candles',
       ma30m: '30-min MA',
       ma1h: '1-h MA',
@@ -435,8 +435,8 @@ window.__ModuleLoader__.load({
       buyFail: 'Buy failed',
       sellFail: 'Sell failed',
       sellNoSnapshot: 'No price snapshot yet; selling is unavailable.',
-      sellBandBelow: 'The market price ({quote} $/MT) is below the sell price band ({band}); selling is paused until the band is adjusted.',
-      sellBandAbove: 'The market price ({quote} $/MT) is above the sell price band ({band}); selling is paused until the band is adjusted.',
+      sellBandBelow: 'The market price ({quote} MT / $1K) is below the sell price band ({band}); selling is paused until the band is adjusted.',
+      sellBandAbove: 'The market price ({quote} MT / $1K) is above the sell price band ({band}); selling is paused until the band is adjusted.',
       platformPremiumBreaker: 'The platform daily sell premium budget is exhausted; selling is paused, please retry later.',
       proceedsTooSmall: 'The amount is too small: net proceeds round to zero.',
       insufficientUsd: 'Insufficient balance.',
@@ -445,7 +445,7 @@ window.__ModuleLoader__.load({
       colType: 'Type',
       colAmount: 'Traded tokens',
       colUsd: 'Trade amount',
-      colPrice: 'Price ($/MT)',
+      colPrice: 'Price (MT / $1K)',
       colPnl: 'PnL',
       typeBuy: 'Buy',
       typeSell: 'Sell',
@@ -1878,7 +1878,7 @@ window.__ModuleLoader__.load({
       switch (reason) {
         case 'price_band_breaker': {
           // micros 侧 [minQ, maxQ] 在 $/MT 侧是 [1e12/maxQ, 1e12/minQ]。
-          var band = fmtPx(maxQ) + '–' + fmtPx(minQ) + ' $/MT'
+          var band = fmtPx(maxQ) + '–' + fmtPx(minQ) + ' MT/千美元'
           var quote = fmtPx(quoteMicros)
           // quote 高于上界 ⇒ 词元比允许的最便宜还便宜 ⇒ $/MT 跌破下沿。
           if (quoteMicros > maxQ) return pageT('sellBandBelow').replace('{quote}', quote).replace('{band}', band)
